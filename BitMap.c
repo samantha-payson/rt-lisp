@@ -189,14 +189,14 @@ uint32_t rtl_bmpSelect(rtl_BitMap *B, uint32_t k)
   // could add some logic for that instead of this assertion.
   assert(k < B->nbrOnes);
 
-  selectIdx = k / SELECT_STRIDE;
+  selectIdx = (k ? k - 1 : k) / SELECT_STRIDE;
 
   sample  = B->sampleSelect[selectIdx];
-  rankIdx = sample / RANK_STRIDE;
+  rankIdx = (sample ? sample - 1 : sample) / RANK_STRIDE;
   rank = B->sampleRank[rankIdx];
 
   for (scanRank = B->sampleRank[rankIdx + 1];
-       scanRank < k && rankIdx + 2 < (B->nbrBlocks / (RANK_STRIDE >> 5));
+       scanRank < k && rankIdx + 1 < (B->nbrBlocks / (RANK_STRIDE >> 5));
        scanRank = B->sampleRank[++rankIdx + 1])
   {
     rank = scanRank;
