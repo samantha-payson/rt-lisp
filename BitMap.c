@@ -267,11 +267,10 @@ void bmpTestRankSelect(rtl_BitMap *bmp, uint32_t size)
   }
 }
 
-void rtl_testBitMap()
+void rtl_testBitMap(uint32_t size)
 {
   rtl_BitMap *bmp;
   uint32_t i;
-  static const uint32_t size = 1 << 16;
 
   bmp = rtl_newBitMap(size);
 
