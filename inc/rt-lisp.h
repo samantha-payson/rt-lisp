@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <assert.h>
 
+#define _RTL_INSIDE_RT_LISP_H_
+
+#include "rtl/BitMap.h"
+
 // `rtl_Word' is the fundamental type operated on by the runtime LISP machine.
 // It is used to represent both code and data internally. All addresses are
 // expressed in terms of `rtl_Word's.
@@ -36,12 +40,14 @@ typedef enum rtl_WordType {
 
   // This word type is used to encode addresses in the code segment, rather than
   // the heap segment.
-  RTL_ADDR   = 11,
+  RTL_ADDR = 11,
 
   // 12 .. 15 aren't yet in use
 
   RTL_MAX = 16,
 } rtl_WordType;
+
+char const *rtl_typeName(rtl_WordType type);
 
 static inline
 uint32_t rtl_typeOf(rtl_Word w)
@@ -49,65 +55,143 @@ uint32_t rtl_typeOf(rtl_Word w)
   return w & 0xF;
 }
 
-typedef enum rtl_Error {
-  RTL_OK,
-  RTL_ERR_STACK_UNDERFLOW,
-} rtl_Error;
-
-#define _RTL_INSIDE_RT_LISP_H_
-
-#include "rtl/nil.h"
-#include "rtl/symbol.h"
-// #include "rtl/int28.h"
-// #include "rtl/fix14.h"
-// #include "rtl/tuple.h"
-// #include "rtl/string.h"
-// #include "rtl/record.h"
-// #include "rtl/cons.h"
-// #include "rtl/top.h"
-
-#include "rtl/BitMap.h"
-
-#undef _RTL_INSIDE_RT_LISP_H_
+static inline
+char const *rtl_typeNameOf(rtl_Word w)
+{
+  return rtl_typeName(rtl_typeOf(w));
+}
 
 typedef struct rtl_Generation {
-  size_t     fillPtr;
+  // The number of this generation.
+  int nbr;
 
-  rtl_BitMap blkFirst,
-             blkLast;
+  // The index of the next word to be allocated from this generation.
+  size_t fillPtr;
 
-  rtl_Word   words[];
+  // This is where the fill pointer was at the beginning of this collection cycle.
+  size_t preMoveFillPtr;
+
+  // The total number of words this generation can contribute.
+  size_t capacity;
+
+  // A BitMap where we can mark the reachable blocks during collection.
+  rtl_BitMap *marks;
+
+  // The actual word data managed by this generation.
+  rtl_Word words[];
 } rtl_Generation;
 
-#define RTL_NBR_GENERATIONS 16
+#define RTL_MAX_GENERATIONS 16
 
 typedef struct rtl_Heap {
   // Each generation is twice the size of the previous generation.
-  rtl_Generation *gen[RTL_NBR_GENERATIONS];
-
-  size_t nbrGen;
+  rtl_Generation *gen[RTL_MAX_GENERATIONS];
 } rtl_Heap;
 
+typedef enum rtl_Error {
+  RTL_OK,
+  RTL_ERR_INVALID_OPERATION,
+  RTL_ERR_OUT_OF_MEMORY,
+  RTL_ERR_STACK_UNDERFLOW,
+  RTL_ERR_EXPECTED_TUPLE,
+  RTL_ERR_EXPECTED_CONS,
+} rtl_Error;
+
+typedef struct rtl_RetAddr {
+  rtl_Word *pc;
+  rtl_Word envFrame;
+} rtl_RetAddr;
+
 typedef struct rtl_Machine {
-  rtl_Heap *heap;
+  rtl_Heap heap;
 
-  // This is a pointer to the current environment frame, it points to a tuple on
-  // the heap.
-  rtl_Word *envFrame;
+  rtl_Word envFrame;
 
-  rtl_Word reg[32];
+  rtl_Word *vStack;
+  size_t   vStackLen;
+  size_t   vStackCap;
 
   rtl_Word *pc;
 
-  rtl_Word **rStack;
-  size_t   rStackLen;
-  size_t   rStackCap;
+  rtl_RetAddr *rStack;
+  size_t      rStackLen;
+  size_t      rStackCap;
 
   rtl_Error error;
 } rtl_Machine;
 
-void rtl_initMachine(rtl_Machine *machine);
+// Initialize the machine M.
+void rtl_initMachine(rtl_Machine *M);
 
-rtl_Error rtl_getError(rtl_Machine *machine);
+// Return any pending error from M, or RTL_OK if there is no error. This
+// function does not clear the error.
+static inline
+rtl_Error rtl_peekError(rtl_Machine *M) { return M->error; }
+
+// Return any pending error from M, or RTL_OK if there is no error, then clear
+// the error.
+static inline
+rtl_Error rtl_getError(rtl_Machine *M) {
+  rtl_Error err;
+
+  err      = M->error;
+  M->error = RTL_OK;
+
+  return err;
+}
+
+// Return a human-readable string describing err.
+char const *rtl_errString(rtl_Error err);
+
+// Returns a pointer to a newly allocated block of nbr words. Writes a word of
+// type t with this pointer to w. t must be one of:
+//
+//   - RTL_TUPLE
+//   - RTL_STRING
+//   - RTL_RECORD
+//   - RTL_CONS
+//
+// Errors:
+//   RTL_ERR_INVALID_OPERATION:  if t is not one of the types listed above.
+//
+//   RTL_ERR_OUT_OF_MEMORY:      if the allocator can't allocate a block of nbr
+//                               words.
+//
+rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr);
+
+void rtl_testGarbageCollector(size_t count);
+
+// Return true if w is one of the pointer types:
+//
+//   - RTL_TUPLE
+//   - RTL_STRING
+//   - RTL_RECORD
+//   - RTL_CONS
+//
+static inline
+int rtl_isPtr(rtl_Word w) {
+  switch (rtl_typeOf(w)) {
+  case RTL_TUPLE:
+  case RTL_STRING:
+  case RTL_RECORD:
+  case RTL_CONS:
+    return 1;
+
+  default:
+    return 0;
+  }
+}
+
+#include "rtl/nil.h"
+#include "rtl/symbol.h"
+#include "rtl/int28.h"
+#include "rtl/fix14.h"
+#include "rtl/tuple.h"
+// #include "rtl/string.h"
+// #include "rtl/record.h"
+#include "rtl/cons.h"
+// #include "rtl/top.h"
+
+#undef _RTL_INSIDE_RT_LISP_H_
 
 #endif // rt-lisp.h

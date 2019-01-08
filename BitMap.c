@@ -4,8 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RANK_STRIDE   1024
-#define SELECT_STRIDE 4096
+#define RANK_STRIDE   128
+#define SELECT_STRIDE 512
+
 
 rtl_BitMap *rtl_newBitMap(size_t nbrBits)
 {
@@ -17,7 +18,7 @@ rtl_BitMap *rtl_newBitMap(size_t nbrBits)
   nbrBlocks  = (nbrBits + 31) / 32;
 
   nbrSelect = (nbrBits + SELECT_STRIDE - 1) / SELECT_STRIDE;
-  nbrRank   = (nbrBits + RANK_STRIDE - 1) / RANK_STRIDE;
+  nbrRank   = (nbrBits + RANK_STRIDE   - 1) / RANK_STRIDE;
 
   bmp = malloc(sizeof(rtl_BitMap)
 	       + nbrSelect*sizeof(uint32_t)
@@ -31,7 +32,7 @@ rtl_BitMap *rtl_newBitMap(size_t nbrBits)
   // This will be filled out when rtl_bmpTabulate is called.
   bmp->nbrOnes = 0;
 
-  bmp->sampleRank   = (uint32_t *)(bmp->blocks + nbrBlocks);
+  bmp->sampleRank   = bmp->blocks     + nbrBlocks;
   bmp->sampleSelect = bmp->sampleRank + nbrRank;
 
   rtl_bmpClearAll(bmp);
@@ -56,15 +57,15 @@ uint32_t rtl_scanForKth(uint32_t x, uint32_t k)
 
   uint32_t lo, mid, hi;
 
-  lo = 0, hi = 32;
+  lo = 0, hi = 31;
 
   while (lo < hi) {
-    mid = (lo + hi) / 2;
+    mid = ((lo + hi + 1) >> 1);
 
-    if (__builtin_popcount(mask32(mid) & x) < k) {
-      lo = mid + 1;
+    if (__builtin_popcount(mask32(mid) & x) <= k) {
+      lo = mid;
     } else {
-      hi = mid;
+      hi = mid - 1;
     }
   }
 
@@ -87,14 +88,16 @@ void rtl_bmpTabulate(rtl_BitMap *bmp)
 
   accumulatedRank = 0;
   selectIdx       = 0;
-  nbrRankSamples  = bmp->nbrBits / RANK_STRIDE;
+  nbrRankSamples  = (bmp->nbrBits + RANK_STRIDE - 1) / RANK_STRIDE;
   nextSelect      = 1;
 
   for (rankIdx = 0; rankIdx < nbrRankSamples; rankIdx++) {
     bmp->sampleRank[rankIdx] = accumulatedRank;
 
-    for (i = 0; i < RANK_STRIDE >> 5; i++) {
-      blockIdx = rankIdx*(RANK_STRIDE >> 5) + i;
+    for (i = 0, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i;
+	 i < RANK_STRIDE >> 5 && blockIdx < bmp->nbrBlocks;
+	 i++, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i)
+    {
       word     = bmp->blocks[blockIdx];
       popcnt   = __builtin_popcount(word);
 
@@ -131,7 +134,6 @@ void rtl_bmpClearAll(rtl_BitMap *bmp)
 
   nbrSelect = (bmp->nbrBits + SELECT_STRIDE - 1) / SELECT_STRIDE;
   nbrRank   = (bmp->nbrBits + RANK_STRIDE - 1) / RANK_STRIDE;
-
 
   memset(bmp->blocks,
 	 0,
@@ -183,7 +185,8 @@ uint32_t rtl_bmpSelect(rtl_BitMap *B, uint32_t k)
            popcnt,
            scanRank,
            rank,
-           i;
+           i,
+           select;
 
   // If it turns out we want to be able to query past the end of the bitmap, we
   // could add some logic for that instead of this assertion.
@@ -205,14 +208,19 @@ uint32_t rtl_bmpSelect(rtl_BitMap *B, uint32_t k)
   for (i = rankIdx *(RANK_STRIDE >> 5) ;; i++) {
     popcnt = __builtin_popcount(B->blocks[i]);
 
-    if (popcnt + rank >= k) {
+    if (popcnt + rank > k) {
       break;
     } else {
       rank += popcnt;
     }
   }
 
-  return i*32 + rtl_scanForKth(B->blocks[i], k - rank);
+  select = i*32 + rtl_scanForKth(B->blocks[i], k - rank);
+  if (select > B->nbrBits) {
+    asm("int3");
+  }
+
+  return select;
 }
 
 // A very slow but extremely straightforward implementation of RANK, for testing
@@ -222,9 +230,9 @@ uint32_t controlRank(rtl_BitMap *B, uint32_t k)
 {
   uint32_t rank, select;
 
-  for (rank = select = 0; select < k; select++) {
-    if (rtl_bmpGetBit(B, select)) rank++;
-  }
+  for (rank = select = 0; select < k; select++)
+    if (rtl_bmpGetBit(B, select))
+      rank++;
 
   return rank;
 }
@@ -237,16 +245,24 @@ uint32_t controlSelect(rtl_BitMap *B, uint32_t k)
 {
   uint32_t rank, select;
 
-  for (rank = select = 0; rank < k; select++) {
+  rank = 0;
+  select = -1;
+
+  do {
+    select++;
     if (rtl_bmpGetBit(B, select)) rank++;
-  }
+  } while (rank <= k);
+  
+  /* for (rank = select = 0; rank < k; select++) */
+  /*   if (select > 0 && rtl_bmpGetBit(B, select)) */
+  /*     rank++; */
 
   return select;
 }
 
 
 static
-void bmpTestRankSelect(rtl_BitMap *bmp, uint32_t size)
+  void bmpTestRankSelect(rtl_BitMap *bmp, uint32_t size)
 {
   uint32_t i;
 
