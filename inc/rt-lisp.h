@@ -42,7 +42,11 @@ typedef enum rtl_WordType {
   // the heap segment.
   RTL_ADDR = 11,
 
-  // 12 .. 15 aren't yet in use
+  RTL_BUILTIN = 12,
+
+  RTL_CLOSURE = 13,
+
+  // 14, 15 aren't yet in use
 
   RTL_MAX = 16,
 } rtl_WordType;
@@ -68,7 +72,9 @@ typedef struct rtl_Generation {
   // The index of the next word to be allocated from this generation.
   size_t fillPtr;
 
-  // This is where the fill pointer was at the beginning of this collection cycle.
+  // This is where the fill pointer was at the beginning of this collection
+  // cycle. This is used by the moveWord helper in rt-lisp.c, it has no other
+  // purpose.
   size_t preMoveFillPtr;
 
   // The total number of words this generation can contribute.
@@ -95,12 +101,19 @@ typedef enum rtl_Error {
   RTL_ERR_STACK_UNDERFLOW,
   RTL_ERR_EXPECTED_TUPLE,
   RTL_ERR_EXPECTED_CONS,
+  RTL_ERR_EXPECTED_INT28,
+  RTL_ERR_EXPECTED_FIX14,
 } rtl_Error;
 
 typedef struct rtl_RetAddr {
   rtl_Word *pc;
   rtl_Word envFrame;
 } rtl_RetAddr;
+
+typedef struct rtl_CodePage {
+  uint32_t len;
+  rtl_Word code[];
+} rtl_CodePage;
 
 typedef struct rtl_Machine {
   rtl_Heap heap;
@@ -111,11 +124,17 @@ typedef struct rtl_Machine {
   size_t   vStackLen;
   size_t   vStackCap;
 
-  rtl_Word *pc;
+  uint8_t *pc;
 
   rtl_RetAddr *rStack;
   size_t      rStackLen;
   size_t      rStackCap;
+
+  // All code addresses are relative to this pointer.
+  uint8_t *code;
+
+  // This is the end of the code. 
+  uint8_t *codeEnd;
 
   rtl_Error error;
 } rtl_Machine;
@@ -192,6 +211,14 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/cons.h"
 // #include "rtl/top.h"
 
+#include "rtl/rto.h"
+
+#include "rtl/instructions.h"
+
+#include "rtl/debug.h"
+
 #undef _RTL_INSIDE_RT_LISP_H_
+
+rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code);
 
 #endif // rt-lisp.h

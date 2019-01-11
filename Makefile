@@ -7,6 +7,7 @@ LDFLAGS =
 OBJS = \
   rt-lisp.o \
   BitMap.o \
+  debug.o \
   main.o
 
 HDRS = \
@@ -17,7 +18,10 @@ HDRS = \
   inc/rtl/cons.h \
   inc/rtl/symbol.h \
   inc/rtl/fix14.h \
-  inc/rtl/tuple.h
+  inc/rtl/tuple.h \
+  inc/rtl/rto.h \
+  inc/rtl/instructions.h \
+  inc/rtl/debug.h
 
 
 rtl: $(OBJS)

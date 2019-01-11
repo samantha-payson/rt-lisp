@@ -4,14 +4,6 @@
 #include <string.h>
 #include <stdio.h>
 
-// Return the number of words in generation genNbr. This will always return a
-// power of 2.
-static
-size_t genCapacity(int genNbr)
-{
-  return 1 << ((27 + genNbr) - RTL_MAX_GENERATIONS);
-}
-
 static
 rtl_Generation *mkGeneration(int genNbr)
 {
@@ -19,7 +11,7 @@ rtl_Generation *mkGeneration(int genNbr)
   size_t         capacity;
 
   // We have 27 address bits available to us.
-  capacity = genCapacity(genNbr);
+  capacity = __rtl_genCapacity(genNbr);
 
   gen = malloc(sizeof(rtl_Generation)
 	       + capacity*sizeof(rtl_Word));
@@ -37,17 +29,6 @@ void rtl_initHeap(rtl_Heap *h)
   memset(h->gen, 0, sizeof(rtl_Generation *)*RTL_MAX_GENERATIONS);
 }
 
-// Return the generation number of a pointer type.
-static inline
-int ptrGen(rtl_Word ptr) {
-  return RTL_MAX_GENERATIONS - __builtin_clz(ptr);
-}
-
-static inline
-uint32_t ptrOffs(rtl_Word ptr) {
-  return ~genCapacity(ptrGen(ptr)) & (ptr >> 4);
-}
-
 static inline
 rtl_Word *reifyPtr(rtl_Machine *M, rtl_Word ptr)
 {
@@ -55,14 +36,14 @@ rtl_Word *reifyPtr(rtl_Machine *M, rtl_Word ptr)
                  offs;
   rtl_Generation *gen;
 
-  genNum = ptrGen(ptr);
+  genNum = __rtl_ptrGen(ptr);
 
   assert(genNum < RTL_MAX_GENERATIONS);
   assert(NULL != M->heap.gen[genNum]);
 
   gen = M->heap.gen[genNum];
 
-  offs = ptrOffs(ptr);
+  offs = __rtl_ptrOffs(ptr);
 
   assert(offs < gen->capacity);
 
@@ -108,9 +89,9 @@ rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 static
 rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 {
-  assert(offs < genCapacity(gen));
+  assert(offs < __rtl_genCapacity(gen));
 
-  return ((genCapacity(gen) | offs) << 4) | t;
+  return ((__rtl_genCapacity(gen) | offs) << 4) | t;
 }
 
 // Mark the memory w points to, for generation g.
@@ -122,10 +103,10 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   rtl_Word const *fields;
   rtl_Generation *wGen;
 
-  wOffs = ptrOffs(w);
+  wOffs = __rtl_ptrOffs(w);
 
   // Don't bother with pointers into other generations.
-  if (ptrGen(w) != gen->nbr) return;
+  if (__rtl_ptrGen(w) != gen->nbr) return;
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
@@ -154,7 +135,7 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     fields = rtl_reifyCons(M, w);
 
     // Mark CAR then CDR
-    wGen = M->heap.gen[ptrGen(w)];
+    wGen = M->heap.gen[__rtl_ptrGen(w)];
     if (!rtl_bmpSetBit(wGen->marks, wOffs, true)) {
       markWord(M, gen, fields[0]);
     }
@@ -175,7 +156,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
 
   if (!rtl_isPtr(w)) return w;
 
-  g = ptrGen(w);
+  g = __rtl_ptrGen(w);
   if (g > highestGen) return w;
 
   type = rtl_typeOf(w);
@@ -187,7 +168,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   if (!nextGen)
     nextGen = M->heap.gen[g + 1] = mkGeneration(g + 1);
 
-  oldOffs = ptrOffs(w);
+  oldOffs = __rtl_ptrOffs(w);
   newOffs = rtl_bmpRank(gen->marks, oldOffs)
           + nextGen->preMoveFillPtr;
 
@@ -370,7 +351,7 @@ static
 void pushVStack(rtl_Machine *M, rtl_Word w)
 {
   if (M->vStackLen == M->vStackCap) {
-    M->vStackCap = M->vStackCap * 2;
+    M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;
     M->vStack = realloc(M->vStack, M->vStackCap * sizeof(rtl_Word));
   }
 
@@ -504,3 +485,317 @@ char const *rtl_typeName(rtl_WordType type)
   }
 }
 
+// These macros are to be used for operating on the VM from the main
+// loop. Hopefully this gives the compiler more freedom to keep things in
+// registers, etc...
+
+#define likely(x)       __builtin_expect(!!(x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
+#define VPUSH(W) ({							\
+      if (unlikely(vStackLen == vStackCap)) {				\
+	vStackCap = vStackCap == 0 ? 64 : vStackCap * 2;		\
+	vStack    = realloc(vStack, sizeof(rtl_Word)*vStackCap);	\
+      }									\
+									\
+      vStack[vStackLen++] = (W);					\
+    })									\
+  // End of multi-line macro
+
+#define VSTACK_ASSERT_LEN(N) ({			\
+      if (unlikely((N) > vStackLen)) {		\
+	err = RTL_ERR_STACK_UNDERFLOW;		\
+	goto interp_cleanup;			\
+      }						\
+    })						\
+  // End of multi-line macro
+
+#define RSTACK_ASSERT_LEN(N) ({			\
+      if (unlikely((N) > rStackLen)) {		\
+	err = RTL_ERR_STACK_UNDERFLOW;		\
+	goto interp_cleanup;			\
+      }						\
+    })						\
+  // End of multi-line macro
+
+#define VPOP() (vStack[--vStackLen])
+
+#define VPOPK(K) ({ vStackLen -= (K); })
+
+#define VPEEK(N) (vStack[vStackLen - ((N) + 1)])
+
+#define SAVE_MACHINE() ({			\
+      M->pc = pc;				\
+						\
+      M->vStack    = vStack;			\
+      M->vStackLen = vStackLen;			\
+      M->vStackCap = vStackCap;			\
+						\
+      M->rStack    = rStack;			\
+      M->rStackLen = rStackLen;			\
+      M->rStackCap = rStackCap;			\
+						\
+      M->error = err;				\
+    })						\
+  // End of multi-line macro
+
+#define RESTORE_MACHINE() ({			\
+      pc = M->pc;				\
+						\
+      vStack    = M->vStack;			\
+      vStackLen = M->vStackLen;			\
+      vStackCap = M->vStackCap;			\
+						\
+      rStack    = M->rStack;			\
+      rStackLen = M->rStackLen;			\
+      rStackCap = M->rStackCap;			\
+						\
+      err = M->error;				\
+    })						\
+  // End of multi-line macro
+
+
+// This is the decode/dispatch template for all hard-coded binary operators.
+#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_ERR, TYPE_MK, TYPE_VAL)	\
+      case RTL_OP_##INAME:						\
+	VSTACK_ASSERT_LEN(2);						\
+									\
+	a = VPOP();							\
+	b = VPOP();							\
+									\
+	if (unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b))) {	\
+	  err = TYPE_ERR;						\
+	  goto interp_cleanup;						\
+	}								\
+									\
+	VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));			\
+	break;								\
+	// end of multi-line macro
+
+static
+rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
+{
+  uint8_t  *pc;
+  rtl_Word *vStack;
+  size_t   vStackLen,
+           vStackCap;
+
+  rtl_RetAddr *rStack;
+  size_t       rStackLen,
+               rStackCap;
+
+  rtl_Error err;
+
+  uint32_t literal;
+
+  // Some scratch space;
+  rtl_Word a, b, c, d;
+
+  rtl_Word f, g;
+
+  rtl_Word const *ptr;
+
+  M->pc = M->code + addr;
+
+  // Load up all of the "register" values.
+  RESTORE_MACHINE();
+
+  while (err == RTL_OK) {
+    rtl_disasm(pc);
+
+    switch (*pc) {
+    case RTL_OP_NOP:
+      break;
+
+    case RTL_OP_CONST:
+      literal = (uint32_t)pc[1] << 0
+	      | (uint32_t)pc[2] << 8
+	      | (uint32_t)pc[3] << 16
+	      | (uint32_t)pc[4] << 24 ;
+
+      pc += 4;
+
+      VPUSH(literal);
+      break;
+
+    case RTL_OP_CONST_NIL:
+      VPUSH(RTL_NIL);
+      break;
+
+    case RTL_OP_CONST_TOP:
+      VPUSH(RTL_TOP);
+      break;
+
+    case RTL_OP_CONS:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPEEK(0);
+      a = VPEEK(1);
+
+      SAVE_MACHINE();
+
+      c = rtl_cons(M, a, b);
+
+      RESTORE_MACHINE();
+
+      VPOPK(2);
+	
+      VPUSH(c);
+      break;
+
+    case RTL_OP_CAR:
+      VSTACK_ASSERT_LEN(1);
+
+      // Don't need to SAVE_MACHINE() here, since reifyCons doesn't look at any
+      // of the un-saved fields.
+      ptr = rtl_reifyCons(M, VPOP());
+      if (unlikely(!ptr)) {
+	err = M->error;
+	goto interp_cleanup;
+      }
+
+      VPUSH(ptr[0]);
+      break;
+
+    case RTL_OP_CDR:
+      VSTACK_ASSERT_LEN(1);
+
+      ptr = rtl_reifyCons(M, VPOP());
+      if (unlikely(!ptr)) {
+	err = M->error;
+	goto interp_cleanup;
+      }
+
+      VPUSH(ptr[1]);
+      break;
+
+    case RTL_OP_POP:
+      VSTACK_ASSERT_LEN(1);
+
+      VPOPK(1);
+      break;
+
+    case RTL_OP_SWAP:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP();
+      a = VPOP();
+
+      VPUSH(b);
+      VPUSH(a);
+      break;
+
+    case RTL_OP_DUP:
+      VSTACK_ASSERT_LEN(1);
+
+      VPUSH(VPEEK(0));
+      break;
+
+    case RTL_OP_IS_INT28:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isInt28(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_FIX14:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isFix14(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_SYMBOL:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isSymbol(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    // `nil?' and `not' are actually the same function.
+    case RTL_OP_IS_NIL:
+    case RTL_OP_NOT:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isNil(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_CONS:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isCons(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_TUPLE:
+      VSTACK_ASSERT_LEN(1);
+      VPUSH(rtl_isTuple(VPOP()) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_CJMP:
+      VSTACK_ASSERT_LEN(1);
+
+      if (rtl_isNil(VPOP())) {
+	break;
+      }
+
+      // Intentionally fallthrough into JMP ...
+
+    case RTL_OP_JMP:
+      literal = (uint32_t)pc[1] << 0
+	      | (uint32_t)pc[2] << 8
+	      | (uint32_t)pc[3] << 16
+	      | (uint32_t)pc[4] << 24 ;
+      pc = M->code + literal;
+      break;
+
+    case RTL_OP_CALL:
+      VSTACK_ASSERT_LEN(1);
+      f = VPOP();
+
+      printf("rtl: CALL instruction not yet implemented!\n");
+
+      if (unlikely(rtl_isSymbol(f))) {
+	// TODO: Lookup functions by name
+      }
+
+      switch (rtl_typeOf(f)) {
+      case RTL_SELECTOR:
+      case RTL_RECORD:
+      case RTL_ADDR:
+      case RTL_BUILTIN:
+      case RTL_CLOSURE:
+      default:
+	break;
+      }
+
+      break;
+
+    case RTL_OP_RETURN:
+      // For now, the RETURN instruction just exits the interpreter -- we'll handle function calls later.
+      goto interp_cleanup;
+
+
+    // Generate code for binary operations using the BINARY_OP macro.
+    BINARY_OP(IADD, +, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+    BINARY_OP(ISUB, -, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+    BINARY_OP(IMUL, *, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+    BINARY_OP(IDIV, /, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+    BINARY_OP(IMOD, %, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+
+    BINARY_OP(FADD, +, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FSUB, -, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FMUL, *, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+
+    default:
+      printf("Unhandled instruction: opcode %d\n", (int)*pc);
+      break;
+    }
+
+    if (likely(err == RTL_OK)) pc++;
+  }
+
+ interp_cleanup:
+  SAVE_MACHINE();
+
+  return rtl_getError(M);
+}
+
+rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code)
+{
+  M->code = code;
+
+  return runMachine(M, 0);
+}
