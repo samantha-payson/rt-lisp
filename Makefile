@@ -24,7 +24,7 @@ HDRS = \
   inc/rtl/debug.h
 
 
-rtl: $(OBJS)
+crtl: $(OBJS)
 	@ echo "  LD    $@"
 	@ $(LD) $(LDFLAGS) $^ -o $@
 
