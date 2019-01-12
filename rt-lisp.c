@@ -570,7 +570,7 @@ char const *rtl_typeName(rtl_WordType type)
 									\
 	VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));			\
 	break;								\
-	// end of multi-line macro
+  // end of multi-line macro
 
 static
 rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
@@ -647,7 +647,7 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
       VSTACK_ASSERT_LEN(1);
 
       // Don't need to SAVE_MACHINE() here, since reifyCons doesn't look at any
-      // of the un-saved fields.
+      // of the un-saved fields of M.
       ptr = rtl_reifyCons(M, VPOP());
       if (unlikely(!ptr)) {
 	err = M->error;
