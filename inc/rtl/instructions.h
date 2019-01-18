@@ -40,6 +40,10 @@ typedef enum rtl_Opcode {
   RTL_OP_CALL,
   RTL_OP_RETURN,
 
+  // This opcode is placed wherever there is a call site that hasn't been
+  // resolved yet. It will print an error and exit the interpreter if executed.
+  RTL_OP_UNDEFINED_FUNCTION,
+
   // Int28 Arithmetic
   RTL_OP_IADD,
   RTL_OP_ISUB,

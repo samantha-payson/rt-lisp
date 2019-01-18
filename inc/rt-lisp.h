@@ -46,7 +46,7 @@ typedef enum rtl_WordType {
 
   RTL_CLOSURE = 13,
 
-  // 14, 15 aren't yet in use
+  RTL_UNRESOLVED_SYMBOL = 14,
 
   RTL_MAX = 16,
 } rtl_WordType;
@@ -110,10 +110,21 @@ typedef struct rtl_RetAddr {
   rtl_Word envFrame;
 } rtl_RetAddr;
 
-typedef struct rtl_CodePage {
+typedef struct rtl_Page {
+  // The number of bytes in this page which are in use.
   uint32_t len;
-  rtl_Word code[];
-} rtl_CodePage;
+
+  // The number of bytes in this page, including unused space at the end.
+  uint32_t cap;
+
+  // Every time that a new page is installed for a given pageID, the version is
+  // incremented. This allows us to invalidate rtl_CallSites which refer to old
+  // versions of the page.
+  uint32_t version;
+
+  // The actual bytecode.
+  uint8_t code[];
+} rtl_Page;
 
 typedef struct rtl_Machine {
   rtl_Heap heap;
@@ -130,17 +141,27 @@ typedef struct rtl_Machine {
   size_t      rStackLen;
   size_t      rStackCap;
 
-  // All code addresses are relative to this pointer.
-  uint8_t *code;
-
-  // This is the end of the code. 
-  uint8_t *codeEnd;
+  rtl_Page **pages;
+  size_t   pagesLen;
+  size_t   pagesCap;
 
   rtl_Error error;
 } rtl_Machine;
 
 // Initialize the machine M.
 void rtl_initMachine(rtl_Machine *M);
+
+// Replace the pageID'th page with a new empty page and increment the
+// version. This will free the old version of the page.
+void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
+
+// Add a byte to the end of the pageID'th page.
+void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
+
+void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
+
+// Create a new empty page and return its ID.
+uint16_t rtl_newPageID(rtl_Machine *M);
 
 // Return any pending error from M, or RTL_OK if there is no error. This
 // function does not clear the error.
@@ -209,16 +230,21 @@ int rtl_isPtr(rtl_Word w) {
 // #include "rtl/string.h"
 // #include "rtl/record.h"
 #include "rtl/cons.h"
+#include "rtl/addr.h"
 // #include "rtl/top.h"
 
 #include "rtl/rto.h"
-
 #include "rtl/instructions.h"
-
 #include "rtl/debug.h"
+#include "rtl/compiler.h"
 
 #undef _RTL_INSIDE_RT_LISP_H_
 
-rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code);
+rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr);
 
+rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len);
+
+rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
+			   rtl_NameSpace const *ns,
+			   uint32_t            unresID);
 #endif // rt-lisp.h

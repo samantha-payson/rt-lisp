@@ -11,31 +11,44 @@
     ((N & 0xFF00000) << 4)			\
 
 int main() {
-  rtl_Machine M;
-  rtl_Word    w;
-
-  uint8_t code[] = {
-    RTL_OP_CONST, I28(1),
-    RTL_OP_CONST, I28(2),
-    RTL_OP_CONST, I28(3),
-    RTL_OP_CONST, I28(4),
-    RTL_OP_CONST_NIL,
-    RTL_OP_CONS,
-    RTL_OP_CONS,
-    RTL_OP_CONS,
-    RTL_OP_CONS,
-    RTL_OP_RETURN,
-  };
+  rtl_Machine  M;
+  rtl_Compiler C;
+  rtl_Word     w, a, b;
+  uint16_t     pageID;
 
   rtl_initMachine(&M);
+  rtl_initCompiler(&C, &M);
 
-  if (rtl_runSnippet(&M, code)) {
+  M.vStackLen = 1;
+  M.vStack[0] = rtl_cons(&M, rtl_int28(2), RTL_NIL);
+  M.vStack[0] = rtl_cons(&M, rtl_int28(1), M.vStack[0]);
+  M.vStack[0] = rtl_cons(&M, rtl_intern("intrinsic", "cons"), M.vStack[0]);
+
+  printf("\n   Input source was: ");
+  rtl_formatExpr(&M, M.vStack[0]);
+  printf("\n\n");
+
+  pageID = rtl_newPageID(&M);
+
+  rtl_compileExpr(&C, pageID, M.vStack[0]);
+
+  if (C.error.type) {
+    printf("Error compiling expression!\n");
+    return 1;
+  }
+
+  rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
+
+  M.vStackLen = 0;
+
+  if (rtl_run(&M, rtl_addr(pageID, 0))) {
     printf("Error running snippet!\n");
+    return 1;
   }
 
   w = M.vStack[0];
 
-  printf("Result was a '%s': ", rtl_typeNameOf(w));
+  printf("\n   Result was a '%s': ", rtl_typeNameOf(w));
   rtl_formatExpr(&M, w);
   printf("\n");
 

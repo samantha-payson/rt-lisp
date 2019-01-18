@@ -86,6 +86,32 @@ rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
   return reifyPtr(M, cons);
 }
 
+rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons)
+{
+  rtl_Word const *ptr;
+
+  if (cons == RTL_NIL) return RTL_NIL;
+
+  ptr = rtl_reifyCons(M, cons);
+
+  if (!ptr) return RTL_NIL;
+
+  return ptr[0];
+}
+
+rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons)
+{
+  rtl_Word const *ptr;
+
+  if (cons == RTL_NIL) return RTL_NIL;
+
+  ptr = rtl_reifyCons(M, cons);
+
+  if (!ptr) return RTL_NIL;
+
+  return ptr[1];
+}
+
 static
 rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 {
@@ -344,6 +370,10 @@ void rtl_initMachine(rtl_Machine *M)
 
   M->pc = NULL;
 
+  M->pages    = NULL;
+  M->pagesLen = 0;
+  M->pagesCap = 0;
+
   M->error = RTL_OK;
 }
 
@@ -572,8 +602,7 @@ char const *rtl_typeName(rtl_WordType type)
 	break;								\
   // end of multi-line macro
 
-static
-rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
+rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 {
   uint8_t  *pc;
   rtl_Word *vStack;
@@ -586,16 +615,14 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
 
   rtl_Error err;
 
-  uint32_t literal;
+  rtl_Word literal;
 
-  // Some scratch space;
+  // Some scratch space:
   rtl_Word a, b, c, d;
-
   rtl_Word f, g;
-
   rtl_Word const *ptr;
 
-  M->pc = M->code + addr;
+  M->pc = rtl_resolveAddr(M, addr);
 
   // Load up all of the "register" values.
   RESTORE_MACHINE();
@@ -693,34 +720,46 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
 
     case RTL_OP_IS_INT28:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isInt28(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isInt28(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_IS_FIX14:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isFix14(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isFix14(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_IS_SYMBOL:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isSymbol(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
       break;
 
     // `nil?' and `not' are actually the same function.
     case RTL_OP_IS_NIL:
     case RTL_OP_NOT:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isNil(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isNil(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_IS_CONS:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isCons(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isCons(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_IS_TUPLE:
       VSTACK_ASSERT_LEN(1);
-      VPUSH(rtl_isTuple(VPOP()) ? RTL_TOP : RTL_NIL);
+
+      a = VPOP();
+      VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_CJMP:
@@ -737,7 +776,8 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
 	      | (uint32_t)pc[2] << 8
 	      | (uint32_t)pc[3] << 16
 	      | (uint32_t)pc[4] << 24 ;
-      pc = M->code + literal;
+
+      pc = rtl_resolveAddr(M, literal);
       break;
 
     case RTL_OP_CALL:
@@ -762,8 +802,20 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
 
       break;
 
+    case RTL_OP_UNDEFINED_FUNCTION:
+      literal = (rtl_Word)pc[1] << 0
+	      | (rtl_Word)pc[2] << 8
+	      | (rtl_Word)pc[3] << 16
+	      | (rtl_Word)pc[4] << 24 ;
+
+      printf("tried to call undefined function: '%s'\n",
+	     rtl_symbolName(literal));
+
+      break;
+
     case RTL_OP_RETURN:
-      // For now, the RETURN instruction just exits the interpreter -- we'll handle function calls later.
+      // For now, the RETURN instruction just exits the interpreter -- we'll
+      // handle function calls later.
       goto interp_cleanup;
 
 
@@ -793,9 +845,116 @@ rtl_Error runMachine(rtl_Machine *M, uint32_t addr)
   return rtl_getError(M);
 }
 
-rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code)
+rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len)
 {
-  M->code = code;
+  uint16_t pageID = rtl_newPageID(M);
 
-  return runMachine(M, 0);
+  for (uint16_t i = 0; i < len; i++) {
+    rtl_emitByteToPage(M, pageID, code[i]);
+  }
+
+  return rtl_run(M, rtl_addr(pageID, 0));
+}
+
+uint16_t rtl_newPageID(rtl_Machine *M)
+{
+  rtl_Page *page;
+
+  if (M->pagesCap == M->pagesLen) {
+    M->pagesCap = M->pagesCap == 0 ? 32 : 2*M->pagesCap;
+    M->pages    = realloc(M->pages, sizeof(rtl_Page *)*M->pagesCap);
+  }
+
+  page = malloc(sizeof(rtl_Page));
+
+  page->len     = 0;
+  page->cap     = 0;
+  page->version = 0;
+
+  M->pages[M->pagesLen] = page;
+
+  return M->pagesLen++;
+}
+
+void rtl_installPage(rtl_Machine *M, uint16_t id, rtl_Page *page)
+{
+  assert(id < M->pagesLen);
+
+  page->version = M->pages[id]->version + 1;
+
+  free(M->pages[id]);
+  M->pages[id] = page;
+}
+
+void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID)
+{
+  rtl_Page *oldPage, *newPage;
+
+  oldPage = M->pages[pageID];
+  newPage = malloc(sizeof(rtl_Page));
+
+  newPage->len     = 0;
+  newPage->cap     = 0;
+  newPage->version = oldPage->version + 1;
+
+  // TODO: In the future, maybe we'd want to refcount here and share pages
+  //       between machines?
+  //
+  //       Just a thought... definitely not something I have time for right
+  //       now...
+  free(oldPage);
+
+  M->pages[pageID] = newPage;
+}
+
+/* static */
+/* uint16_t rtl_installNewPage(rtl_Machine *M, rtl_Page *page) */
+/* { */
+/*   uint16_t id; */
+
+/*   id = rtl_newPageID(M); */
+
+/*   rtl_installPage(M, id, page); */
+
+/*   return id; */
+/* } */
+
+rtl_Page *rtl_getPageByID(rtl_Machine *M, uint16_t id)
+{
+  assert(id < M->pagesLen);
+  return M->pages[id];
+}
+
+void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
+{
+  rtl_Page *page;
+  rtl_Page *newPage;
+
+  assert(pageID < M->pagesLen);
+  page = M->pages[pageID];
+
+  if (unlikely(page->cap == page->len)) {
+    page->cap = !page->cap ? 32 : 4*page->cap/3;
+    newPage   = malloc(sizeof(rtl_Page) + page->cap);
+
+    newPage->len     = page->len;
+    newPage->cap     = page->cap;
+    newPage->version = page->version;
+
+    memcpy(newPage->code, page->code, page->len);
+
+    free(page);
+    page = M->pages[pageID]
+         = newPage;
+  }
+
+  page->code[page->len++] = b;
+}
+
+void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
+{
+  rtl_emitByteToPage(M, pageID, (w >>  0) & 0xFF);
+  rtl_emitByteToPage(M, pageID, (w >>  8) & 0xFF);
+  rtl_emitByteToPage(M, pageID, (w >> 16) & 0xFF);
+  rtl_emitByteToPage(M, pageID, (w >> 24) & 0xFF);
 }

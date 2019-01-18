@@ -13,7 +13,7 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_SYMBOL:
-    printf("<symbol>");
+    printf("%s:%s", rtl_symbolPackageName(w), rtl_symbolName(w));
     break;
 
   case RTL_SELECTOR:

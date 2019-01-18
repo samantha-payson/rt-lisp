@@ -1,5 +1,5 @@
 CC     = gcc
-CFLAGS = -Iinc -g -O3 -march=native
+CFLAGS = -Iinc -g -O0 -march=native
 
 LD      = gcc
 LDFLAGS =
@@ -8,6 +8,8 @@ OBJS = \
   rt-lisp.o \
   BitMap.o \
   debug.o \
+  symbol.o \
+  compiler.o \
   main.o
 
 HDRS = \
@@ -21,6 +23,7 @@ HDRS = \
   inc/rtl/tuple.h \
   inc/rtl/rto.h \
   inc/rtl/instructions.h \
+  inc/rtl/compiler.h \
   inc/rtl/debug.h
 
 
