@@ -109,6 +109,8 @@ rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *pkgName)
 
   pkg->next       = C->pkgByID[idx];
   C->pkgByID[idx] = pkg;
+
+  return pkg;
 }
 
 // Intern a symbol, with a given package and name. 
