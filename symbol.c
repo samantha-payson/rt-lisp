@@ -195,13 +195,6 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
   // .. then add this to the array.
   symByID[symNextID++] = sym;
 
-  printf("Just interned symbol %d, '%s:%s'.\n",
-	 (int)sym->id,
-	 sym->pkg->name,
-	 sym->name);
-
-  printf("symbol entry addr: %p\n", symByID[sym->id]);
-
   return sym->id;
 }
 

@@ -27,9 +27,9 @@ int main() {
   w = rtl_read(&C, stdin);
   w = rtl_macroExpand(&C, &ns, w);
 
-  printf("\n   Input source was: ");
+  printf("\n Input source was: ");
   rtl_formatExpr(&M, w);
-  printf("\n\n");
+  printf("\n");
 
   pageID = rtl_newPageID(&M);
 
@@ -42,6 +42,8 @@ int main() {
 
   rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
 
+  printf("\n Running code on VM:\n");
+
   if (rtl_run(&M, rtl_addr(pageID, 0))) {
     printf("Error running snippet!\n");
     return 1;
@@ -49,7 +51,7 @@ int main() {
 
   w = M.vStack[0];
 
-  printf("\n   Result was a '%s': ", rtl_typeNameOf(w));
+  printf("\n Result was a '%s': ", rtl_typeNameOf(w));
   rtl_formatExpr(&M, w);
   printf("\n");
 
