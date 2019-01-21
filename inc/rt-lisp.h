@@ -5,20 +5,21 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <assert.h>
+#include <stdio.h>
 
 #define _RTL_INSIDE_RT_LISP_H_
 
 #include "rtl/BitMap.h"
 
 // `rtl_Word' is the fundamental type operated on by the runtime LISP machine.
-// It is used to represent both code and data internally. All addresses are
-// expressed in terms of `rtl_Word's.
+// It is used to represent data internally. All heap addresses are expressed in
+// terms of `rtl_Word's.
 //
 // Because an `rtl_Word' might encode a heap address, they cannot be shared
-// between seperate machines.
+// between seperate rtl_Machine's.
 //
-// The low 4 bits of an `rtl_Word' encode its type, and the next 28 bits contain
-// data.
+// The low 4 bits of an `rtl_Word' encode its type, and the remaining 28 bits
+// contain data.
 typedef uint32_t rtl_Word;
 
 typedef enum rtl_WordType {
@@ -126,6 +127,8 @@ typedef struct rtl_Page {
   uint8_t code[];
 } rtl_Page;
 
+typedef rtl_Word **rtl_WorkingSet;
+
 typedef struct rtl_Machine {
   rtl_Heap heap;
 
@@ -141,6 +144,10 @@ typedef struct rtl_Machine {
   size_t      rStackLen;
   size_t      rStackCap;
 
+  rtl_WorkingSet *wsStack;
+  size_t         wsStackLen;
+  size_t         wsStackCap;
+
   rtl_Page **pages;
   size_t   pagesLen;
   size_t   pagesCap;
@@ -151,6 +158,36 @@ typedef struct rtl_Machine {
 // Initialize the machine M.
 void rtl_initMachine(rtl_Machine *M);
 
+static inline
+size_t rtl_push(rtl_Machine *M, rtl_Word w)
+{
+  size_t pos;
+
+  pos = M->vStackLen;
+
+  M->vStack[M->vStackLen++] = w;
+
+  return pos;
+}
+
+static inline
+rtl_Word rtl_pop(rtl_Machine *M)
+{
+  return M->vStack[--M->vStackLen];
+}
+
+static inline
+rtl_Word rtl_peek(rtl_Machine *M, int n)
+{
+  return M->vStack[M->vStackLen - (1 + n)];
+}
+
+static inline
+void rtl_popK(rtl_Machine *M, int k)
+{
+  M->vStackLen -= k;
+}
+
 // Replace the pageID'th page with a new empty page and increment the
 // version. This will free the old version of the page.
 void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
@@ -158,10 +195,21 @@ void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
 // Add a byte to the end of the pageID'th page.
 void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
 
+// Add a word to the end of the pageID'th page, in little-endian encoding. This
+// is the format expected by instructions with a word argument.
 void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
 
 // Create a new empty page and return its ID.
 uint16_t rtl_newPageID(rtl_Machine *M);
+
+void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws);
+
+void rtl_popWorkingSet(rtl_Machine *M);
+
+#define RTL_PUSH_WORKING_SET(M, PTRS...)		\
+  rtl_Word *___rtl_workingSet___[] = { PTRS, NULL };	\
+  rtl_pushWorkingSet(M, ___rtl_workingSet___);		\
+  // End of multi-line macro
 
 // Return any pending error from M, or RTL_OK if there is no error. This
 // function does not clear the error.
@@ -247,4 +295,7 @@ rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len);
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   rtl_NameSpace const *ns,
 			   uint32_t            unresID);
+
+rtl_Word rtl_read(rtl_Compiler *C, FILE *f);
+
 #endif // rt-lisp.h

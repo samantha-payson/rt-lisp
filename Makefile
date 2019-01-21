@@ -10,6 +10,7 @@ OBJS = \
   debug.o \
   symbol.o \
   compiler.o \
+  reader.o \
   main.o
 
 HDRS = \

@@ -19,6 +19,13 @@ rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr);
 rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons);
 rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons);
 
+rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last);
+
+static inline
+rtl_Word rtl_reverseList(rtl_Machine *M, rtl_Word ls) {
+  return rtl_reverseListImproper(M, ls, RTL_NIL);
+}
+
 static inline
 rtl_Word rtl_caar(rtl_Machine *M, rtl_Word cons) {
   return rtl_car(M, rtl_car(M, cons));

@@ -209,6 +209,7 @@ int collectGen(rtl_Machine *M, int g)
   rtl_Generation *gen, *youngerGen, *nextGen;
   rtl_BitMap *bmp;
   int highest;
+  rtl_Word **pp;
 
   // Next generation needs to exist in order for us to collect. Maybe in the
   // future we could add the ability to compact the maximum generation in-place,
@@ -243,6 +244,13 @@ int collectGen(rtl_Machine *M, int g)
   // .. any environment frames on the return stack ..
   for (i = 0; i < M->rStackLen; i++) {
     markWord(M, gen, M->rStack[i].envFrame);
+  }
+
+  // .. any words in live working sets ..
+  for (i = 0; i < M->wsStackLen; i++) {
+    for (pp = M->wsStack[i]; *pp != NULL; pp++) {
+      markWord(M, gen, **pp);
+    }
   }
 
   // .. and any live words in younger generations.
@@ -369,6 +377,10 @@ void rtl_initMachine(rtl_Machine *M)
   M->rStackCap = 64;
 
   M->pc = NULL;
+
+  M->wsStack    = NULL;
+  M->wsStackLen = 0;
+  M->wsStackCap = 0;
 
   M->pages    = NULL;
   M->pagesLen = 0;
@@ -957,4 +969,34 @@ void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
   rtl_emitByteToPage(M, pageID, (w >>  8) & 0xFF);
   rtl_emitByteToPage(M, pageID, (w >> 16) & 0xFF);
   rtl_emitByteToPage(M, pageID, (w >> 24) & 0xFF);
+}
+
+rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
+{
+  rtl_Word result = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &ls, &last, &result);
+
+  for (result = last; ls != RTL_NIL; ls = rtl_cdr(M, ls)) {
+    result = rtl_cons(M, rtl_car(M, ls), result);
+  }
+
+  return result;
+}
+
+void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws)
+{
+  if (M->wsStackLen == M->wsStackCap) {
+    M->wsStackCap = !M->wsStackCap ? 8 : 2*M->wsStackCap;
+    M->wsStack = realloc(M->wsStack, M->wsStackCap*sizeof(rtl_WorkingSet *));
+  }
+
+  M->wsStack[M->wsStackLen++] = ws;
+}
+
+void rtl_popWorkingSet(rtl_Machine *M)
+{
+  assert(M->wsStackLen > 0);
+
+  M->wsStackLen--;
 }

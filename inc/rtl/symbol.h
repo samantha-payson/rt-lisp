@@ -27,7 +27,6 @@ rtl_Word rtl_unresolvedSymbol(uint32_t id)
   return (id << 4) | RTL_UNRESOLVED_SYMBOL;
 }
 
-
 // These two functions are part of the symbol resolution process which takes
 // place during macro expansion. They return symbol IDs:
 

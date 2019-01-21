@@ -173,6 +173,56 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
 
   C->M = M;
 
-  memset(C->callSitesByName, 0, sizeof(C->callSitesByName));
-  memset(C->pkgByID, 0, sizeof(C->pkgByID));
+  memset(C->callSitesByName, 0, sizeof C->callSitesByName);
+  memset(C->pkgByID, 0, sizeof C->pkgByID);
+}
+
+// In the future, this will check if w is the name of a macro... right now it
+// just returns false 100% of the time.
+bool rtl_isMacroName(rtl_Compiler *C, rtl_Word w) {
+  return false;
+}
+
+rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
+{
+  rtl_Word head = RTL_NIL,
+           arg  = RTL_NIL,
+           tail = RTL_NIL,
+           out  = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &tail, &out);
+
+  switch (rtl_typeOf(in)) {
+  case RTL_UNRESOLVED_SYMBOL:
+    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
+    break;
+
+  case RTL_CONS:
+    head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
+
+    if (rtl_isMacroName(C, head)) {
+      // TODO: Implement macros
+      out = RTL_NIL;
+      break;
+    }
+
+    out = rtl_cons(C->M, head, RTL_NIL);
+
+    for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
+    {
+      arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+      out = rtl_cons(C->M, arg, out);
+    }
+
+    out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
+    break;
+
+  default:
+    out = in;
+    break;
+  }
+
+  rtl_popWorkingSet(C->M);
+
+  return out;
 }

@@ -93,6 +93,8 @@ uint32_t rtl_internUnresolvedID(char const *pkg, char const *name)
     }
   }
 
+  // asm("int3");
+
   // There is no such unresolved symbol at this point -- make a new one.
   usym = malloc(sizeof(UnresolvedSymbol));
   usym->id   = unresNextID;
@@ -259,9 +261,11 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   uint32_t            unresID)
 {
   UnresolvedSymbol const *usym;
-  uint32_t     pkgID;
-  rtl_Package  *pkg;
-  size_t       i;
+  rtl_NameSpace const    *seek;
+
+  uint32_t    pkgID;
+  rtl_Package *pkg;
+  size_t      i;
 
   assert(unresID < unresNextID);
 
@@ -269,12 +273,12 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 
   // First check to see if this is an unqualified alias
   if (NULL == usym->pkg) {
-    for (ns = ns; NULL != ns; ns = ns->super) {
-      switch (ns->type) {
+    for (seek = ns; NULL != seek; seek = seek->super) {
+      switch (seek->type) {
       case RTL_NS_ALIAS:
-	if (!strcmp(usym->name, ns->as.alias.aliasName)) {
+	if (!strcmp(usym->name, seek->as.alias.aliasName)) {
 	  // This symbol refers to an alias, our work here is done.
-	  return ns->as.alias.symbol;
+	  return seek->as.alias.symbol;
 	}
 	break;
 

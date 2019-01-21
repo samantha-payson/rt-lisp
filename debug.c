@@ -16,6 +16,10 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("%s:%s", rtl_symbolPackageName(w), rtl_symbolName(w));
     break;
 
+  case RTL_UNRESOLVED_SYMBOL:
+    printf("<unres-sym>");
+    break;
+
   case RTL_SELECTOR:
     printf("<selector>");
     break;

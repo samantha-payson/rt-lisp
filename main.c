@@ -11,26 +11,29 @@
     ((N & 0xFF00000) << 4)			\
 
 int main() {
-  rtl_Machine  M;
-  rtl_Compiler C;
-  rtl_Word     w, a, b;
-  uint16_t     pageID;
+  rtl_Machine   M;
+  rtl_Compiler  C;
+  rtl_Word      w, a, b;
+  uint16_t      pageID;
+  rtl_NameSpace ns;
 
   rtl_initMachine(&M);
   rtl_initCompiler(&C, &M);
 
-  M.vStackLen = 1;
-  M.vStack[0] = rtl_cons(&M, rtl_int28(2), RTL_NIL);
-  M.vStack[0] = rtl_cons(&M, rtl_int28(1), M.vStack[0]);
-  M.vStack[0] = rtl_cons(&M, rtl_intern("intrinsic", "cons"), M.vStack[0]);
+  RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
+
+  ns = rtl_nsInPkg(NULL, rtl_internPackage(&C, "intrinsic"));
+
+  w = rtl_read(&C, stdin);
+  w = rtl_macroExpand(&C, &ns, w);
 
   printf("\n   Input source was: ");
-  rtl_formatExpr(&M, M.vStack[0]);
+  rtl_formatExpr(&M, w);
   printf("\n\n");
 
   pageID = rtl_newPageID(&M);
 
-  rtl_compileExpr(&C, pageID, M.vStack[0]);
+  rtl_compileExpr(&C, pageID, w);
 
   if (C.error.type) {
     printf("Error compiling expression!\n");
@@ -38,8 +41,6 @@ int main() {
   }
 
   rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
-
-  M.vStackLen = 0;
 
   if (rtl_run(&M, rtl_addr(pageID, 0))) {
     printf("Error running snippet!\n");
