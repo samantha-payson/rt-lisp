@@ -192,16 +192,22 @@ void rtl_popK(rtl_Machine *M, int k)
 void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
 
 // Add a byte to the end of the pageID'th page.
-void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
+//
+// Returns the address of that byte.
+rtl_Word rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
 
 // Add an unsigned 16-bit short to the end of the pageID'th page, in
 // little-endian encoding. This is the format expected by instructions with a
 // 16-bit argument.
-void rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
+//
+// Returns the address of that short.
+rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
 
 // Add a word to the end of the pageID'th page, in little-endian encoding. This
 // is the format expected by instructions with a word argument.
-void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
+//
+// Returns the address of that word.
+rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
 
 // Create a new empty page and return its ID.
 uint16_t rtl_newPageID(rtl_Machine *M);

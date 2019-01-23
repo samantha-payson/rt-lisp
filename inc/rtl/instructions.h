@@ -44,7 +44,7 @@ typedef enum rtl_Opcode {
   RTL_OP_JMP,
   RTL_OP_CJMP,
   RTL_OP_CALL,
-  RTL_OP_NAMED_CALL,
+  RTL_OP_STATIC_CALL,
   RTL_OP_RETURN,
 
   // This opcode is placed wherever there is a call site that hasn't been

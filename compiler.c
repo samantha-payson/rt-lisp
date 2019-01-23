@@ -73,7 +73,7 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
     if (site->version == page->version) {
       csa->sites[w++] = csa->sites[r];
 
-      code[0] = RTL_OP_CALL;
+      code[0] = RTL_OP_STATIC_CALL;
       code[1] = (fn >>  0) & 0xFF;
       code[2] = (fn >>  8) & 0xFF;
       code[3] = (fn >> 16) & 0xFF;
@@ -515,6 +515,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 {
   size_t   i;
   uint16_t newPageID;
+  rtl_Word addr;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -549,6 +550,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitShortToPage(C->M, pageID, x->as.call.argsLen);
     break;
 
+  case RTL_INTRINSIC_NAMED_CALL:
+    for (i = 0; i < x->as.namedCall.argsLen; i++) {
+      rtl_emitIntrinsicCode(C, pageID, x->as.namedCall.args[i]);
+    }
+
+    addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
+    rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
+    rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+
+    rtl_registerCallSite(C, x->as.namedCall.name, addr);
+    break;
+
   case RTL_INTRINSIC_LAMBDA:
     // TODO: Prevent recompilation of the same function from creating the same
     // lambda over and over with a new page each time...
@@ -567,7 +580,36 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+    break;
 
+  case RTL_INTRINSIC_IADD:
+    rtl_emitIntrinsicCode(C, pageID, x->as.iadd.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.iadd.rightArg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_IADD);
+    break;
+
+  case RTL_INTRINSIC_ISUB:
+    rtl_emitIntrinsicCode(C, pageID, x->as.isub.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.isub.rightArg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_ISUB);
+    break;
+
+  case RTL_INTRINSIC_IMUL:
+    rtl_emitIntrinsicCode(C, pageID, x->as.imul.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.imul.rightArg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_IMUL);
+    break;
+
+  case RTL_INTRINSIC_IDIV:
+    rtl_emitIntrinsicCode(C, pageID, x->as.idiv.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.idiv.rightArg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_IDIV);
+    break;
+
+  case RTL_INTRINSIC_IMOD:
+    rtl_emitIntrinsicCode(C, pageID, x->as.imod.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.imod.rightArg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_IMOD);
     break;
 
   case RTL_INTRINSIC_CONSTANT:

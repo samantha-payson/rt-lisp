@@ -47,7 +47,7 @@ int main() {
 
   rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
 
-  rtl_disasmPage(&M, pageID + 1);
+  rtl_disasmPage(&M, pageID);
 
   printf("\n Running code on VM:\n");
 

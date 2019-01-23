@@ -832,7 +832,7 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
 	M->env = b;
 	M->pc = rtl_resolveAddr(M, f);
-	printf(" -> page %d, offs %d <-\n",
+	printf("\n  -> page %d, offs %d\n\n",
 	       (int)rtl_addrPage(f),
 	       (int)rtl_addrOffs(f));
 	break;
@@ -840,7 +840,8 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       case RTL_CLOSURE:
 	rptr = reifyPtr(M, f);
 
-	f    = rptr[0];
+	f = rptr[0];
+
 	if (rptr[1] != RTL_NIL) {
 	  rptr = rtl_reifyTuple(M, rptr[1], &len);
 	} else {
@@ -860,7 +861,7 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 	M->env = b;
 	M->pc  = rtl_resolveAddr(M, f);
 
-	printf(" -> page %d, offs %d <-\n",
+	printf("\n-> page %d, offs %d <-\n\n",
 	       (int)rtl_addrPage(f),
 	       (int)rtl_addrOffs(f));
 	break;
@@ -869,7 +870,39 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 	printf(" error: Can't call object of type '%s'!\n",
 	       rtl_typeNameOf(f));
 	goto interp_cleanup;
+
       } break;
+
+    case RTL_OP_STATIC_CALL:
+      M->pc = readWord(M->pc, &f);
+      M->pc = readShort(M->pc, &size);
+
+      VSTACK_ASSERT_LEN(1+ size);
+
+      wptr = rtl_allocTuple(M, &a, size);
+
+      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
+      M->vStackLen -= size;
+
+      wptr = rtl_allocTuple(M, &b, 1);
+      wptr[0] = a;
+
+      if (unlikely(M->rStackLen == M->rStackCap)) {
+	M->rStackCap = M->rStackCap*2;
+	M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+      }
+
+      M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	.pc  = M->pc,
+	.env = M->env,
+      };
+
+      M->env = b;
+      M->pc = rtl_resolveAddr(M, f);
+      printf("\n  -> page %d, offs %d\n\n",
+	     (int)rtl_addrPage(f),
+	     (int)rtl_addrOffs(f));
+      break;
 
     case RTL_OP_UNDEFINED_FUNCTION:
       M->pc = readWord(M->pc, &literal);
@@ -889,6 +922,8 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
       M->pc  = M->rStack[M->rStackLen].pc;
       M->env = M->rStack[M->rStackLen].env;
+
+      printf("\n<-\n\n");
       break;
 
 
@@ -996,10 +1031,11 @@ rtl_Page *rtl_getPageByID(rtl_Machine *M, uint16_t id)
   return M->pages[id];
 }
 
-void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
+rtl_Word rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
 {
   rtl_Page *page;
   rtl_Page *newPage;
+  rtl_Word addr;
 
   assert(pageID < M->pagesLen);
   page = M->pages[pageID];
@@ -1019,21 +1055,33 @@ void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
          = newPage;
   }
 
+  addr = rtl_addr(pageID, page->len);
+
   page->code[page->len++] = b;
+
+  return addr;
 }
 
-void rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16)
+rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16)
 {
-  rtl_emitByteToPage(M, pageID, (u16 >> 0) & 0xFF);
+  rtl_Word addr;
+
+  addr = rtl_emitByteToPage(M, pageID, (u16 >> 0) & 0xFF);
   rtl_emitByteToPage(M, pageID, (u16 >> 8) & 0xFF);
+
+  return addr;
 }
 
-void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
+rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
 {
-  rtl_emitByteToPage(M, pageID, (w >>  0) & 0xFF);
+  rtl_Word addr;
+
+  addr = rtl_emitByteToPage(M, pageID, (w >>  0) & 0xFF);
   rtl_emitByteToPage(M, pageID, (w >>  8) & 0xFF);
   rtl_emitByteToPage(M, pageID, (w >> 16) & 0xFF);
   rtl_emitByteToPage(M, pageID, (w >> 24) & 0xFF);
+
+  return addr;
 }
 
 rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)

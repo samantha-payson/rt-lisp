@@ -232,7 +232,7 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   closure %d#%X\n",
+    printf("   closure   %d#%X\n",
 	   (int)rtl_addrPage(literal),
 	   (unsigned int)rtl_addrOffs(literal));
     return bc + 5;
