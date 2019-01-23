@@ -44,7 +44,6 @@ typedef enum rtl_WordType {
   RTL_ADDR = 11,
 
   RTL_BUILTIN = 12,
-
   RTL_CLOSURE = 13,
 
   RTL_UNRESOLVED_SYMBOL = 14,
@@ -107,8 +106,8 @@ typedef enum rtl_Error {
 } rtl_Error;
 
 typedef struct rtl_RetAddr {
-  rtl_Word *pc;
-  rtl_Word envFrame;
+  uint8_t  *pc;
+  rtl_Word env;
 } rtl_RetAddr;
 
 typedef struct rtl_Page {
@@ -132,7 +131,7 @@ typedef rtl_Word **rtl_WorkingSet;
 typedef struct rtl_Machine {
   rtl_Heap heap;
 
-  rtl_Word envFrame;
+  rtl_Word env;
 
   rtl_Word *vStack;
   size_t   vStackLen;
@@ -195,6 +194,11 @@ void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
 // Add a byte to the end of the pageID'th page.
 void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
 
+// Add an unsigned 16-bit short to the end of the pageID'th page, in
+// little-endian encoding. This is the format expected by instructions with a
+// 16-bit argument.
+void rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
+
 // Add a word to the end of the pageID'th page, in little-endian encoding. This
 // is the format expected by instructions with a word argument.
 void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
@@ -247,6 +251,8 @@ char const *rtl_errString(rtl_Error err);
 //
 rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr);
 
+rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len);
+
 void rtl_testGarbageCollector(size_t count);
 
 // Return true if w is one of the pointer types:
@@ -283,6 +289,7 @@ int rtl_isPtr(rtl_Word w) {
 
 #include "rtl/rto.h"
 #include "rtl/instructions.h"
+#include "rtl/intrinsic.h"
 #include "rtl/debug.h"
 #include "rtl/compiler.h"
 

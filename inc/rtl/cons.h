@@ -26,6 +26,8 @@ rtl_Word rtl_reverseList(rtl_Machine *M, rtl_Word ls) {
   return rtl_reverseListImproper(M, ls, RTL_NIL);
 }
 
+size_t rtl_listLength(rtl_Machine *M, rtl_Word ls);
+
 static inline
 rtl_Word rtl_caar(rtl_Machine *M, rtl_Word cons) {
   return rtl_car(M, rtl_car(M, cons));

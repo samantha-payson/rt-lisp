@@ -234,7 +234,7 @@ int collectGen(rtl_Machine *M, int g)
   // Mark any pointers into this generation in ..
 
   // .. the current environment frame ..
-  markWord(M, gen, M->envFrame);
+  markWord(M, gen, M->env);
 
   // .. any words on the value stack ..
   for (i = 0; i < M->vStackLen; i++) {
@@ -243,7 +243,7 @@ int collectGen(rtl_Machine *M, int g)
 
   // .. any environment frames on the return stack ..
   for (i = 0; i < M->rStackLen; i++) {
-    markWord(M, gen, M->rStack[i].envFrame);
+    markWord(M, gen, M->rStack[i].env);
   }
 
   // .. any words in live working sets ..
@@ -309,7 +309,7 @@ int collectGen(rtl_Machine *M, int g)
     rtl_Word old, new;
 
     // .. the current environment frame ..
-    M->envFrame = moveWord(M, highest, M->envFrame);
+    M->env = moveWord(M, highest, M->env);
 
     // .. any words on the value stack ..
     for (i = 0; i < M->vStackLen; i++) {
@@ -318,7 +318,7 @@ int collectGen(rtl_Machine *M, int g)
 
     // .. any environment frames on the return stack ..
     for (i = 0; i < M->rStackLen; i++) {
-      M->rStack[i].envFrame = new = moveWord(M, highest, old = M->rStack[i].envFrame);
+      M->rStack[i].env = new = moveWord(M, highest, old = M->rStack[i].env);
     }
   }
 
@@ -337,6 +337,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   case RTL_STRING:
   case RTL_RECORD:
   case RTL_CONS:
+  case RTL_CLOSURE:
     break;
 
   default:
@@ -362,11 +363,18 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   return gen0->words + offs;
 }
 
+rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
+{
+  rtl_Word *ptr = rtl_allocGC(M, RTL_TUPLE, w, len + 1);
+  ptr[0] = (len << 4) | RTL_LENGTH;
+  return ptr + 1;
+}
+
 void rtl_initMachine(rtl_Machine *M)
 {
   rtl_initHeap(&M->heap);
 
-  M->envFrame = RTL_NIL;
+  M->env = RTL_NIL;
 
   M->vStack    = malloc(64*sizeof(rtl_Word));
   M->vStackLen = 0;
@@ -516,6 +524,9 @@ char const *rtl_typeName(rtl_WordType type)
   case RTL_TOP:
     return "Top";
 
+  case RTL_CLOSURE:
+    return "Closure";
+
   case RTL_LENGTH:
     return "[Length (impl detail)]";
 
@@ -535,67 +546,36 @@ char const *rtl_typeName(rtl_WordType type)
 #define unlikely(x)     __builtin_expect((x),0)
 
 #define VPUSH(W) ({							\
-      if (unlikely(vStackLen == vStackCap)) {				\
-	vStackCap = vStackCap == 0 ? 64 : vStackCap * 2;		\
-	vStack    = realloc(vStack, sizeof(rtl_Word)*vStackCap);	\
+      if (unlikely(M->vStackLen == M->vStackCap)) {			\
+	M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;	\
+	M->vStack    = realloc(M->vStack, sizeof(rtl_Word)*M->vStackCap); \
       }									\
 									\
-      vStack[vStackLen++] = (W);					\
+      M->vStack[M->vStackLen++] = (W);					\
     })									\
   // End of multi-line macro
 
 #define VSTACK_ASSERT_LEN(N) ({			\
-      if (unlikely((N) > vStackLen)) {		\
-	err = RTL_ERR_STACK_UNDERFLOW;		\
+      if (unlikely((N) > M->vStackLen)) {	\
+	M->error = RTL_ERR_STACK_UNDERFLOW;	\
 	goto interp_cleanup;			\
       }						\
     })						\
   // End of multi-line macro
 
 #define RSTACK_ASSERT_LEN(N) ({			\
-      if (unlikely((N) > rStackLen)) {		\
-	err = RTL_ERR_STACK_UNDERFLOW;		\
+      if (unlikely((N) > M->rStackLen)) {	\
+	M->error = RTL_ERR_STACK_UNDERFLOW;	\
 	goto interp_cleanup;			\
       }						\
     })						\
   // End of multi-line macro
 
-#define VPOP() (vStack[--vStackLen])
+#define VPOP() (M->vStack[--M->vStackLen])
 
-#define VPOPK(K) ({ vStackLen -= (K); })
+#define VPOPK(K) ({ M->vStackLen -= (K); })
 
-#define VPEEK(N) (vStack[vStackLen - ((N) + 1)])
-
-#define SAVE_MACHINE() ({			\
-      M->pc = pc;				\
-						\
-      M->vStack    = vStack;			\
-      M->vStackLen = vStackLen;			\
-      M->vStackCap = vStackCap;			\
-						\
-      M->rStack    = rStack;			\
-      M->rStackLen = rStackLen;			\
-      M->rStackCap = rStackCap;			\
-						\
-      M->error = err;				\
-    })						\
-  // End of multi-line macro
-
-#define RESTORE_MACHINE() ({			\
-      pc = M->pc;				\
-						\
-      vStack    = M->vStack;			\
-      vStackLen = M->vStackLen;			\
-      vStackCap = M->vStackCap;			\
-						\
-      rStack    = M->rStack;			\
-      rStackLen = M->rStackLen;			\
-      rStackCap = M->rStackCap;			\
-						\
-      err = M->error;				\
-    })						\
-  // End of multi-line macro
-
+#define VPEEK(N) (M->vStack[M->vStackLen - ((N) + 1)])
 
 // This is the decode/dispatch template for all hard-coded binary operators.
 #define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_ERR, TYPE_MK, TYPE_VAL)	\
@@ -606,7 +586,7 @@ char const *rtl_typeName(rtl_WordType type)
 	b = VPOP();							\
 									\
 	if (unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b))) {	\
-	  err = TYPE_ERR;						\
+	  M->error = TYPE_ERR;						\
 	  goto interp_cleanup;						\
 	}								\
 									\
@@ -614,45 +594,61 @@ char const *rtl_typeName(rtl_WordType type)
 	break;								\
   // end of multi-line macro
 
+static
+uint8_t *readWord(uint8_t *pc, rtl_Word *out)
+{
+  *out = (rtl_Word)pc[0] << 0
+       | (rtl_Word)pc[1] << 8
+       | (rtl_Word)pc[2] << 16
+       | (rtl_Word)pc[3] << 24 ;
+
+  return pc + 4;
+}
+
+static
+uint8_t *readShort(uint8_t *pc, uint16_t *out)
+{
+  *out = (rtl_Word)pc[0] << 0
+       | (rtl_Word)pc[1] << 8 ;
+
+  return pc + 2;
+}
+
 rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 {
-  uint8_t  *pc;
-  rtl_Word *vStack;
-  size_t   vStackLen,
-           vStackCap;
+  uint8_t opcode;
 
-  rtl_RetAddr *rStack;
-  size_t       rStackLen,
-               rStackCap;
-
-  rtl_Error err;
+  uint16_t frame, idx, size;
+  size_t   len;
 
   rtl_Word literal;
 
   // Some scratch space:
-  rtl_Word a, b, c, d;
-  rtl_Word f, g;
-  rtl_Word const *ptr;
+  rtl_Word a = RTL_NIL,
+           b = RTL_NIL,
+           c = RTL_NIL,
+           d = RTL_NIL;
+
+  rtl_Word f = RTL_NIL,
+           g = RTL_NIL;
+
+  rtl_Word const *rptr;
+  rtl_Word *wptr;
+
+  // Ensure these words are involved in any garbage collection that may happen.
+  RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
   M->pc = rtl_resolveAddr(M, addr);
 
-  // Load up all of the "register" values.
-  RESTORE_MACHINE();
+  while (M->error == RTL_OK) {
+    rtl_disasm(M->pc);
 
-  while (err == RTL_OK) {
-    rtl_disasm(pc);
-
-    switch (*pc) {
+    switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
       break;
 
     case RTL_OP_CONST:
-      literal = (uint32_t)pc[1] << 0
-	      | (uint32_t)pc[2] << 8
-	      | (uint32_t)pc[3] << 16
-	      | (uint32_t)pc[4] << 24 ;
-
-      pc += 4;
+      M->pc = readWord(M->pc, &literal);
 
       VPUSH(literal);
       break;
@@ -671,11 +667,7 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       b = VPEEK(0);
       a = VPEEK(1);
 
-      SAVE_MACHINE();
-
       c = rtl_cons(M, a, b);
-
-      RESTORE_MACHINE();
 
       VPOPK(2);
 	
@@ -687,25 +679,23 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
       // Don't need to SAVE_MACHINE() here, since reifyCons doesn't look at any
       // of the un-saved fields of M.
-      ptr = rtl_reifyCons(M, VPOP());
-      if (unlikely(!ptr)) {
-	err = M->error;
+      rptr = rtl_reifyCons(M, VPOP());
+      if (unlikely(!rptr)) {
 	goto interp_cleanup;
       }
 
-      VPUSH(ptr[0]);
+      VPUSH(rptr[0]);
       break;
 
     case RTL_OP_CDR:
       VSTACK_ASSERT_LEN(1);
 
-      ptr = rtl_reifyCons(M, VPOP());
-      if (unlikely(!ptr)) {
-	err = M->error;
+      rptr = rtl_reifyCons(M, VPOP());
+      if (unlikely(!rptr)) {
 	goto interp_cleanup;
       }
 
-      VPUSH(ptr[1]);
+      VPUSH(rptr[1]);
       break;
 
     case RTL_OP_POP:
@@ -784,41 +774,105 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       // Intentionally fallthrough into JMP ...
 
     case RTL_OP_JMP:
-      literal = (uint32_t)pc[1] << 0
-	      | (uint32_t)pc[2] << 8
-	      | (uint32_t)pc[3] << 16
-	      | (uint32_t)pc[4] << 24 ;
+      readWord(M->pc, &literal);
 
-      pc = rtl_resolveAddr(M, literal);
+      M->pc = rtl_resolveAddr(M, literal);
+      break;
+
+    case RTL_OP_VAR:
+      M->pc = readShort(M->pc, &frame);
+      M->pc = readShort(M->pc, &idx);
+
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      assert(frame < len);
+
+      rptr = rtl_reifyTuple(M, rptr[frame], &len);
+      assert(idx < len);
+
+      VPUSH(rptr[idx]);
+      break;
+
+    case RTL_OP_CLOSURE:
+      M->pc = readWord(M->pc, &literal);
+
+      wptr = rtl_allocGC(M, RTL_CLOSURE, &f, 2);
+
+      wptr[0] = literal;
+      wptr[1] = M->env;
+
+      VPUSH(f);
       break;
 
     case RTL_OP_CALL:
-      VSTACK_ASSERT_LEN(1);
+      M->pc = readShort(M->pc, &size);
+
+      VSTACK_ASSERT_LEN(1+ size);
+
+      wptr = rtl_allocTuple(M, &a, size);
+
+      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
+      M->vStackLen -= size;
+
       f = VPOP();
 
-      printf("rtl: CALL instruction not yet implemented!\n");
-
-      if (unlikely(rtl_isSymbol(f))) {
-	// TODO: Lookup functions by name
-      }
-
       switch (rtl_typeOf(f)) {
-      case RTL_SELECTOR:
-      case RTL_RECORD:
       case RTL_ADDR:
-      case RTL_BUILTIN:
-      case RTL_CLOSURE:
-      default:
-	break;
-      }
+	wptr = rtl_allocTuple(M, &b, 1);
+	wptr[0] = a;
 
-      break;
+	if (unlikely(M->rStackLen == M->rStackCap)) {
+	  M->rStackCap = M->rStackCap*2;
+	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	}
+
+	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	  .pc  = M->pc,
+	  .env = M->env,
+	};
+
+	M->env = b;
+	M->pc = rtl_resolveAddr(M, f);
+	printf(" -> page %d, offs %d <-\n",
+	       (int)rtl_addrPage(f),
+	       (int)rtl_addrOffs(f));
+	break;
+
+      case RTL_CLOSURE:
+	rptr = reifyPtr(M, f);
+
+	f    = rptr[0];
+	if (rptr[1] != RTL_NIL) {
+	  rptr = rtl_reifyTuple(M, rptr[1], &len);
+	} else {
+	  len  = 0;
+	  rptr = NULL;
+	}
+
+	wptr      = rtl_allocTuple(M, &b, len + 1);
+	wptr[len] = a;
+	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+
+	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	  .pc  = M->pc,
+	  .env = M->env,
+	};
+
+	M->env = b;
+	M->pc  = rtl_resolveAddr(M, f);
+
+	printf(" -> page %d, offs %d <-\n",
+	       (int)rtl_addrPage(f),
+	       (int)rtl_addrOffs(f));
+	break;
+
+      default:
+	printf(" error: Can't call object of type '%s'!\n",
+	       rtl_typeNameOf(f));
+	goto interp_cleanup;
+      } break;
 
     case RTL_OP_UNDEFINED_FUNCTION:
-      literal = (rtl_Word)pc[1] << 0
-	      | (rtl_Word)pc[2] << 8
-	      | (rtl_Word)pc[3] << 16
-	      | (rtl_Word)pc[4] << 24 ;
+      M->pc = readWord(M->pc, &literal);
 
       printf("tried to call undefined function: '%s'\n",
 	     rtl_symbolName(literal));
@@ -826,9 +880,16 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       break;
 
     case RTL_OP_RETURN:
-      // For now, the RETURN instruction just exits the interpreter -- we'll
-      // handle function calls later.
-      goto interp_cleanup;
+      if (M->rStackLen == 0) {
+	// If the return stack is empty, return means exit the interpreter.
+	goto interp_cleanup;
+      }
+
+      M->rStackLen--;
+
+      M->pc  = M->rStack[M->rStackLen].pc;
+      M->env = M->rStack[M->rStackLen].env;
+      break;
 
 
     // Generate code for binary operations using the BINARY_OP macro.
@@ -844,15 +905,13 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
     BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
 
     default:
-      printf("Unhandled instruction: opcode %d\n", (int)*pc);
+      printf("Unhandled instruction: opcode %d\n", (int)opcode);
       break;
     }
-
-    if (likely(err == RTL_OK)) pc++;
   }
 
  interp_cleanup:
-  SAVE_MACHINE();
+  rtl_popWorkingSet(M);
 
   return rtl_getError(M);
 }
@@ -963,6 +1022,12 @@ void rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
   page->code[page->len++] = b;
 }
 
+void rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16)
+{
+  rtl_emitByteToPage(M, pageID, (u16 >> 0) & 0xFF);
+  rtl_emitByteToPage(M, pageID, (u16 >> 8) & 0xFF);
+}
+
 void rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
 {
   rtl_emitByteToPage(M, pageID, (w >>  0) & 0xFF);
@@ -983,6 +1048,18 @@ rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
 
   return result;
 }
+
+size_t rtl_listLength(rtl_Machine *M, rtl_Word ls)
+{
+  size_t n;
+
+  for (n = 0; ls != RTL_NIL; n++) {
+    ls = rtl_cdr(M, ls);
+  }
+
+  return n;
+}
+
 
 void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws)
 {

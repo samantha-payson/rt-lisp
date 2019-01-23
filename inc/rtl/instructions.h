@@ -16,7 +16,13 @@ typedef enum rtl_Opcode {
   RTL_OP_CAR,
   RTL_OP_CDR,
 
-  // Stack Operationsx
+  // Basic tuple operations
+  RTL_OP_TUPLE,
+  RTL_OP_EXPLODE,
+  RTL_OP_GET,
+  RTL_OP_LEN,
+
+  // Stack Operations
   RTL_OP_POP,
   RTL_OP_SWAP,
   RTL_OP_DUP,
@@ -38,11 +44,18 @@ typedef enum rtl_Opcode {
   RTL_OP_JMP,
   RTL_OP_CJMP,
   RTL_OP_CALL,
+  RTL_OP_NAMED_CALL,
   RTL_OP_RETURN,
 
   // This opcode is placed wherever there is a call site that hasn't been
   // resolved yet. It will print an error and exit the interpreter if executed.
   RTL_OP_UNDEFINED_FUNCTION,
+
+  // Load a variable onto the stack.
+  RTL_OP_VAR,
+
+  // Create a closure in the current environment
+  RTL_OP_CLOSURE,
 
   // Int28 Arithmetic
   RTL_OP_IADD,
@@ -56,4 +69,6 @@ typedef enum rtl_Opcode {
   RTL_OP_FSUB,
   RTL_OP_FMUL,
   RTL_OP_FDIV,
+
+  ___RTL_OP_MAX___,
 } rtl_Opcode;

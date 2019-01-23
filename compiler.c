@@ -127,44 +127,42 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
 
 static struct symCache_t {
   struct {
-    rtl_Word cons;
+    rtl_Word cons,
+             car,
+             cdr,
+             var,
+             call,
+             namedCall,
+             lambda,
+             iadd,
+             isub,
+             imul,
+             idiv,
+             imod;
   } intrinsic;
 } symCache;
 
 static bool symCacheWasInit;
 
-static
-void initSymCache() {
-  symCache = (struct symCache_t) {
-    .intrinsic = {
-      .cons = rtl_intern("intrinsic", "cons"),
-    },
-  };
-}
-
-void rtl_compileExpr(rtl_Compiler *C, uint16_t pageID, rtl_Word sxp)
-{
+static inline
+void ensureSymCache() {
   if (unlikely(!symCacheWasInit)) {
-    initSymCache();
-  }
-
-  if (rtl_isCons(sxp)) {
-    if (rtl_car(C->M, sxp) == symCache.intrinsic.cons) {
-      rtl_compileExpr(C, pageID, rtl_cadr(C->M, sxp));
-      rtl_compileExpr(C, pageID, rtl_caddr(C->M, sxp));
-
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONS);
-
-      // TODO: Check that there are only 2 arguments...
-    }
-
-  } else if (rtl_isInt28(sxp)) {
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-    rtl_emitWordToPage(C->M, pageID, sxp);
-
-  } else if (rtl_isNil(sxp)) {
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
-
+    symCache = (struct symCache_t) {
+      .intrinsic = {
+	.cons      = rtl_intern("intrinsic", "cons"),
+	.car       = rtl_intern("intrinsic", "car"),
+	.cdr       = rtl_intern("intrinsic", "cdr"),
+	.var       = rtl_intern("intrinsic", "var"),
+	.call      = rtl_intern("intrinsic", "call"),
+	.namedCall = rtl_intern("intrinsic", "named-call"),
+	.lambda    = rtl_intern("intrinsic", "lambda"),
+	.iadd      = rtl_intern("intrinsic", "iadd"),
+	.isub      = rtl_intern("intrinsic", "isub"),
+	.imul      = rtl_intern("intrinsic", "imul"),
+	.idiv      = rtl_intern("intrinsic", "idiv"),
+	.imod      = rtl_intern("intrinsic", "imod"),
+      },
+    };
   }
 }
 
@@ -188,9 +186,9 @@ bool rtl_isMacroName(rtl_Compiler *C, rtl_Word w) {
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
   rtl_Word head = RTL_NIL,
-           arg  = RTL_NIL,
-           tail = RTL_NIL,
-           out  = RTL_NIL;
+    arg  = RTL_NIL,
+    tail = RTL_NIL,
+    out  = RTL_NIL;
 
   RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &tail, &out);
 
@@ -211,10 +209,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     out = rtl_cons(C->M, head, RTL_NIL);
 
     for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
-    {
-      arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-      out = rtl_cons(C->M, arg, out);
-    }
+      {
+	arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+	out = rtl_cons(C->M, arg, out);
+      }
 
     out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
     break;
@@ -227,4 +225,362 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
   rtl_popWorkingSet(C->M);
 
   return out;
+}
+
+rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
+{
+  rtl_Word head, tail;
+  size_t len;
+  rtl_Intrinsic **buf;
+  size_t        bufLen;
+  size_t        bufCap;
+
+  rtl_Word *argNames;
+  size_t   argNamesLen;
+  size_t   argNamesCap;
+
+  ensureSymCache();
+
+  buf    = NULL;
+  bufCap = bufLen = 0;
+
+  argNames    = NULL;
+  argNamesCap = argNamesLen = 0;
+
+  if (rtl_isCons(sxp)) {
+    head = rtl_car(C->M, sxp);
+    len  = rtl_listLength(C->M, sxp);
+
+    if (head == symCache.intrinsic.cons) {
+      assert(len == 3);
+      return rtl_mkConsIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.car) {
+      assert(len == 2);
+      return rtl_mkCarIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.cdr) {
+      assert(len == 2);
+      return rtl_mkCdrIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.lambda) {
+      assert(len >= 2);
+      for (tail = rtl_cadr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+	{
+	  assert(rtl_isSymbol(rtl_car(C->M, tail)));
+
+	  if (argNamesCap == argNamesLen) {
+	    argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+	    argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+	  }
+
+	  argNames[argNamesLen++] = rtl_car(C->M, tail);
+	}
+
+      for (tail = rtl_cddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+	{
+	  if (bufCap == bufLen) {
+	    bufCap = !bufCap ? 4 : 2*bufCap;
+	    buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	  }
+
+	  buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+	}
+
+      return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
+
+    } else if (head == symCache.intrinsic.iadd) {
+      assert(len == 3);
+      return rtl_mkIAddIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+    } else if (head == symCache.intrinsic.isub) {
+      assert(len == 3);
+      return rtl_mkISubIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.imul) {
+      assert(len == 3);
+      return rtl_mkIMulIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.idiv) {
+      assert(len == 3);
+      return rtl_mkIDivIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.imod) {
+      assert(len == 3);
+      return rtl_mkIModIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else {
+      assert(len >= 1);
+
+      for (tail = rtl_cdr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	if (bufCap == bufLen) {
+	  bufCap = !bufCap ? 4 : 2*bufCap;
+	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	}
+
+	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkCallIntrinsic(rtl_exprToIntrinsic(C, rtl_car(C->M, sxp)),
+				 buf,
+				 bufLen);
+  }
+
+  } else if (rtl_isSymbol(sxp)) {
+    return rtl_mkVarIntrinsic(sxp);
+    
+  } else if (rtl_isInt28(sxp)) {
+    return rtl_mkConstantIntrinsic(sxp);
+
+  } else if (rtl_isNil(sxp)) {
+    return rtl_mkConstantIntrinsic(RTL_NIL);
+
+  }
+  printf("   !!! Unhandled intrinsic in rtl_exprToIntrinsic !!!\n");
+  abort();
+}
+
+typedef struct Environment {
+  struct Environment const *super;
+  uint16_t frame;
+
+  uint16_t len;
+  rtl_Word *names;
+} Environment;
+
+// Returns true if there is a variable by this name in env, and writes its
+// location into frame and idx.
+//
+// Either or both of frame/idx may be NULL, in which case the NULL pointers are
+// not written to.
+//
+// Returns false if there is no variable by this name in scope.
+static
+bool lookupVar(Environment const *env,
+	       rtl_Word name,
+	       uint16_t *frame,
+	       uint16_t *idx)
+{
+  uint16_t i;
+
+  for (i = 0; i < env->len; i++) {
+    if (env->names[i] == name) {
+      if (frame) *frame = env->frame;
+      if (idx)   *idx   = i;
+
+      return true;
+    }
+  }
+
+  if (env->super != NULL) {
+    return lookupVar(env->super, name, frame, idx);
+  } else {
+    return false;
+  }
+}
+
+static
+rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *x)
+{
+  rtl_Word      nameTmp;
+  rtl_Intrinsic **argsTmp;
+  size_t        argsLenTmp;
+  Environment   newEnv;
+
+  size_t i;
+
+  switch (x->type) {
+  case RTL_INTRINSIC_CONS:
+    x->as.cons.car = __impl_transformIntrinsic(env, x->as.cons.car);
+    x->as.cons.cdr = __impl_transformIntrinsic(env, x->as.cons.cdr);
+    break;
+
+  case RTL_INTRINSIC_CAR:
+    x->as.car.arg = __impl_transformIntrinsic(env, x->as.car.arg);
+    break;
+
+  case RTL_INTRINSIC_CDR:
+    x->as.cdr.arg = __impl_transformIntrinsic(env, x->as.cdr.arg);
+    break;
+
+  case RTL_INTRINSIC_VAR:
+    if (!env ||
+	!lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))
+    {
+      printf("\n   error: No variable named '%s:%s' in scope!\n\n",
+	     rtl_symbolPackageName(x->as.var.name),
+	     rtl_symbolName(x->as.var.name));
+      abort();
+    }
+
+    // If we didn't abort, then the correct frame/idx values were written by
+    // lookupVar.
+    break;
+
+  case RTL_INTRINSIC_CALL:
+    // Start by transforming all of the args
+    for (i = 0; i < x->as.call.argsLen; i++) {
+      x->as.call.args[i] = __impl_transformIntrinsic(env, x->as.call.args[i]);
+    }
+
+    // Then check if this is a named-call (i.e. a call of a global function
+    // rather than a function resulting from the evaluation of an expression).
+    if (x->as.call.fn->type == RTL_INTRINSIC_VAR &&
+	(!env || !lookupVar(env, x->as.call.fn->as.var.name, NULL, NULL)))
+    {
+      nameTmp    = x->as.call.fn->as.var.name;
+      argsTmp    = x->as.call.args;
+      argsLenTmp = x->as.call.argsLen;
+
+      // Release the VAR node, it's no longer needed.
+      free(x->as.call.fn);
+
+      *x = (rtl_Intrinsic) {
+	.type = RTL_INTRINSIC_NAMED_CALL,
+	.as = {
+	  .namedCall = {
+	    .name    = nameTmp,
+	    .args    = argsTmp,
+	    .argsLen = argsLenTmp,
+	  },
+	},
+      };
+    } else {
+      x->as.call.fn = __impl_transformIntrinsic(env, x->as.call.fn);
+    } break;
+
+  case RTL_INTRINSIC_LAMBDA:
+    newEnv.super = env;
+    newEnv.frame = env ? env->frame + 1 : 0;
+    newEnv.len   = x->as.lambda.argNamesLen;
+    newEnv.names = x->as.lambda.argNames;
+
+    for (i = 0; i < x->as.lambda.bodyLen; i++) {
+      x->as.lambda.body[i] = __impl_transformIntrinsic(&newEnv,
+						    x->as.lambda.body[i]);
+    }
+    break;
+
+  case RTL_INTRINSIC_IADD:
+    x->as.iadd.leftArg  = __impl_transformIntrinsic(env, x->as.iadd.leftArg);
+    x->as.iadd.rightArg = __impl_transformIntrinsic(env, x->as.iadd.rightArg);
+    break;
+
+  case RTL_INTRINSIC_ISUB:
+    x->as.isub.leftArg  = __impl_transformIntrinsic(env, x->as.isub.leftArg);
+    x->as.isub.rightArg = __impl_transformIntrinsic(env, x->as.isub.rightArg);
+    break;
+
+  case RTL_INTRINSIC_IMUL:
+    x->as.imul.leftArg  = __impl_transformIntrinsic(env, x->as.imul.leftArg);
+    x->as.imul.rightArg = __impl_transformIntrinsic(env, x->as.imul.rightArg);
+    break;
+
+  case RTL_INTRINSIC_IDIV:
+    x->as.idiv.leftArg  = __impl_transformIntrinsic(env, x->as.idiv.leftArg);
+    x->as.idiv.rightArg = __impl_transformIntrinsic(env, x->as.idiv.rightArg);
+    break;
+
+  case RTL_INTRINSIC_IMOD:
+    x->as.imod.leftArg  = __impl_transformIntrinsic(env, x->as.imod.leftArg);
+    x->as.imod.rightArg = __impl_transformIntrinsic(env, x->as.imod.rightArg);
+    break;
+
+  case RTL_INTRINSIC_CONSTANT:
+    break;
+  }
+
+  return x;
+}
+
+rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x) {
+  return __impl_transformIntrinsic(NULL, x);
+}
+
+void rtl_emitIntrinsicCode(rtl_Compiler *C,
+			   uint16_t pageID,
+			   rtl_Intrinsic const *x)
+{
+  size_t   i;
+  uint16_t newPageID;
+
+  switch (x->type) {
+  case RTL_INTRINSIC_CONS:
+    rtl_emitIntrinsicCode(C, pageID, x->as.cons.car);
+    rtl_emitIntrinsicCode(C, pageID, x->as.cons.cdr);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONS);
+    break;
+
+  case RTL_INTRINSIC_CAR:
+    rtl_emitIntrinsicCode(C, pageID, x->as.car.arg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CAR);
+    break;
+
+  case RTL_INTRINSIC_CDR:
+    rtl_emitIntrinsicCode(C, pageID, x->as.cdr.arg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CDR);
+    break;
+
+  case RTL_INTRINSIC_VAR:
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_VAR);
+    rtl_emitShortToPage(C->M, pageID, x->as.var.frame);
+    rtl_emitShortToPage(C->M, pageID, x->as.var.idx);
+    break;
+
+  case RTL_INTRINSIC_CALL:
+    rtl_emitIntrinsicCode(C, pageID, x->as.call.fn);
+    for (i = 0; i < x->as.call.argsLen; i++) {
+      rtl_emitIntrinsicCode(C, pageID, x->as.call.args[i]);
+    }
+
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CALL);
+    rtl_emitShortToPage(C->M, pageID, x->as.call.argsLen);
+    break;
+
+  case RTL_INTRINSIC_LAMBDA:
+    // TODO: Prevent recompilation of the same function from creating the same
+    // lambda over and over with a new page each time...
+
+    newPageID = rtl_newPageID(C->M);
+
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CLOSURE);
+    rtl_emitWordToPage(C->M, pageID, rtl_addr(newPageID, 0));
+
+    for (i = 0; i < x->as.lambda.bodyLen; i++) {
+      rtl_emitIntrinsicCode(C, newPageID, x->as.lambda.body[i]);
+
+      // Ignore the result of all but the last expression.
+      if (i + 1 < x->as.lambda.bodyLen)
+	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+    }
+
+    rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+
+    break;
+
+  case RTL_INTRINSIC_CONSTANT:
+    if (x->as.constant == RTL_NIL) {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
+
+    } else if (x->as.constant == RTL_TOP) {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
+
+    } else {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+      rtl_emitWordToPage(C->M, pageID, x->as.constant);
+
+    } break;
+  }
 }

@@ -51,6 +51,10 @@ void rtl_formatExprShallow(rtl_Word w)
   case RTL_ADDR:
     printf("Addr#%X", w >> 4);
     break;
+
+  case RTL_CLOSURE:
+    printf("<closure>");
+    break;
   }
 }
 
@@ -101,6 +105,7 @@ void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
 uint8_t *rtl_disasm(uint8_t *bc)
 {
   rtl_Word literal;
+  uint16_t frame, idx, size;
 
   switch (*bc) {
   case RTL_OP_NOP:
@@ -113,7 +118,7 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   const ");
+    printf("   const     ");
     rtl_formatExprShallow(literal);
     printf("\n");
 
@@ -186,8 +191,8 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   cjmp #%X\n", literal);
-    return bc + 1;
+    printf("   cjmp      #%X\n", literal);
+    return bc + 5;
 
     // Intentionally fallthrough into JMP ...
 
@@ -197,15 +202,55 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   jmp #%X\n", literal);
-    return bc + 1;
+    printf("   jmp       #%X\n", literal);
+    return bc + 5;
 
   case RTL_OP_CALL:
-    printf("   call\n");
-    return bc + 1;
+    size = (uint16_t)bc[1] << 0
+         | (uint16_t)bc[2] << 8;
+
+    printf("   call      %d\n", (int)size);
+    return bc + 3;
 
   case RTL_OP_RETURN:
     printf("   return\n");
+    return bc + 1;
+
+  case RTL_OP_VAR:
+    frame = (uint16_t)bc[1] << 0
+          | (uint16_t)bc[2] << 8;
+
+    idx = (uint16_t)bc[3] << 0
+        | (uint16_t)bc[4] << 8;
+
+    printf("   var       %d %d\n", (int)frame, (int)idx);
+    return bc + 5;
+
+  case RTL_OP_CLOSURE:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   closure %d#%X\n",
+	   (int)rtl_addrPage(literal),
+	   (unsigned int)rtl_addrOffs(literal));
+    return bc + 5;
+
+  case RTL_OP_EXPLODE:
+    printf("   explode\n");
+    return bc + 1;
+
+  case RTL_OP_TUPLE:
+    printf("   tuple\n");
+    return bc + 1;
+
+  case RTL_OP_GET:
+    printf("   get\n");
+    return bc + 1;
+
+  case RTL_OP_LEN:
+    printf("   len\n");
     return bc + 1;
 
   case RTL_OP_IADD:
@@ -248,4 +293,22 @@ uint8_t *rtl_disasm(uint8_t *bc)
     printf("  ??? ; opcode %d\n", (int)*bc);
     break;
   }
+}
+
+void rtl_disasmPage(rtl_Machine *M, uint16_t pageID)
+{
+  uint8_t *code, *end;
+
+  assert(pageID < M->pagesLen);
+
+  code = M->pages[pageID]->code;
+  end  = code + M->pages[pageID]->len;
+
+  printf("\n ---- Disassembly of Page #% 3d ----\n\n", (int)pageID);
+
+  while (code < end) {
+    code = rtl_disasm(code);
+  }
+
+  printf("\n ----------------------------------\n\n");
 }
