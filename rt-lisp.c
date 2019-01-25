@@ -767,14 +767,15 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
     case RTL_OP_CJMP:
       VSTACK_ASSERT_LEN(1);
 
-      if (rtl_isNil(VPOP())) {
-	break;
-      }
+      M->pc = readWord(M->pc, &literal);
 
-      // Intentionally fallthrough into JMP ...
+      if (rtl_isNil(VPOP())) break;
+
+      M->pc = rtl_resolveAddr(M, literal);
+      break;
 
     case RTL_OP_JMP:
-      readWord(M->pc, &literal);
+      M->pc = readWord(M->pc, &literal);
 
       M->pc = rtl_resolveAddr(M, literal);
       break;
@@ -1126,4 +1127,14 @@ void rtl_popWorkingSet(rtl_Machine *M)
   assert(M->wsStackLen > 0);
 
   M->wsStackLen--;
+}
+
+rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID)
+{
+  rtl_Page *page;
+
+  assert(pageID < M->pagesLen);
+  page = M->pages[pageID];
+
+  return rtl_addr(pageID, page->len);
 }

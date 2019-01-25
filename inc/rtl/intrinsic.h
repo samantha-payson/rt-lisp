@@ -18,6 +18,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_IMUL,
   RTL_INTRINSIC_IDIV,
   RTL_INTRINSIC_IMOD,
+  RTL_INTRINSIC_IF,
   RTL_INTRINSIC_CONSTANT,
 } rtl_IntrinsicType;
 
@@ -75,6 +76,10 @@ struct rtl_Intrinsic {
     struct {
       rtl_Intrinsic *leftArg, *rightArg;
     } iadd, isub, imul, idiv, imod;
+
+    struct {
+      rtl_Intrinsic *test, *then, *_else;
+    } _if;
 
     rtl_Word constant;
   } as;
@@ -333,6 +338,25 @@ rtl_Intrinsic *rtl_mkIModIntrinsic(rtl_Intrinsic *leftArg,
   };
 
   return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
+				 rtl_Intrinsic *then,
+				 rtl_Intrinsic *_else)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_IF,
+    .as = {
+      ._if = {
+	.test  = test,
+	.then  = then,
+	._else = _else,
+      },
+    },
+  };
 }
 
 static inline

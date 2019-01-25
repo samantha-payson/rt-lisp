@@ -209,6 +209,8 @@ rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
 // Returns the address of that word.
 rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
 
+rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID);
+
 // Create a new empty page and return its ID.
 uint16_t rtl_newPageID(rtl_Machine *M);
 

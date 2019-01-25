@@ -200,7 +200,8 @@ static struct symCache_t {
              isub,
              imul,
              idiv,
-             imod;
+             imod,
+             _if;
   } intrinsic;
 } symCache;
 
@@ -224,6 +225,7 @@ void ensureSymCache() {
 	.imul      = rtl_intern("intrinsic", "imul"),
 	.idiv      = rtl_intern("intrinsic", "idiv"),
 	.imod      = rtl_intern("intrinsic", "imod"),
+	._if       = rtl_intern("intrinsic", "if"),
       },
     };
   }
@@ -293,7 +295,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
-  rtl_Word head, tail, name;
+  rtl_Word head, tail, name, _else;
   size_t len;
   rtl_Intrinsic **buf;
   size_t        bufLen;
@@ -416,7 +418,17 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       assert(len == 3);
       return rtl_mkIModIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
-      
+
+    } else if (head == symCache.intrinsic._if) {
+      assert(len == 3 || len == 4);
+      tail = rtl_cdddr(C->M, sxp);
+
+      return rtl_mkIfIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+			       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+			       tail == RTL_NIL
+			         ? NULL
+			         : rtl_exprToIntrinsic(C, rtl_car(C->M, tail)));
+
     } else {
       assert(len >= 1);
 
@@ -609,6 +621,13 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as.imod.rightArg = __impl_transformIntrinsic(env, x->as.imod.rightArg);
     break;
 
+  case RTL_INTRINSIC_IF:
+    x->as._if.test  = __impl_transformIntrinsic(env, x->as._if.test);
+    x->as._if.then  = __impl_transformIntrinsic(env, x->as._if.then);
+    if (x->as._if._else) {
+      x->as._if._else = __impl_transformIntrinsic(env, x->as._if._else);
+    }
+
   case RTL_INTRINSIC_CONSTANT:
     break;
   }
@@ -620,14 +639,27 @@ rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x) {
   return __impl_transformIntrinsic(NULL, x);
 }
 
+static
+void writeWordAtAddr(rtl_Machine *M, rtl_Word addr, rtl_Word w)
+{
+  uint8_t *ptr;
+  ptr = rtl_resolveAddr(M, addr);
+
+  ptr[0] = (w >>  0) & 0xFF;
+  ptr[1] = (w >>  8) & 0xFF;
+  ptr[2] = (w >> 16) & 0xFF;
+  ptr[3] = (w >> 24) & 0xFF;
+}
+
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
 			   uint16_t pageID,
 			   rtl_Intrinsic const *x)
 {
   size_t    i;
   uint16_t  newPageID;
-  rtl_Word  addr;
+  rtl_Word  addr0, addr1;
   rtl_FnDef *fnDef;
+  uint8_t   *ptr;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -670,18 +702,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     fnDef = rtl_lookupFn(C, x->as.namedCall.name);
     printf("fnDef: %p\n", fnDef);
     if (fnDef != NULL && !fnDef->isMacro) {
-      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
+      addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
 
       rtl_emitWordToPage(C->M, pageID, fnDef->addr);
       rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
     } else {
-      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
+      addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
 
       rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
       rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
     }
 
-    rtl_registerCallSite(C, x->as.namedCall.name, addr);
+    rtl_registerCallSite(C, x->as.namedCall.name, addr0);
     break;
 
   case RTL_INTRINSIC_LAMBDA:
@@ -752,6 +784,27 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitIntrinsicCode(C, pageID, x->as.imod.rightArg);
     rtl_emitByteToPage(C->M, pageID, RTL_OP_IMOD);
     break;
+
+  case RTL_INTRINSIC_IF:
+    rtl_emitIntrinsicCode(C, pageID, x->as._if.test);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_NOT);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP);
+    addr0 = rtl_emitWordToPage(C->M, pageID, 0);
+
+    rtl_emitIntrinsicCode(C, pageID, x->as._if.then);
+
+    if (x->as._if._else) {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP);
+      addr1 = rtl_emitWordToPage(C->M, pageID, 0);
+    }
+
+    writeWordAtAddr(C->M, addr0, rtl_nextAddrInPage(C->M, pageID));
+
+    if (x->as._if._else) {
+      rtl_emitIntrinsicCode(C, pageID, x->as._if._else);
+
+      writeWordAtAddr(C->M, addr1, rtl_nextAddrInPage(C->M, pageID));
+    } break;
 
   case RTL_INTRINSIC_CONSTANT:
     if (x->as.constant == RTL_NIL) {

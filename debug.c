@@ -107,6 +107,8 @@ uint8_t *rtl_disasm(uint8_t *bc)
   rtl_Word literal;
   uint16_t frame, idx, size;
 
+  printf("%X: ", (unsigned int)(((uintptr_t)bc) & 0xFFFF));
+
   switch (*bc) {
   case RTL_OP_NOP:
     printf("   nop\n");
@@ -191,7 +193,9 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   cjmp      #%X\n", literal);
+    printf("   cjmp      %d#%X\n",
+	   (int)rtl_addrPage(literal),
+	   (unsigned int)rtl_addrOffs(literal));
     return bc + 5;
 
     // Intentionally fallthrough into JMP ...
@@ -202,7 +206,9 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   jmp       #%X\n", literal);
+    printf("   jmp       %d#%X\n",
+	   (int)rtl_addrPage(literal),
+	   (unsigned int)rtl_addrOffs(literal));
     return bc + 5;
 
   case RTL_OP_CALL:
