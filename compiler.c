@@ -196,11 +196,8 @@ static struct symCache_t {
              namedCall,
              lambda,
              defun,
-             iadd,
-             isub,
-             imul,
-             idiv,
-             imod,
+             iadd, isub, imul, idiv, imod,
+             lt, leq, gt, geq, eq, neq, iso, niso,
              _if;
   } intrinsic;
 } symCache;
@@ -225,6 +222,14 @@ void ensureSymCache() {
 	.imul      = rtl_intern("intrinsic", "imul"),
 	.idiv      = rtl_intern("intrinsic", "idiv"),
 	.imod      = rtl_intern("intrinsic", "imod"),
+	.lt        = rtl_intern("intrinsic", "lt"),
+	.leq       = rtl_intern("intrinsic", "leq"),
+	.gt        = rtl_intern("intrinsic", "gt"),
+	.geq       = rtl_intern("intrinsic", "geq"),
+	.eq        = rtl_intern("intrinsic", "eq"),
+	.neq       = rtl_intern("intrinsic", "neq"),
+	.iso       = rtl_intern("intrinsic", "iso"),
+	.niso      = rtl_intern("intrinsic", "niso"),
 	._if       = rtl_intern("intrinsic", "if"),
       },
     };
@@ -396,38 +401,85 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
     } else if (head == symCache.intrinsic.iadd) {
       assert(len == 3);
-      return rtl_mkIAddIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IADD,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.isub) {
       assert(len == 3);
-      return rtl_mkISubIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISUB,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.imul) {
       assert(len == 3);
-      return rtl_mkIMulIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMUL,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.idiv) {
       assert(len == 3);
-      return rtl_mkIDivIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IDIV,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.imod) {
       assert(len == 3);
-      return rtl_mkIModIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
-
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMOD,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.lt) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LT,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.leq) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LEQ,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.gt) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GT,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.geq) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GEQ,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.eq) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_EQ,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.neq) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_NEQ,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
+    } else if (head == symCache.intrinsic.iso) {
+      assert(len == 3);
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISO,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      
     } else if (head == symCache.intrinsic._if) {
       assert(len == 3 || len == 4);
-      tail = rtl_cdddr(C->M, sxp);
 
       return rtl_mkIfIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 			       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-			       tail == RTL_NIL
-			         ? NULL
-			         : rtl_exprToIntrinsic(C, rtl_car(C->M, tail)));
+			       rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+
+    } else if (head == symCache.intrinsic.lt) {
+      
 
     } else {
       assert(len >= 1);
@@ -597,36 +649,26 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     break;
 
   case RTL_INTRINSIC_IADD:
-    x->as.iadd.leftArg  = __impl_transformIntrinsic(env, x->as.iadd.leftArg);
-    x->as.iadd.rightArg = __impl_transformIntrinsic(env, x->as.iadd.rightArg);
-    break;
-
   case RTL_INTRINSIC_ISUB:
-    x->as.isub.leftArg  = __impl_transformIntrinsic(env, x->as.isub.leftArg);
-    x->as.isub.rightArg = __impl_transformIntrinsic(env, x->as.isub.rightArg);
-    break;
-
   case RTL_INTRINSIC_IMUL:
-    x->as.imul.leftArg  = __impl_transformIntrinsic(env, x->as.imul.leftArg);
-    x->as.imul.rightArg = __impl_transformIntrinsic(env, x->as.imul.rightArg);
-    break;
-
   case RTL_INTRINSIC_IDIV:
-    x->as.idiv.leftArg  = __impl_transformIntrinsic(env, x->as.idiv.leftArg);
-    x->as.idiv.rightArg = __impl_transformIntrinsic(env, x->as.idiv.rightArg);
-    break;
-
   case RTL_INTRINSIC_IMOD:
-    x->as.imod.leftArg  = __impl_transformIntrinsic(env, x->as.imod.leftArg);
-    x->as.imod.rightArg = __impl_transformIntrinsic(env, x->as.imod.rightArg);
+  case RTL_INTRINSIC_LT:
+  case RTL_INTRINSIC_LEQ:
+  case RTL_INTRINSIC_GT:
+  case RTL_INTRINSIC_GEQ:
+  case RTL_INTRINSIC_EQ:
+  case RTL_INTRINSIC_NEQ:
+  case RTL_INTRINSIC_ISO:
+    x->as.binop.leftArg  = __impl_transformIntrinsic(env, x->as.binop.leftArg);
+    x->as.binop.rightArg = __impl_transformIntrinsic(env, x->as.binop.rightArg);
     break;
 
   case RTL_INTRINSIC_IF:
     x->as._if.test  = __impl_transformIntrinsic(env, x->as._if.test);
     x->as._if.then  = __impl_transformIntrinsic(env, x->as._if.then);
-    if (x->as._if._else) {
-      x->as._if._else = __impl_transformIntrinsic(env, x->as._if._else);
-    }
+    x->as._if._else = __impl_transformIntrinsic(env, x->as._if._else);
+    break;
 
   case RTL_INTRINSIC_CONSTANT:
     break;
@@ -756,34 +798,70 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     break;
 
   case RTL_INTRINSIC_IADD:
-    rtl_emitIntrinsicCode(C, pageID, x->as.iadd.leftArg);
-    rtl_emitIntrinsicCode(C, pageID, x->as.iadd.rightArg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_IADD);
-    break;
-
   case RTL_INTRINSIC_ISUB:
-    rtl_emitIntrinsicCode(C, pageID, x->as.isub.leftArg);
-    rtl_emitIntrinsicCode(C, pageID, x->as.isub.rightArg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_ISUB);
-    break;
-
   case RTL_INTRINSIC_IMUL:
-    rtl_emitIntrinsicCode(C, pageID, x->as.imul.leftArg);
-    rtl_emitIntrinsicCode(C, pageID, x->as.imul.rightArg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_IMUL);
-    break;
-
   case RTL_INTRINSIC_IDIV:
-    rtl_emitIntrinsicCode(C, pageID, x->as.idiv.leftArg);
-    rtl_emitIntrinsicCode(C, pageID, x->as.idiv.rightArg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_IDIV);
-    break;
-
   case RTL_INTRINSIC_IMOD:
-    rtl_emitIntrinsicCode(C, pageID, x->as.imod.leftArg);
-    rtl_emitIntrinsicCode(C, pageID, x->as.imod.rightArg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_IMOD);
-    break;
+  case RTL_INTRINSIC_LT:
+  case RTL_INTRINSIC_LEQ:
+  case RTL_INTRINSIC_GT:
+  case RTL_INTRINSIC_GEQ:
+  case RTL_INTRINSIC_EQ:
+  case RTL_INTRINSIC_NEQ:
+  case RTL_INTRINSIC_ISO:
+    rtl_emitIntrinsicCode(C, pageID, x->as.binop.leftArg);
+    rtl_emitIntrinsicCode(C, pageID, x->as.binop.rightArg);
+
+    switch (x->type) {
+    case RTL_INTRINSIC_IADD:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IADD);
+      break;
+
+    case RTL_INTRINSIC_ISUB:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_ISUB);
+      break;
+
+    case RTL_INTRINSIC_IMUL:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IMUL);
+      break;
+
+    case RTL_INTRINSIC_IDIV:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IDIV);
+      break;
+
+    case RTL_INTRINSIC_IMOD:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IMOD);
+      break;
+
+    case RTL_INTRINSIC_LT:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_LT);
+      break;
+
+    case RTL_INTRINSIC_LEQ:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_LEQ);
+      break;
+
+    case RTL_INTRINSIC_GT:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_GT);
+      break;
+
+    case RTL_INTRINSIC_GEQ:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_GEQ);
+      break;
+
+    case RTL_INTRINSIC_EQ:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_EQ);
+      break;
+
+    case RTL_INTRINSIC_NEQ:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_NEQ);
+      break;
+
+    case RTL_INTRINSIC_ISO:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_ISO);
+      break;
+
+    } break;
 
   case RTL_INTRINSIC_IF:
     rtl_emitIntrinsicCode(C, pageID, x->as._if.test);
@@ -793,18 +871,15 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     rtl_emitIntrinsicCode(C, pageID, x->as._if.then);
 
-    if (x->as._if._else) {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP);
-      addr1 = rtl_emitWordToPage(C->M, pageID, 0);
-    }
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP);
+    addr1 = rtl_emitWordToPage(C->M, pageID, 0);
 
     writeWordAtAddr(C->M, addr0, rtl_nextAddrInPage(C->M, pageID));
 
-    if (x->as._if._else) {
-      rtl_emitIntrinsicCode(C, pageID, x->as._if._else);
+    rtl_emitIntrinsicCode(C, pageID, x->as._if._else);
 
-      writeWordAtAddr(C->M, addr1, rtl_nextAddrInPage(C->M, pageID));
-    } break;
+    writeWordAtAddr(C->M, addr1, rtl_nextAddrInPage(C->M, pageID));
+    break;
 
   case RTL_INTRINSIC_CONSTANT:
     if (x->as.constant == RTL_NIL) {

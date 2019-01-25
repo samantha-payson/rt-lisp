@@ -298,6 +298,34 @@ uint8_t *rtl_disasm(uint8_t *bc)
     printf("   imod\n");
     return bc + 1;
 
+  case RTL_OP_LT:
+    printf("   lt\n");
+    return bc + 1;
+
+  case RTL_OP_LEQ:
+    printf("   leq\n");
+    return bc + 1;
+
+  case RTL_OP_GT:
+    printf("   gt\n");
+    return bc + 1;
+
+  case RTL_OP_GEQ:
+    printf("   geq\n");
+    return bc + 1;
+
+  case RTL_OP_EQ:
+    printf("   eq\n");
+    return bc + 1;
+
+  case RTL_OP_NEQ:
+    printf("   neq\n");
+    return bc + 1;
+
+  case RTL_OP_ISO:
+    printf("   iso // unimplemented!\n");
+    return bc + 1;
+
   case RTL_OP_FADD:
     printf("   fadd\n");
     return bc + 1;

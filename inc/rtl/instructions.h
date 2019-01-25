@@ -70,5 +70,14 @@ typedef enum rtl_Opcode {
   RTL_OP_FMUL,
   RTL_OP_FDIV,
 
+  // Comparisons
+  RTL_OP_LT,
+  RTL_OP_LEQ,
+  RTL_OP_GT,
+  RTL_OP_GEQ,
+  RTL_OP_EQ,
+  RTL_OP_NEQ,
+  RTL_OP_ISO,
+
   ___RTL_OP_MAX___,
 } rtl_Opcode;

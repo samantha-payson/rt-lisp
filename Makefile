@@ -35,3 +35,7 @@ crtl: $(OBJS)
 %.o: %.c $(HDRS)
 	@ echo "  CC    $@"
 	@ $(CC) $(CFLAGS) -c $< -o $@
+
+
+clean:
+	@ rm -f $(OBJS)

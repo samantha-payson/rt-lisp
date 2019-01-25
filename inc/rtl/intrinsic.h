@@ -19,6 +19,13 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_IDIV,
   RTL_INTRINSIC_IMOD,
   RTL_INTRINSIC_IF,
+  RTL_INTRINSIC_LT,
+  RTL_INTRINSIC_LEQ,
+  RTL_INTRINSIC_GT,
+  RTL_INTRINSIC_GEQ,
+  RTL_INTRINSIC_EQ,
+  RTL_INTRINSIC_NEQ,
+  RTL_INTRINSIC_ISO,
   RTL_INTRINSIC_CONSTANT,
 } rtl_IntrinsicType;
 
@@ -75,7 +82,7 @@ struct rtl_Intrinsic {
 
     struct {
       rtl_Intrinsic *leftArg, *rightArg;
-    } iadd, isub, imul, idiv, imod;
+    } binop;
 
     struct {
       rtl_Intrinsic *test, *then, *_else;
@@ -246,91 +253,16 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word      name,
 }
 
 static inline
-rtl_Intrinsic *rtl_mkIAddIntrinsic(rtl_Intrinsic *leftArg,
-				   rtl_Intrinsic *rightArg)
+rtl_Intrinsic *rtl_mkBinopIntrinsic(rtl_IntrinsicType type,
+				    rtl_Intrinsic     *leftArg,
+				    rtl_Intrinsic     *rightArg)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
   *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_IADD,
+    .type = type,
     .as = {
-      .iadd = {
-	.leftArg  = leftArg,
-	.rightArg = rightArg,
-      },
-    },
-  };
-
-  return intr;
-}
-
-static inline
-rtl_Intrinsic *rtl_mkISubIntrinsic(rtl_Intrinsic *leftArg,
-				   rtl_Intrinsic *rightArg)
-{
-  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-
-  *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_ISUB,
-    .as = {
-      .isub = {
-	.leftArg  = leftArg,
-	.rightArg = rightArg,
-      },
-    },
-  };
-
-  return intr;
-}
-
-static inline
-rtl_Intrinsic *rtl_mkIMulIntrinsic(rtl_Intrinsic *leftArg,
-				   rtl_Intrinsic *rightArg)
-{
-  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-
-  *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_IMUL,
-    .as = {
-      .imul = {
-	.leftArg  = leftArg,
-	.rightArg = rightArg,
-      },
-    },
-  };
-
-  return intr;
-}
-
-static inline
-rtl_Intrinsic *rtl_mkIDivIntrinsic(rtl_Intrinsic *leftArg,
-				   rtl_Intrinsic *rightArg)
-{
-  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-
-  *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_IDIV,
-    .as = {
-      .idiv = {
-	.leftArg  = leftArg,
-	.rightArg = rightArg,
-      },
-    },
-  };
-
-  return intr;
-}
-
-static inline
-rtl_Intrinsic *rtl_mkIModIntrinsic(rtl_Intrinsic *leftArg,
-				   rtl_Intrinsic *rightArg)
-{
-  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-
-  *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_IMOD,
-    .as = {
-      .imod = {
+      .binop = {
 	.leftArg  = leftArg,
 	.rightArg = rightArg,
       },

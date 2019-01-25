@@ -582,8 +582,8 @@ char const *rtl_typeName(rtl_WordType type)
       case RTL_OP_##INAME:						\
 	VSTACK_ASSERT_LEN(2);						\
 									\
-	a = VPOP();							\
 	b = VPOP();							\
+	a = VPOP();							\
 									\
 	if (unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b))) {	\
 	  M->error = TYPE_ERR;						\
@@ -593,6 +593,21 @@ char const *rtl_typeName(rtl_WordType type)
 	VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));			\
 	break;								\
   // end of multi-line macro
+
+#define CMP_OP(INAME, NUMERIC_CMP)		\
+  case RTL_OP_##INAME:				\
+  VSTACK_ASSERT_LEN(2);				\
+						\
+  b = VPOP();					\
+  a = VPOP();					\
+						\
+  if (rtl_cmp(M, a, b) NUMERIC_CMP) {		\
+    VPUSH(RTL_TOP);				\
+  } else {					\
+    VPUSH(RTL_NIL);				\
+  }						\
+  break;					\
+  // end of multiline macro
 
 static
 uint8_t *readWord(uint8_t *pc, rtl_Word *out)
@@ -614,12 +629,85 @@ uint8_t *readShort(uint8_t *pc, uint16_t *out)
   return pc + 2;
 }
 
+int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
+{
+  rtl_WordType   aType,
+                 bType;
+
+  int32_t        aI32,
+                 bI32;
+
+  size_t         aLen,
+                 bLen,
+                 i;
+
+  rtl_Word const *aPtr,
+                 *bPtr;
+
+  int subResult;
+
+  aType = rtl_typeOf(a);
+  bType = rtl_typeOf(b);
+
+  if (aType < bType) {
+    return -1;
+
+  } else if (aType > bType) {
+    return 1;
+
+  } else {
+    switch (aType) {
+    case RTL_NIL:
+    case RTL_TOP:
+      return 0;
+
+    case RTL_INT28:
+    case RTL_FIX14:
+      aI32 = (int32_t)a >> 4;
+      bI32 = (int32_t)b >> 4;
+      return aI32 - bI32;
+
+    case RTL_ADDR:
+      aI32 = (int32_t)(a >> 4);
+      bI32 = (int32_t)(b >> 4);
+      return aI32 - bI32;
+
+    case RTL_SYMBOL:
+    case RTL_UNRESOLVED_SYMBOL:
+      aI32 = rtl_symbolID(a);
+      bI32 = rtl_symbolID(b);
+      return aI32 - bI32;
+
+    case RTL_TUPLE:
+      aPtr = rtl_reifyTuple(M, a, &aLen);
+      bPtr = rtl_reifyTuple(M, b, &bLen);
+      for (i = 0; i < aLen && i < bLen; i++) {
+	subResult = rtl_cmp(M, aPtr[i], bPtr[i]);
+	if (subResult != 0) return subResult;
+      }
+
+      return (int)aLen - (int)bLen;
+
+    case RTL_CONS:
+      aPtr = rtl_reifyCons(M, a);
+      bPtr = rtl_reifyCons(M, b);
+
+      subResult = rtl_cmp(M, aPtr[0], bPtr[0]);
+      if (subResult != 0) {
+	return rtl_cmp(M, aPtr[1], bPtr[1]);
+      }
+
+      return subResult;
+    }
+  }
+}
+
 rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 {
   uint8_t opcode;
 
   uint16_t frame, idx, size;
-  size_t   len;
+  size_t   len, i;
 
   rtl_Word literal;
 
@@ -641,6 +729,13 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
   M->pc = rtl_resolveAddr(M, addr);
 
   while (M->error == RTL_OK) {
+    printf("VSTACK:");
+    for (i = 0; i < M->vStackLen; i++) {
+      printf(" ");
+      rtl_formatExpr(M, M->vStack[i]);
+    }
+    printf("\n");
+
     rtl_disasm(M->pc);
 
     switch (opcode = *M->pc++) {
@@ -941,6 +1036,35 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
     BINARY_OP(FSUB, -, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
     BINARY_OP(FMUL, *, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
     BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+
+    CMP_OP(LT,  <  0);
+    CMP_OP(LEQ, <= 0);
+    CMP_OP(GT,  >  0);
+    CMP_OP(GEQ, >= 0);
+    CMP_OP(ISO, == 0);
+
+    case RTL_OP_EQ:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP();
+      a = VPOP();
+      if (a == b) {
+	VPUSH(RTL_TOP);
+      } else {
+	VPUSH(RTL_NIL);
+      } break;
+
+    case RTL_OP_NEQ:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP();
+      a = VPOP();
+      if (a != b) {
+	VPUSH(RTL_TOP);
+      } else {
+	VPUSH(RTL_NIL);
+      } break;
+      
 
     default:
       printf("Unhandled instruction: opcode %d\n", (int)opcode);

@@ -32,21 +32,24 @@ typedef enum rtl_WordType {
   RTL_STRING   = 6,
   RTL_RECORD   = 7,
   RTL_CONS     = 8,
-  RTL_TOP      = 9,
 
   // This is a special word type which only exists on the heap. Its upper 28
   // bits are a an unsigned integer indicating the number of words occupied by a
   // string or tuple immediately after it on the heap.
-  RTL_LENGTH = 10,
+  RTL_LENGTH = 9,
 
   // This word type is used to encode addresses in the code segment, rather than
   // the heap segment.
-  RTL_ADDR = 11,
+  RTL_ADDR = 10,
 
-  RTL_BUILTIN = 12,
-  RTL_CLOSURE = 13,
+  RTL_BUILTIN = 11,
+  RTL_CLOSURE = 12,
 
-  RTL_UNRESOLVED_SYMBOL = 14,
+  RTL_UNRESOLVED_SYMBOL = 13,
+
+  // 14 is unused still ..
+
+  RTL_TOP = 15,
 
   RTL_MAX = 16,
 } rtl_WordType;
