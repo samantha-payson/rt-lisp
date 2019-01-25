@@ -212,6 +212,25 @@ uint8_t *rtl_disasm(uint8_t *bc)
     printf("   call      %d\n", (int)size);
     return bc + 3;
 
+  case RTL_OP_STATIC_CALL:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    size = (uint16_t)bc[5] << 0
+         | (uint16_t)bc[6] << 8;
+
+    printf("   static-call %d#%X %d\n",
+	   (int)rtl_addrPage(literal),
+	   (unsigned int)rtl_addrOffs(literal),
+	   (int)size);
+    return bc + 7;
+
+  case RTL_OP_UNDEFINED_FUNCTION:
+    printf("undefined-fn\n");
+    return bc + 7;
+
   case RTL_OP_RETURN:
     printf("   return\n");
     return bc + 1;
@@ -291,7 +310,7 @@ uint8_t *rtl_disasm(uint8_t *bc)
 
   default:
     printf("  ??? ; opcode %d\n", (int)*bc);
-    break;
+    abort();
   }
 }
 

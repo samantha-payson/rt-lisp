@@ -877,7 +877,7 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       M->pc = readWord(M->pc, &f);
       M->pc = readShort(M->pc, &size);
 
-      VSTACK_ASSERT_LEN(1+ size);
+      VSTACK_ASSERT_LEN(size);
 
       wptr = rtl_allocTuple(M, &a, size);
 
@@ -907,9 +907,11 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
     case RTL_OP_UNDEFINED_FUNCTION:
       M->pc = readWord(M->pc, &literal);
 
-      printf("tried to call undefined function: '%s'\n",
+      printf("tried to call undefined function: '%s:%s'\n",
+	     rtl_symbolPackageName(literal),
 	     rtl_symbolName(literal));
 
+      M->pc = readShort(M->pc, &size);
       break;
 
     case RTL_OP_RETURN:

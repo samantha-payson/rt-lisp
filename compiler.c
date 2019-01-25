@@ -84,6 +84,67 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
   csa->sitesLen = w;
 }
 
+void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word addr, bool isMacro)
+{
+  rtl_FnDef *def;
+  size_t    idx;
+
+  idx = rtl_symbolID(name) % RTL_COMPILER_FN_HASH_SIZE;
+
+  if (!isMacro) {
+    rtl_resolveCallSites(C, name, addr);
+  }
+
+  printf("warning: defining '%s:%s' as a %s\n",
+	 rtl_symbolPackageName(name),
+	 rtl_symbolName(name),
+	 isMacro ? "macro" : "function");
+  for (def = C->fnsByName[idx]; def != NULL; def = def->next) {
+    if (def->name == name) {
+      def->addr    = addr;
+
+      if (isMacro && !def->isMacro) {
+	printf("warning: redefining '%s:%s' as a macro (was a function)\n",
+	       rtl_symbolPackageName(name),
+	       rtl_symbolName(name));
+      } else if (!isMacro && def->isMacro) {
+	printf("warning: redefining '%s:%s' as a function (was a macro)\n",
+	       rtl_symbolPackageName(name),
+	       rtl_symbolName(name));
+      }
+      def->isMacro = isMacro;
+
+      return;
+    }
+  }
+
+  // If we made it here, there is no existing entry by this name... create one.
+
+  def = malloc(sizeof(rtl_FnDef));
+
+  def->name    = name;
+  def->addr    = addr;
+  def->isMacro = isMacro;
+
+  def->next         = C->fnsByName[idx];
+  C->fnsByName[idx] = def;
+}
+
+rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
+{
+  rtl_FnDef *def;
+  size_t    idx = rtl_symbolID(name) % RTL_COMPILER_FN_HASH_SIZE;
+
+  for (def = C->fnsByName[idx]; def != NULL; def = def->next)
+  {
+    if (def->name == name) {
+      return def;
+    }
+  }
+
+  return NULL;
+}
+
 rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *pkgName)
 {
   uint32_t    pkgID;
@@ -134,6 +195,7 @@ static struct symCache_t {
              call,
              namedCall,
              lambda,
+             defun,
              iadd,
              isub,
              imul,
@@ -156,6 +218,7 @@ void ensureSymCache() {
 	.call      = rtl_intern("intrinsic", "call"),
 	.namedCall = rtl_intern("intrinsic", "named-call"),
 	.lambda    = rtl_intern("intrinsic", "lambda"),
+	.defun     = rtl_intern("intrinsic", "defun"),
 	.iadd      = rtl_intern("intrinsic", "iadd"),
 	.isub      = rtl_intern("intrinsic", "isub"),
 	.imul      = rtl_intern("intrinsic", "imul"),
@@ -174,7 +237,8 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   C->M = M;
 
   memset(C->callSitesByName, 0, sizeof C->callSitesByName);
-  memset(C->pkgByID, 0, sizeof C->pkgByID);
+  memset(C->fnsByName,       0, sizeof C->fnsByName);
+  memset(C->pkgByID,         0, sizeof C->pkgByID);
 }
 
 // In the future, this will check if w is the name of a macro... right now it
@@ -186,9 +250,9 @@ bool rtl_isMacroName(rtl_Compiler *C, rtl_Word w) {
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
   rtl_Word head = RTL_NIL,
-    arg  = RTL_NIL,
-    tail = RTL_NIL,
-    out  = RTL_NIL;
+           arg  = RTL_NIL,
+           tail = RTL_NIL,
+           out  = RTL_NIL;
 
   RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &tail, &out);
 
@@ -229,7 +293,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
-  rtl_Word head, tail;
+  rtl_Word head, tail, name;
   size_t len;
   rtl_Intrinsic **buf;
   size_t        bufLen;
@@ -266,6 +330,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
     } else if (head == symCache.intrinsic.lambda) {
       assert(len >= 2);
+
       for (tail = rtl_cadr(C->M, sxp);
 	   tail != RTL_NIL;
 	   tail = rtl_cdr(C->M, tail))
@@ -294,10 +359,44 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
       return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
 
+    } else if (head == symCache.intrinsic.defun) {
+      assert(len >= 3);
+
+      name = rtl_cadr(C->M, sxp);
+
+      for (tail = rtl_caddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	assert(rtl_isSymbol(rtl_car(C->M, tail)));
+
+	if (argNamesCap == argNamesLen) {
+	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+	}
+
+	argNames[argNamesLen++] = rtl_car(C->M, tail);
+      }
+
+      for (tail = rtl_cdddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	if (bufCap == bufLen) {
+	  bufCap = !bufCap ? 4 : 2*bufCap;
+	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	}
+
+	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkDefunIntrinsic(name, argNames, argNamesLen, buf, bufLen);
+
     } else if (head == symCache.intrinsic.iadd) {
       assert(len == 3);
       return rtl_mkIAddIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
     } else if (head == symCache.intrinsic.isub) {
       assert(len == 3);
       return rtl_mkISubIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
@@ -336,7 +435,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkCallIntrinsic(rtl_exprToIntrinsic(C, rtl_car(C->M, sxp)),
 				 buf,
 				 bufLen);
-  }
+    }
 
   } else if (rtl_isSymbol(sxp)) {
     return rtl_mkVarIntrinsic(sxp);
@@ -469,7 +568,19 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
     for (i = 0; i < x->as.lambda.bodyLen; i++) {
       x->as.lambda.body[i] = __impl_transformIntrinsic(&newEnv,
-						    x->as.lambda.body[i]);
+						       x->as.lambda.body[i]);
+    }
+    break;
+
+  case RTL_INTRINSIC_DEFUN:
+    newEnv.super = env;
+    newEnv.frame = env ? env->frame + 1 : 0;
+    newEnv.len   = x->as.defun.argNamesLen;
+    newEnv.names = x->as.defun.argNames;
+
+    for (i = 0; i < x->as.defun.bodyLen; i++) {
+      x->as.defun.body[i] = __impl_transformIntrinsic(&newEnv,
+						      x->as.defun.body[i]);
     }
     break;
 
@@ -513,9 +624,10 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 			   uint16_t pageID,
 			   rtl_Intrinsic const *x)
 {
-  size_t   i;
-  uint16_t newPageID;
-  rtl_Word addr;
+  size_t    i;
+  uint16_t  newPageID;
+  rtl_Word  addr;
+  rtl_FnDef *fnDef;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -555,9 +667,19 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitIntrinsicCode(C, pageID, x->as.namedCall.args[i]);
     }
 
-    addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
-    rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
-    rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+    fnDef = rtl_lookupFn(C, x->as.namedCall.name);
+    printf("fnDef: %p\n", fnDef);
+    if (fnDef != NULL && !fnDef->isMacro) {
+      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
+
+      rtl_emitWordToPage(C->M, pageID, fnDef->addr);
+      rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+    } else {
+      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
+
+      rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
+      rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+    }
 
     rtl_registerCallSite(C, x->as.namedCall.name, addr);
     break;
@@ -580,6 +702,25 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+    break;
+
+  case RTL_INTRINSIC_DEFUN:
+    newPageID = rtl_newPageID(C->M);
+
+    // TODO: We're not using the argnames at all.. we should probably check
+    // arity when resolving call sites.
+
+    for (i = 0; i < x->as.defun.bodyLen; i++) {
+      rtl_emitIntrinsicCode(C, newPageID, x->as.defun.body[i]);
+
+      // Ignore the result of all but the last expression.
+      if (i + 1 < x->as.defun.bodyLen)
+	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+    }
+
+    rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+
+    rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), false);
     break;
 
   case RTL_INTRINSIC_IADD:
