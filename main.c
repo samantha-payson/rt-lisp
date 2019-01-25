@@ -26,41 +26,47 @@ int main() {
 
   ns = rtl_nsInPkg(NULL, rtl_internPackage(&C, "intrinsic"));
 
-  w = rtl_read(&C, stdin);
-  w = rtl_macroExpand(&C, &ns, w);
+  while (!feof(stdin)) {
+    w = rtl_read(&C, stdin);
+    w = rtl_macroExpand(&C, &ns, w);
 
-  printf("\n Input source was: ");
-  rtl_formatExpr(&M, w);
-  printf("\n");
+    printf("\n Input source was: ");
+    rtl_formatExpr(&M, w);
+    printf("\n");
 
-  pageID = rtl_newPageID(&M);
+    pageID = rtl_newPageID(&M);
 
-  ir = rtl_exprToIntrinsic(&C, w);
-  ir = rtl_transformIntrinsic(ir);
+    ir = rtl_exprToIntrinsic(&C, w);
+    ir = rtl_transformIntrinsic(ir);
 
-  rtl_emitIntrinsicCode(&C, pageID, ir);
+    rtl_emitIntrinsicCode(&C, pageID, ir);
 
-  if (C.error.type) {
-    printf("Error compiling expression!\n");
-    return 1;
+    if (C.error.type) {
+      printf("Error compiling expression!\n");
+      return 1;
+    }
+
+    rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
+
+    rtl_disasmPage(&M, pageID);
+
+    printf("\n Running code on VM:\n");
+
+    if (rtl_run(&M, rtl_addr(pageID, 0)) != RTL_OK) {
+      printf("Error running snippet!\n");
+      return 1;
+    }
+
+    if (M.vStackLen) {
+      w = rtl_pop(&M);
+    } else {
+      w = RTL_NIL;
+    }
+
+    printf("\n Result was a '%s': ", rtl_typeNameOf(w));
+    rtl_formatExpr(&M, w);
+    printf("\n");
   }
-
-  rtl_emitByteToPage(&M, pageID, RTL_OP_RETURN);
-
-  rtl_disasmPage(&M, pageID);
-
-  printf("\n Running code on VM:\n");
-
-  if (rtl_run(&M, rtl_addr(pageID, 0)) != RTL_OK) {
-    printf("Error running snippet!\n");
-    return 1;
-  }
-
-  w = M.vStack[0];
-
-  printf("\n Result was a '%s': ", rtl_typeNameOf(w));
-  rtl_formatExpr(&M, w);
-  printf("\n");
 
   return 0;
 }
