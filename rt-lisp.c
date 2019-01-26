@@ -1221,6 +1221,8 @@ rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
     result = rtl_cons(M, rtl_car(M, ls), result);
   }
 
+  rtl_popWorkingSet(M);
+
   return result;
 }
 
