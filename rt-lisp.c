@@ -337,6 +337,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   rtl_Heap       *heap;
   rtl_Generation *gen0;
   size_t         offs;
+  rtl_Word       *ptr;
 
   // Validate t, ensure it's one of the accepted types.
   switch (t) {
@@ -367,7 +368,15 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
 
   *w = mkPtr(t, 0, offs);
 
-  return gen0->words + offs;
+  ptr = gen0->words + offs;
+
+  #ifndef NDEBUG
+  // In most cases, this should leave uninitialized GC-allocated memory as an
+  // invalid tuple.
+  memset(ptr, RTL_TUPLE, nbr*sizeof(rtl_Word));
+  #endif
+
+  return ptr;
 }
 
 rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
@@ -428,15 +437,16 @@ rtl_Word popVStack(rtl_Machine *M)
 
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 {
-  rtl_Word w, *ptr;
+  rtl_Word w = RTL_NIL, *ptr;
 
-  pushVStack(M, cdr);
-  pushVStack(M, car);
+  RTL_PUSH_WORKING_SET(M, &w, &car, &cdr);
 
   ptr = rtl_allocGC(M, RTL_CONS, &w, 2);
 
-  ptr[0] = popVStack(M);
-  ptr[1] = popVStack(M);
+  ptr[0] = car;
+  ptr[1] = cdr;
+
+  rtl_popWorkingSet(M);
 
   return w;
 }
@@ -714,7 +724,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
   uint8_t opcode;
 
   uint16_t frame, idx, size;
-  size_t   len, i;
+  ssize_t   len, i;
 
   rtl_Word literal;
 
@@ -962,8 +972,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	}
 
 	wptr      = rtl_allocTuple(M, &b, len + 1);
-	wptr[len] = a;
-	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+	wptr[0] = a;
+	memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
 
 	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
 	  .pc  = M->pc,
@@ -1057,6 +1067,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       wptr[0] = b;
 
       M->env = c;
+
       break;
 
 

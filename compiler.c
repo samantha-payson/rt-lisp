@@ -406,6 +406,11 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       if (!rtl_isNil(tail)) {
 	assert(rtl_isSymbol(tail));
 
+	if (argNamesCap == argNamesLen) {
+	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+	}
+
 	argNames[argNamesLen++] = tail;
 	hasRestArg = true;
       }
