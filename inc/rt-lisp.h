@@ -262,8 +262,6 @@ char const *rtl_errString(rtl_Error err);
 //
 rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr);
 
-rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len);
-
 void rtl_testGarbageCollector(size_t count);
 
 // Return true if w is one of the pointer types:
@@ -296,7 +294,7 @@ int rtl_isPtr(rtl_Word w) {
 // #include "rtl/record.h"
 #include "rtl/cons.h"
 #include "rtl/addr.h"
-// #include "rtl/top.h"
+#include "rtl/top.h"
 
 #include "rtl/rto.h"
 #include "rtl/instructions.h"
@@ -306,7 +304,9 @@ int rtl_isPtr(rtl_Word w) {
 
 #undef _RTL_INSIDE_RT_LISP_H_
 
-rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr);
+rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr);
+
+rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 
 rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len);
 

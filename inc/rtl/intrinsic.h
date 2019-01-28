@@ -13,6 +13,8 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_NAMED_CALL,
   RTL_INTRINSIC_LAMBDA,
   RTL_INTRINSIC_DEFUN,
+  RTL_INTRINSIC_DEFMACRO,
+  RTL_INTRINSIC_QUOTE,
   RTL_INTRINSIC_IADD,
   RTL_INTRINSIC_ISUB,
   RTL_INTRINSIC_IMUL,
@@ -50,6 +52,8 @@ struct rtl_Intrinsic {
       uint16_t idx;
     } var;
 
+    rtl_Word quote;
+
     struct {
       rtl_Intrinsic *fn;
       rtl_Intrinsic **args;
@@ -78,7 +82,7 @@ struct rtl_Intrinsic {
 
       rtl_Intrinsic **body;
       size_t        bodyLen;
-    } defun;
+    } defun, defmacro;
 
     struct {
       rtl_Intrinsic *leftArg, *rightArg;
@@ -247,6 +251,44 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word      name,
 	.bodyLen     = bodyLen,
       },
     },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkDefmacroIntrinsic(rtl_Word       name,
+				       rtl_Word      *argNames,
+				       size_t        argNamesLen,
+				       rtl_Intrinsic **body,
+				       size_t        bodyLen)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_DEFMACRO,
+    .as = {
+      .defun = {
+	.name        = name,
+	.argNames    = argNames,
+	.argNamesLen = argNamesLen,
+	.body        = body,
+	.bodyLen     = bodyLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkQuoteIntrinsic(rtl_Word expr)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_QUOTE,
+    .as = { .quote = expr },
   };
 
   return intr;

@@ -55,43 +55,50 @@ void rtl_formatExprShallow(rtl_Word w)
   case RTL_CLOSURE:
     printf("<closure>");
     break;
+
+  case RTL_TOP:
+    printf("T");
+    break;
   }
 }
 
-void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
+void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 {
   rtl_Word const *ptr;
   size_t         len,
-                 i;
+                 i,
+                 j;
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
     ptr = rtl_reifyTuple(M, w, &len);
 
-    printf("[");
+    printf("[ ");
     if (len != 0) {
-      rtl_formatExpr(M, ptr[0]);
+      rtl_formatExprIndented(M, ptr[0], indent + 1);
     }
     for (i = 1; i < len; i++) {
-      printf(" ");
-      rtl_formatExpr(M, ptr[i]);
+      for (j = 0; j < indent; j++) {
+	printf("  ");
+      }
+      rtl_formatExprIndented(M, ptr[i], indent + 1);
     }
-    printf("]");
+    printf(" ]");
     break;
 
   case RTL_CONS:
     printf("(");
     ptr = rtl_reifyCons(M, w);
-    rtl_formatExpr(M, ptr[0]);
+    rtl_formatExprIndented(M, ptr[0], indent + 1);
 
     while (rtl_isCons(ptr[1])) {
       ptr = rtl_reifyCons(M, ptr[1]);
       printf(" ");
-      rtl_formatExpr(M, ptr[0]);
+      rtl_formatExprIndented(M, ptr[0], indent + 1);
     }
     if (!rtl_isNil(ptr[1])) {
       printf(" . ");
-      rtl_formatExpr(M, ptr[1]);
+      rtl_formatExprIndented(M, ptr[1], indent + 1);
     }
     printf(")");
     break;
@@ -100,6 +107,11 @@ void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
     rtl_formatExprShallow(w);
     break;
   }
+}
+
+void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
+{
+  rtl_formatExprIndented(M, w, 0);
 }
 
 uint8_t *rtl_disasm(uint8_t *bc)
@@ -364,4 +376,36 @@ void rtl_disasmPage(rtl_Machine *M, uint16_t pageID)
   }
 
   printf("\n ----------------------------------\n\n");
+}
+
+char const *rtl_errString(rtl_Error err)
+{
+  switch (err) {
+  case RTL_OK:
+    return "OK -- No Error";
+
+  case RTL_ERR_INVALID_OPERATION:
+    return "Invalid Operation";
+
+  case RTL_ERR_OUT_OF_MEMORY:
+    return "Out of Memory";
+
+  case RTL_ERR_STACK_UNDERFLOW:
+    return "Stack Underflow";
+
+  case RTL_ERR_EXPECTED_TUPLE:
+    return "Expected Tuple";
+
+  case RTL_ERR_EXPECTED_CONS:
+    return "Expected Cons";
+
+  case RTL_ERR_EXPECTED_INT28:
+    return "Expected Int28";
+
+  case RTL_ERR_EXPECTED_FIX14:
+    return "Expected Fix14";
+
+  default:
+    return "[Uknown Error]";
+  }
 }

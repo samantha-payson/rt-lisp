@@ -320,6 +320,13 @@ int collectGen(rtl_Machine *M, int g)
     for (i = 0; i < M->rStackLen; i++) {
       M->rStack[i].env = new = moveWord(M, highest, old = M->rStack[i].env);
     }
+
+    // .. any words in live working sets ..
+    for (i = 0; i < M->wsStackLen; i++) {
+      for (pp = M->wsStack[i]; *pp != NULL; pp++) {
+	**pp = moveWord(M, highest, **pp);
+      }
+    }
   }
 
   return highest;
@@ -595,18 +602,18 @@ char const *rtl_typeName(rtl_WordType type)
   // end of multi-line macro
 
 #define CMP_OP(INAME, NUMERIC_CMP)		\
-  case RTL_OP_##INAME:				\
-  VSTACK_ASSERT_LEN(2);				\
+      case RTL_OP_##INAME:			\
+	VSTACK_ASSERT_LEN(2);			\
 						\
-  b = VPOP();					\
-  a = VPOP();					\
+	b = VPOP();				\
+	a = VPOP();				\
 						\
-  if (rtl_cmp(M, a, b) NUMERIC_CMP) {		\
-    VPUSH(RTL_TOP);				\
-  } else {					\
-    VPUSH(RTL_NIL);				\
-  }						\
-  break;					\
+	if (rtl_cmp(M, a, b) NUMERIC_CMP) {	\
+	  VPUSH(RTL_TOP);			\
+	} else {				\
+	  VPUSH(RTL_NIL);			\
+	}					\
+	break;					\
   // end of multiline macro
 
 static
@@ -702,7 +709,7 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
   }
 }
 
-rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
+rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 {
   uint8_t opcode;
 
@@ -729,12 +736,23 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
   M->pc = rtl_resolveAddr(M, addr);
 
   while (M->error == RTL_OK) {
-    printf("VSTACK:");
-    for (i = 0; i < M->vStackLen; i++) {
-      printf(" ");
-      rtl_formatExpr(M, M->vStack[i]);
-    }
-    printf("\n");
+    /* printf("VSTACK:"); */
+    /* for (i = 0; i < M->vStackLen; i++) { */
+    /*   printf(" "); */
+    /*   rtl_formatExpr(M, M->vStack[i]); */
+    /* } */
+    /* printf("\n"); */
+
+    /* printf("env: "); */
+    /* rtl_formatExpr(M, M->env); */
+    /* printf("\n"); */
+    /* printf("RSTACK:\n"); */
+    /* for (i = 0; i < M->rStackLen; i++) { */
+    /*   rtl_formatExpr(M, M->rStack[i].env); */
+    /*   printf(" "); */
+    /* } */
+
+    /* printf("\n"); */
 
     rtl_disasm(M->pc);
 
@@ -783,6 +801,7 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
       break;
 
     case RTL_OP_CDR:
+
       VSTACK_ASSERT_LEN(1);
 
       rptr = rtl_reifyCons(M, VPOP());
@@ -928,9 +947,6 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
 	M->env = b;
 	M->pc = rtl_resolveAddr(M, f);
-	printf("\n  -> page %d, offs %d\n\n",
-	       (int)rtl_addrPage(f),
-	       (int)rtl_addrOffs(f));
 	break;
 
       case RTL_CLOSURE:
@@ -957,9 +973,6 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 	M->env = b;
 	M->pc  = rtl_resolveAddr(M, f);
 
-	printf("\n-> page %d, offs %d <-\n\n",
-	       (int)rtl_addrPage(f),
-	       (int)rtl_addrOffs(f));
 	break;
 
       default:
@@ -995,9 +1008,6 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
       M->env = b;
       M->pc = rtl_resolveAddr(M, f);
-      printf("\n  -> page %d, offs %d\n\n",
-	     (int)rtl_addrPage(f),
-	     (int)rtl_addrOffs(f));
       break;
 
     case RTL_OP_UNDEFINED_FUNCTION:
@@ -1018,10 +1028,11 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
 
       M->rStackLen--;
 
+      printf("rStackLen: %d\n", (int)M->rStackLen);
+
       M->pc  = M->rStack[M->rStackLen].pc;
       M->env = M->rStack[M->rStackLen].env;
 
-      printf("\n<-\n\n");
       break;
 
 
@@ -1075,7 +1086,28 @@ rtl_Error rtl_run(rtl_Machine *M, rtl_Word addr)
  interp_cleanup:
   rtl_popWorkingSet(M);
 
-  return rtl_getError(M);
+  return M->vStackLen ? VPOP() : RTL_NIL;
+}
+
+rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
+{
+  size_t   len;
+  rtl_Word *ptr;
+  rtl_Word args, env;
+  size_t   i;
+
+  len = rtl_listLength(M, argList);
+  ptr = rtl_allocTuple(M, &args, len);
+
+  for (i = 0; argList != RTL_NIL; argList = rtl_cdr(M, argList), i++) {
+    ptr[i] = rtl_car(M, argList);
+  }
+
+  ptr    = rtl_allocTuple(M, &env, 1);
+  ptr[0] = args;
+
+  M->env = env;
+  return rtl_run(M, fn);
 }
 
 rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len)

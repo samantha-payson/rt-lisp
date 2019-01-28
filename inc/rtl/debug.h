@@ -5,6 +5,9 @@
 // Format an expression, following pointers and expanding nested data.
 void rtl_formatExpr(rtl_Machine *M, rtl_Word w);
 
+// Format an expression, indented as if it's nested n levels deep.
+void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int n);
+
 // Format an expression, but don't follow any pointers. Basically just print
 // atoms, and addresses for non-atoms.
 void rtl_formatExprShallow(rtl_Word w);
