@@ -24,7 +24,7 @@ int main() {
 
   RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
 
-  ns = rtl_nsInPkg(NULL, rtl_internPackage(&C, "intrinsic"));
+  ns = rtl_nsInPackage(NULL, rtl_internPackage(&C, "intrinsic"));
 
   replPageID = rtl_newPageID(&M);
 

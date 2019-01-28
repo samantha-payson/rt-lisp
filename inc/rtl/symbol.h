@@ -45,9 +45,9 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name);
 // on we can replace it with better lisp code.
 
 typedef enum rtl_NSType {
-  RTL_NS_IN_PKG,
-  RTL_NS_USE_PKG,
-  RTL_NS_PKG_ALIAS,
+  RTL_NS_IN_PACKAGE,
+  RTL_NS_USE_PACKAGE,
+  RTL_NS_ALIAS_PACKAGE,
   RTL_NS_ALIAS,
 } rtl_NSType;
 
@@ -79,7 +79,11 @@ typedef struct rtl_NameSpace {
     struct {
       rtl_Package *pkg;
       char const  *aliasName;
-    } pkgAlias;
+    } aliasPackage;
+
+    struct {
+      rtl_Package *pkg;
+    } usePackage;
 
     struct {
       rtl_Word   symbol;
@@ -89,14 +93,66 @@ typedef struct rtl_NameSpace {
 } rtl_NameSpace;
 
 // Extend super to be in the package pkg.
-rtl_NameSpace rtl_nsInPkg(rtl_NameSpace const *super, rtl_Package *pkg);
+static inline
+rtl_NameSpace rtl_nsInPackage(rtl_NameSpace const *super, rtl_Package *pkg)
+{
+  return (rtl_NameSpace) {
+    .type       = RTL_NS_IN_PACKAGE,
+    .super      = super,
+    .currentPkg = pkg,
+  };
+}
+
+// Bring all symbols exported by pkg into scope.
+static inline
+rtl_NameSpace rtl_nsUsePackage(rtl_NameSpace const *super, rtl_Package *pkg)
+{
+  return (rtl_NameSpace) {
+    .type       = RTL_NS_USE_PACKAGE,
+    .super      = super,
+    .currentPkg = super->currentPkg,
+    .as    = {
+      .usePackage = {
+	.pkg = pkg,
+      },
+    },
+  };
+}
 
 // Extend super to have alias refer to pkg.
-rtl_NameSpace rtl_nsPkgAlias(rtl_NameSpace const *super,
-			     rtl_Package *pkg,
-			     char const *alias);
+static inline
+rtl_NameSpace rtl_nsAliasPackage(rtl_NameSpace const *super,
+				 rtl_Package *pkg,
+				 char const *alias)
+{
+  return (rtl_NameSpace) {
+    .type       = RTL_NS_ALIAS_PACKAGE,
+    .super      = super,
+    .currentPkg = super->currentPkg,
+    .as    = {
+      .aliasPackage = {
+	.pkg       = pkg,
+	.aliasName = alias,
+      },
+    },
+  };
+}
 
 // Extend super to have alias refer to symbol.
+static inline
 rtl_NameSpace rtl_nsAlias(rtl_NameSpace const *super,
 			  rtl_Word symbol,
-			  char const *alias);
+			  char const *alias)
+{
+  return (rtl_NameSpace) {
+    .type       = RTL_NS_ALIAS,
+    .super      = super,
+    .currentPkg = super->currentPkg,
+    .as    = {
+      .alias = {
+	.symbol    = symbol,
+	.aliasName = alias,
+      },
+    },
+  };
+}

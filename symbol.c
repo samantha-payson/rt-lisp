@@ -205,9 +205,9 @@ uint32_t resolvePkgID(rtl_NameSpace const *ns, UnresolvedSymbol const *usym)
     // Search the NS hierarchy for any alias that matches usym->pkg
     for (ns = ns; NULL != ns; ns = ns->super) {
       switch (ns->type) {
-      case RTL_NS_PKG_ALIAS:
-	if (!strcmp(usym->pkg, ns->as.pkgAlias.aliasName)) {
-	  return ns->as.pkgAlias.pkg->id;
+      case RTL_NS_ALIAS_PACKAGE:
+	if (!strcmp(usym->pkg, ns->as.aliasPackage.aliasName)) {
+	  return ns->as.aliasPackage.pkg->id;
 	} else {
 	  continue;
 	}
@@ -303,6 +303,7 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 
     // .. or return an error if there is no exported symbol with that name.
     C->error = __rtl_errSymbolNotExported(usym->name, pkg);
+    abort();
     return RTL_NIL;
   } else {
     // pkg is the current package, just intern the symbol.
@@ -394,13 +395,4 @@ char const *rtl_symbolPackageName(rtl_Word w) {
   sym = symByID[id];
 
   return sym->pkg->name;
-}
-
-rtl_NameSpace rtl_nsInPkg(rtl_NameSpace const *super, rtl_Package *pkg)
-{
-  return (rtl_NameSpace) {
-    .type       = RTL_NS_IN_PKG,
-    .super      = super,
-    .currentPkg = pkg,
-  };
 }

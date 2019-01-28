@@ -11,6 +11,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_NAMED_CALL,
+  RTL_INTRINSIC_PROGN,
   RTL_INTRINSIC_LAMBDA,
   RTL_INTRINSIC_DEFUN,
   RTL_INTRINSIC_DEFMACRO,
@@ -75,6 +76,11 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **body;
       size_t        bodyLen;
     } lambda;
+
+    struct {
+      rtl_Intrinsic **forms;
+      size_t        formsLen;
+    } progn;
 
     struct {
       rtl_Word name;
@@ -205,6 +211,25 @@ rtl_Intrinsic *rtl_mkNamedCallIntrinsic(rtl_Word      name,
 	.name    = name,
 	.args    = args,
 	.argsLen = argsLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkPrognIntrinsic(rtl_Intrinsic **forms,
+				    size_t        formsLen)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_PROGN,
+    .as = {
+      .progn = {
+	.forms    = forms,
+	.formsLen = formsLen,
       },
     },
   };

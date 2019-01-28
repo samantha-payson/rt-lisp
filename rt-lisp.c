@@ -1072,16 +1072,25 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
 
     // Generate code for binary operations using the BINARY_OP macro.
-    BINARY_OP(IADD, +, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
-    BINARY_OP(ISUB, -, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
-    BINARY_OP(IMUL, *, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
-    BINARY_OP(IDIV, /, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
-    BINARY_OP(IMOD, %, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
+    BINARY_OP(IADD, +, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+	      rtl_int28, rtl_int28Value);
+    BINARY_OP(ISUB, -, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+	      rtl_int28, rtl_int28Value);
+    BINARY_OP(IMUL, *, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+	      rtl_int28, rtl_int28Value);
+    BINARY_OP(IDIV, /, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+	      rtl_int28, rtl_int28Value);
+    BINARY_OP(IMOD, %, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+	      rtl_int28, rtl_int28Value);
 
-    BINARY_OP(FADD, +, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FSUB, -, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FMUL, *, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14, rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FADD, +, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+	      rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FSUB, -, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+	      rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FMUL, *, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+	      rtl_fix14, rtl_fix14Value);
+    BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+	      rtl_fix14, rtl_fix14Value);
 
     CMP_OP(LT,  <  0);
     CMP_OP(LEQ, <= 0);

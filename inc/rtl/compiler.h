@@ -137,3 +137,6 @@ rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x);
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
 			   uint16_t pageID,
 			   rtl_Intrinsic const *x);
+
+// Export a symbol within its package.
+void rtl_export(rtl_Compiler *C, rtl_Word symbol);
