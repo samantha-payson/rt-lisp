@@ -70,6 +70,8 @@ struct rtl_Intrinsic {
       rtl_Word *argNames;
       uint16_t argNamesLen;
 
+      bool     hasRestArg;
+
       rtl_Intrinsic **body;
       size_t        bodyLen;
     } lambda;
@@ -79,6 +81,8 @@ struct rtl_Intrinsic {
 
       rtl_Word *argNames;
       uint16_t argNamesLen;
+
+      bool     hasRestArg;
 
       rtl_Intrinsic **body;
       size_t        bodyLen;
@@ -232,11 +236,12 @@ rtl_Intrinsic *rtl_mkLambdaIntrinsic(rtl_Word      *argNames,
 }
 
 static inline
-rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word      name,
-				     rtl_Word      *argNames,
-				     size_t        argNamesLen,
-				     rtl_Intrinsic **body,
-				     size_t        bodyLen)
+rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word       name,
+				    rtl_Word       *argNames,
+				    size_t         argNamesLen,
+				    bool           hasRestArg,
+				    rtl_Intrinsic  **body,
+				    size_t         bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -247,6 +252,7 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word      name,
 	.name        = name,
 	.argNames    = argNames,
 	.argNamesLen = argNamesLen,
+	.hasRestArg  = hasRestArg,
 	.body        = body,
 	.bodyLen     = bodyLen,
       },
@@ -258,20 +264,22 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word      name,
 
 static inline
 rtl_Intrinsic *rtl_mkDefmacroIntrinsic(rtl_Word       name,
-				       rtl_Word      *argNames,
-				       size_t        argNamesLen,
-				       rtl_Intrinsic **body,
-				       size_t        bodyLen)
+				       rtl_Word       *argNames,
+				       size_t         argNamesLen,
+				       bool           hasRestArg,
+				       rtl_Intrinsic  **body,
+				       size_t         bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
   *intr = (rtl_Intrinsic) {
     .type = RTL_INTRINSIC_DEFMACRO,
     .as = {
-      .defun = {
+      .defmacro = {
 	.name        = name,
 	.argNames    = argNames,
 	.argNamesLen = argNamesLen,
+	.hasRestArg  = hasRestArg,
 	.body        = body,
 	.bodyLen     = bodyLen,
       },

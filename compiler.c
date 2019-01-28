@@ -323,6 +323,8 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   size_t   argNamesLen;
   size_t   argNamesCap;
 
+  bool hasRestArg;
+
   ensureSymCache();
 
   buf    = NULL;
@@ -330,6 +332,8 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
   argNames    = NULL;
   argNamesCap = argNamesLen = 0;
+
+  hasRestArg = false;
 
   if (rtl_isCons(sxp)) {
     head = rtl_car(C->M, sxp);
@@ -386,7 +390,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       name = rtl_cadr(C->M, sxp);
 
       for (tail =  rtl_caddr(C->M, sxp);
-	   tail != RTL_NIL;
+	   rtl_isCons(tail);
 	   tail =  rtl_cdr(C->M, tail))
       {
 	assert(rtl_isSymbol(rtl_car(C->M, tail)));
@@ -397,6 +401,13 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 	}
 
 	argNames[argNamesLen++] = rtl_car(C->M, tail);
+      }
+
+      if (!rtl_isNil(tail)) {
+	assert(rtl_isSymbol(tail));
+
+	argNames[argNamesLen++] = tail;
+	hasRestArg = true;
       }
 
       for (tail = rtl_cdddr(C->M, sxp);
@@ -410,12 +421,22 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
 	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
-      if (head == symCache.intrinsic.defun) {
-	return rtl_mkDefunIntrinsic(name, argNames, argNamesLen, buf, bufLen);
-      } else {
-	return rtl_mkDefmacroIntrinsic(name, argNames, argNamesLen, buf, bufLen);
-      }
 
+      if (head == symCache.intrinsic.defun) {
+	return rtl_mkDefunIntrinsic(name,
+				    argNames,
+				    argNamesLen,
+				    hasRestArg,
+				    buf,
+				    bufLen);
+      } else {
+	return rtl_mkDefmacroIntrinsic(name,
+				       argNames,
+				       argNamesLen,
+				       hasRestArg,
+				       buf,
+				       bufLen);
+      }
     } else if (head == symCache.intrinsic.quote) {
       assert(len == 2);
       return rtl_mkQuoteIntrinsic(rtl_cadr(C->M, sxp));
@@ -769,7 +790,6 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
   }
 }
 
-
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
 			   uint16_t pageID,
 			   rtl_Intrinsic const *x)
@@ -858,6 +878,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
   case RTL_INTRINSIC_DEFUN:
     newPageID = rtl_newPageID(C->M);
 
+    if (x->as.defun.hasRestArg) {
+      rtl_emitByteToPage(C->M, newPageID, RTL_OP_REST);
+      rtl_emitShortToPage(C->M, newPageID, x->as.defun.argNamesLen - 1);
+    }
+
     // TODO: We're not using the argnames at all.. we should probably check
     // arity when resolving call sites.
 
@@ -876,6 +901,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
   case RTL_INTRINSIC_DEFMACRO:
     newPageID = rtl_newPageID(C->M);
+
+    if (x->as.defmacro.hasRestArg) {
+      rtl_emitByteToPage(C->M, newPageID, RTL_OP_REST);
+      rtl_emitShortToPage(C->M, newPageID, x->as.defmacro.argNamesLen - 1);
+    }
 
     // TODO: We're not using the argnames at all.. we should probably check
     // arity when resolving call sites.

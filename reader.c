@@ -113,6 +113,49 @@ int rtl_readDelim(rtl_Compiler *C, FILE *f, int delim)
   return n;
 }
 
+static
+rtl_Word readList(rtl_Compiler *C, FILE *f)
+{
+  int ch, n;
+  rtl_Word w;
+
+  eatWhitespace(f);
+  ch = fgetc(f);
+
+  switch (ch) {
+  case ')':
+    return RTL_NIL;
+
+  case '.':
+    // TODO: make this code selector-friendly
+    ch = fgetc(f);
+    if (isspace(ch)) {
+      w = rtl_read(C, f);
+      eatWhitespace(f);
+      ch = fgetc(f);
+      assert(ch == ')');
+      return w;
+    } else {
+      printf("\n   !!! SELECTORS NOT YET SUPPORTED! !!!\n");
+      abort();
+    }
+
+  default:
+    ungetc(ch, f);
+    w = rtl_read(C, f);
+    return rtl_cons(C->M,
+		    w,
+		    readList(C, f));
+  }
+
+  if (ch == EOF) {
+    printf("\n   !!! EOF WHILE READING LIST EXPRESSION  { .delim ')' }\n\n");
+    abort();
+  }
+
+  return n;
+}
+
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 {
   int ch, n, i;
@@ -128,14 +171,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     abort();
 
   case '(':
-    n = rtl_readDelim(C, f, ')');
-    rtl_push(C->M, RTL_NIL);
-
-    for (i = 0; i < n; i++) {
-      consStackTop(C->M);
-    }
-
-    return rtl_pop(C->M);
+    return readList(C, f);
 
   case '{':
     printf("\n   !!! RTL CAN'T READ RECORDS YET !!!\n\n");

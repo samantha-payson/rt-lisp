@@ -253,6 +253,14 @@ uint8_t *rtl_disasm(uint8_t *bc)
     printf("   return\n");
     return bc + 1;
 
+  case RTL_OP_REST:
+    size = (uint16_t)bc[1] << 0
+         | (uint16_t)bc[2] << 8;
+
+    printf("   rest %d\n", (int)size);
+
+    return bc + 3;
+
   case RTL_OP_VAR:
     frame = (uint16_t)bc[1] << 0
           | (uint16_t)bc[2] << 8;

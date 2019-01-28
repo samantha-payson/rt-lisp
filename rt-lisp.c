@@ -1035,6 +1035,30 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
       break;
 
+    case RTL_OP_REST:
+      M->pc = readShort(M->pc, &idx);
+
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      rptr = rtl_reifyTuple(M, rptr[0], &len);
+      assert(0 <= idx && idx <= len);
+
+      a = RTL_NIL;
+      for (i = len - 1; i >= idx; i--) {
+	a = rtl_cons(M, rptr[i], a);
+      }
+
+      wptr = rtl_allocTuple(M, &b, idx + 1);
+      memcpy(wptr, rptr, sizeof(rtl_Word)*idx);
+      wptr[idx] = a;
+
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      wptr = rtl_allocTuple(M, &c, len);
+      memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+      wptr[0] = b;
+
+      M->env = c;
+      break;
+
 
     // Generate code for binary operations using the BINARY_OP macro.
     BINARY_OP(IADD, +, rtl_isInt28, RTL_ERR_EXPECTED_INT28, rtl_int28, rtl_int28Value);
