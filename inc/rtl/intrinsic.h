@@ -30,6 +30,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_EQ,
   RTL_INTRINSIC_NEQ,
   RTL_INTRINSIC_ISO,
+  RTL_INTRINSIC_TYPE_PRED,
   RTL_INTRINSIC_CONSTANT,
 } rtl_IntrinsicType;
 
@@ -67,6 +68,11 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **args;
       size_t        argsLen;
     } namedCall;
+
+    struct {
+      rtl_WordType  type;
+      rtl_Intrinsic *arg;
+    } typePred;
 
     struct {
       rtl_Word *argNames;
@@ -214,6 +220,24 @@ rtl_Intrinsic *rtl_mkNamedCallIntrinsic(rtl_Word      name,
 	.name    = name,
 	.args    = args,
 	.argsLen = argsLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkTypePredIntrinsic(rtl_WordType type, rtl_Intrinsic *arg)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_TYPE_PRED,
+    .as = {
+      .typePred = {
+	.type = type,
+	.arg  = arg,
       },
     },
   };

@@ -192,95 +192,84 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   return rtl_symbol(id);
 }
 
+
+#define MAP_INTRINSICS(M)			\
+  M(cons,         "cons")			\
+  M(car,          "car")			\
+  M(cdr,          "cdr")			\
+  M(var,          "var")			\
+  M(call,         "call")			\
+  M(namedCall,    "named-call")			\
+  M(progn,        "progn")			\
+  M(lambda,       "lambda")			\
+  M(defun,        "defun")			\
+  M(defmacro,     "defmacro")			\
+  M(quote,        "quote")			\
+  M(inPackage,    "in-package")			\
+  M(usePackage,   "use-package")		\
+  M(aliasPackage, "alias-package")		\
+  M(alias,        "alias")			\
+  M(export,       "export")			\
+  M(iadd,         "iadd")			\
+  M(isub,         "isub")			\
+  M(imul,         "imul")			\
+  M(idiv,         "idiv")			\
+  M(imod,         "imod")			\
+  M(lt,           "lt")				\
+  M(leq,          "leq")			\
+  M(gt,           "gt")				\
+  M(geq,          "geq")			\
+  M(eq,           "eq")				\
+  M(neq,          "neq")			\
+  M(iso,          "iso")			\
+  M(nilp,         "nil?")			\
+  M(symbolp,      "symbol?")			\
+  M(selectorp,    "selector?")			\
+  M(int28p,       "int28?")			\
+  M(fix14p,       "fix14?")			\
+  M(tuplep,       "tuple?")			\
+  M(stringp,      "string?")			\
+  M(recordp,      "record?")			\
+  M(consp,        "cons?")			\
+  M(addrp,        "addr?")			\
+  M(builtinp,     "builtin?")			\
+  M(closurep,     "closure?")			\
+  M(unresolvedp,  "unresolved?")		\
+  M(topp,         "top?")			\
+  M(_if,          "if")				\
+  // End of multi-line macro
+
+#define DECLARE_INTRINSIC_WORD(CNAME, LISPNAME)	CNAME,
+
 static struct symCache_t {
   struct {
-    rtl_Word cons,
-             car,
-             cdr,
-             var,
-             call,
-             namedCall,
-             progn,
-             lambda,
-             defun, defmacro,
-             quote,
-             inPackage, usePackage, aliasPackage, alias, export,
-             iadd, isub, imul, idiv, imod,
-             lt, leq, gt, geq, eq, neq, iso, niso,
-             _if;
+    rtl_Word MAP_INTRINSICS(DECLARE_INTRINSIC_WORD)
+      ___ignore___; // Need an identifier here so the trailing comma isn't a
+                    // problem...
   } intrinsic;
 } symCache;
 
 static bool symCacheWasInit;
+
+#define CACHE_INTRINSIC_SYM(CNAME, LISPNAME)	\
+  .CNAME = rtl_intern("intrinsic", LISPNAME),	\
+  // End of multi-line macro
+
+#define EXPORT_INTRINSIC(CNAME, LISPNAME)	\
+  rtl_export(C, symCache.intrinsic.CNAME);	\
+  // End of multi-line macro
 
 static inline
 void ensureSymCache(rtl_Compiler *C) {
   if (unlikely(!symCacheWasInit)) {
     symCache = (struct symCache_t) {
       .intrinsic = {
-	.cons         = rtl_intern("intrinsic", "cons"),
-	.car          = rtl_intern("intrinsic", "car"),
-	.cdr          = rtl_intern("intrinsic", "cdr"),
-	.var          = rtl_intern("intrinsic", "var"),
-	.call         = rtl_intern("intrinsic", "call"),
-	.namedCall    = rtl_intern("intrinsic", "named-call"),
-	.progn        = rtl_intern("intrinsic", "progn"),
-	.lambda       = rtl_intern("intrinsic", "lambda"),
-	.defun        = rtl_intern("intrinsic", "defun"),
-	.defmacro     = rtl_intern("intrinsic", "defmacro"),
-	.quote        = rtl_intern("intrinsic", "quote"),
-	.inPackage    = rtl_intern("intrinsic", "in-package"),
-	.usePackage   = rtl_intern("intrinsic", "use-package"),
-	.aliasPackage = rtl_intern("intrinsic", "alias-package"),
-	.alias        = rtl_intern("intrinsic", "alias"),
-	.export       = rtl_intern("intrinsic", "export"),
-	.iadd         = rtl_intern("intrinsic", "iadd"),
-	.isub         = rtl_intern("intrinsic", "isub"),
-	.imul         = rtl_intern("intrinsic", "imul"),
-	.idiv         = rtl_intern("intrinsic", "idiv"),
-	.imod         = rtl_intern("intrinsic", "imod"),
-	.lt           = rtl_intern("intrinsic", "lt"),
-	.leq          = rtl_intern("intrinsic", "leq"),
-	.gt           = rtl_intern("intrinsic", "gt"),
-	.geq          = rtl_intern("intrinsic", "geq"),
-	.eq           = rtl_intern("intrinsic", "eq"),
-	.neq          = rtl_intern("intrinsic", "neq"),
-	.iso          = rtl_intern("intrinsic", "iso"),
-	.niso         = rtl_intern("intrinsic", "niso"),
-	._if          = rtl_intern("intrinsic", "if"),
+	MAP_INTRINSICS(CACHE_INTRINSIC_SYM)
       },
     };
   }
 
-  rtl_export(C, symCache.intrinsic.cons);
-  rtl_export(C, symCache.intrinsic.car);
-  rtl_export(C, symCache.intrinsic.cdr);
-  rtl_export(C, symCache.intrinsic.car);
-  rtl_export(C, symCache.intrinsic.call);
-  rtl_export(C, symCache.intrinsic.namedCall);
-  rtl_export(C, symCache.intrinsic.progn);
-  rtl_export(C, symCache.intrinsic.lambda);
-  rtl_export(C, symCache.intrinsic.defun);
-  rtl_export(C, symCache.intrinsic.defmacro);
-  rtl_export(C, symCache.intrinsic.quote);
-  rtl_export(C, symCache.intrinsic.inPackage);
-  rtl_export(C, symCache.intrinsic.usePackage);
-  rtl_export(C, symCache.intrinsic.aliasPackage);
-  rtl_export(C, symCache.intrinsic.alias);
-  rtl_export(C, symCache.intrinsic.export);
-  rtl_export(C, symCache.intrinsic.iadd);
-  rtl_export(C, symCache.intrinsic.isub);
-  rtl_export(C, symCache.intrinsic.imul);
-  rtl_export(C, symCache.intrinsic.idiv);
-  rtl_export(C, symCache.intrinsic.imod);
-  rtl_export(C, symCache.intrinsic.lt);
-  rtl_export(C, symCache.intrinsic.leq);
-  rtl_export(C, symCache.intrinsic.gt);
-  rtl_export(C, symCache.intrinsic.geq);
-  rtl_export(C, symCache.intrinsic.eq);
-  rtl_export(C, symCache.intrinsic.neq);
-  rtl_export(C, symCache.intrinsic.iso);
-  rtl_export(C, symCache.intrinsic.niso);
+  MAP_INTRINSICS(EXPORT_INTRINSIC)
 }
 
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
@@ -617,16 +606,83 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISO,
 				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
-      
+
+    } else if (head == symCache.intrinsic.nilp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_NIL,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.symbolp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_SYMBOL,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.selectorp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_SELECTOR,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.int28p) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_INT28,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.fix14p) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_FIX14,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.tuplep) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_TUPLE,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.stringp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_STRING,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.recordp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_RECORD,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.consp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_CONS,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.addrp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_ADDR,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.builtinp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_BUILTIN,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.closurep) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_CLOSURE,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.unresolvedp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_UNRESOLVED_SYMBOL,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.topp) {
+      assert(len == 2);
+      return rtl_mkTypePredIntrinsic(RTL_TOP,
+				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
     } else if (head == symCache.intrinsic._if) {
       assert(len == 3 || len == 4);
 
       return rtl_mkIfIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 			       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
 			       rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
-
-    } else if (head == symCache.intrinsic.lt) {
-      
 
     } else {
       assert(len >= 1);
@@ -831,6 +887,10 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   case RTL_INTRINSIC_ISO:
     x->as.binop.leftArg  = __impl_transformIntrinsic(env, x->as.binop.leftArg);
     x->as.binop.rightArg = __impl_transformIntrinsic(env, x->as.binop.rightArg);
+    break;
+
+  case RTL_INTRINSIC_TYPE_PRED:
+    x->as.typePred.arg = __impl_transformIntrinsic(env, x->as.typePred.arg);
     break;
 
   case RTL_INTRINSIC_IF:
@@ -1117,6 +1177,44 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     case RTL_INTRINSIC_ISO:
       rtl_emitByteToPage(C->M, pageID, RTL_OP_ISO);
+      break;
+
+    } break;
+
+  case RTL_INTRINSIC_TYPE_PRED:
+    rtl_emitIntrinsicCode(C, pageID, x->as.typePred.arg);
+
+    switch (x->as.typePred.type) {
+    case RTL_INT28:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_INT28);
+      break;
+
+    case RTL_FIX14:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_FIX14);
+      break;
+
+    case RTL_SYMBOL:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_SYMBOL);
+      break;
+
+    case RTL_SELECTOR:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_SELECTOR);
+      break;
+
+    case RTL_NIL:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_NIL);
+      break;
+
+    case RTL_CONS:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_CONS);
+      break;
+
+    case RTL_TUPLE:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_TUPLE);
+      break;
+
+    case RTL_TOP:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_TOP);
       break;
 
     } break;
