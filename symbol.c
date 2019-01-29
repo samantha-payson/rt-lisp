@@ -192,6 +192,7 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
     symByIDCap = symByIDCap == 0 ? 32 : 2*symByIDCap;
     symByID = realloc(symByID, sizeof(Symbol *)*symByIDCap);
   }
+
   // .. then add this to the array.
   symByID[symNextID++] = sym;
 
@@ -268,12 +269,21 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
   if (NULL == usym->pkg) {
     for (seek = ns; NULL != seek; seek = seek->super) {
       switch (seek->type) {
+      case RTL_NS_USE_PACKAGE:
+	pkg = seek->as.usePackage.pkg;
+	for (i = 0; i < pkg->exportsLen; i++) {
+	  if (!strcmp(pkg->exports[i].name, usym->name)) {
+	    return pkg->exports[i].symbol;
+	  }
+	}
+	continue;
+
       case RTL_NS_ALIAS:
 	if (!strcmp(usym->name, seek->as.alias.aliasName)) {
 	  // This symbol refers to an alias, our work here is done.
 	  return seek->as.alias.symbol;
 	}
-	break;
+	continue;
 
       default:
 	continue;
