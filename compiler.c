@@ -538,6 +538,10 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 				       buf,
 				       bufLen);
       }
+    } else if (head == symCache.intrinsic.export) {
+      assert(len == 2);
+      return rtl_mkExportIntrinsic(rtl_cadr(C->M, sxp));
+
     } else if (head == symCache.intrinsic.quote) {
       assert(len == 2);
       return rtl_mkQuoteIntrinsic(rtl_cadr(C->M, sxp));
@@ -835,6 +839,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as._if._else = __impl_transformIntrinsic(env, x->as._if._else);
     break;
 
+  case RTL_INTRINSIC_EXPORT:
   case RTL_INTRINSIC_QUOTE:
   case RTL_INTRINSIC_CONSTANT:
     break;
@@ -1040,6 +1045,10 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
 
     rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), true);
+    break;
+
+  case RTL_INTRINSIC_EXPORT:
+    rtl_export(C, x->as.export);
     break;
 
   case RTL_INTRINSIC_QUOTE:

@@ -15,6 +15,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_LAMBDA,
   RTL_INTRINSIC_DEFUN,
   RTL_INTRINSIC_DEFMACRO,
+  RTL_INTRINSIC_EXPORT,
   RTL_INTRINSIC_QUOTE,
   RTL_INTRINSIC_IADD,
   RTL_INTRINSIC_ISUB,
@@ -93,6 +94,8 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **body;
       size_t        bodyLen;
     } defun, defmacro;
+
+    rtl_Word export;
 
     struct {
       rtl_Intrinsic *leftArg, *rightArg;
@@ -322,6 +325,21 @@ rtl_Intrinsic *rtl_mkQuoteIntrinsic(rtl_Word expr)
   *intr = (rtl_Intrinsic) {
     .type = RTL_INTRINSIC_QUOTE,
     .as = { .quote = expr },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkExportIntrinsic(rtl_Word sym)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  assert(rtl_isSymbol(sym));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_EXPORT,
+    .as = { .export = sym },
   };
 
   return intr;
