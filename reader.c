@@ -164,6 +164,11 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 
   ch = fgetc(f);
   switch (ch) {
+  case EOF:
+    return rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
+		    rtl_cons(C->M, rtl_intern("io", "EOF"),
+			     RTL_NIL));
+
   case ')':
   case '}':
   case ']':
@@ -185,9 +190,27 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     printf("\n   !!! RTL CAN'T READ STRINGS YET !!!\n\n");
     abort();
 
+  case '\'':
+    return rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
+		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+
+  case '`':
+    return rtl_cons(C->M, rtl_intern("std", "semiquote"),
+		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+
+  case '~':
+    return rtl_cons(C->M, rtl_intern("std", "escape"),
+		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+
+  case '@':
+    return rtl_cons(C->M, rtl_intern("std", "splice"),
+		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+
   default:
     if (isgraph(ch)) {
-      rtl_readAtom(C, f, ch);
+      return rtl_readAtom(C, f, ch);
     }
   }
+
+  abort();
 }

@@ -381,6 +381,132 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
   return out;
 }
 
+void rtl_compile(rtl_Compiler *C,
+		 rtl_NameSpace const *ns,
+		 uint16_t pageID,
+		 rtl_Word in)
+{
+  rtl_Word head  = RTL_NIL,
+           arg   = RTL_NIL,
+           name  = RTL_NIL,
+           alias = RTL_NIL,
+           tail  = RTL_NIL,
+           out   = RTL_NIL;
+
+  rtl_FnDef *fnDef;
+
+  rtl_NameSpace newNS;
+
+  uint32_t    pkgID;
+  rtl_Package *pkg;
+
+  rtl_Intrinsic *ir;
+
+  ensureSymCache(C);
+
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &tail, &out);
+
+  switch (rtl_typeOf(in)) {
+  case RTL_UNRESOLVED_SYMBOL:
+    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
+    break;
+
+  case RTL_CONS:
+    head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
+
+    if (head == symCache.intrinsic.inPackage) {
+      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
+      newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
+      rtl_compile(C, &newNS, pageID,
+		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+			   rtl_cddr(C->M, in)));
+
+      rtl_popWorkingSet(C->M);
+      return;
+
+    } else if (head == symCache.intrinsic.usePackage) {
+      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
+      newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
+      rtl_compile(C, &newNS, pageID,
+		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+			   rtl_cddr(C->M, in)));
+
+      rtl_popWorkingSet(C->M);
+      return;
+
+    } else if (head == symCache.intrinsic.aliasPackage) {
+      name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
+      alias = rtl_macroExpand(C, ns, rtl_cadr(C->M, rtl_cadr(C->M, in)));
+      newNS = rtl_nsAliasPackage(ns, rtl_internPackage(C, rtl_symbolName(name)),
+				 rtl_symbolName(alias));
+      rtl_compile(C, &newNS, pageID,
+		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+			   rtl_cddr(C->M, in)));
+
+      rtl_popWorkingSet(C->M);
+      return;
+
+    } else if (head == symCache.intrinsic.alias) {
+      printf("\n   !!! alias not yet supported !!!\n\n");
+      abort();
+
+    } else if (head == symCache.intrinsic.progn) {
+      for (tail = rtl_cdr(C->M, in);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	printf("Emitting PROGN elem...\n");
+	rtl_compile(C, ns, pageID, rtl_car(C->M, tail));
+
+	if (rtl_cdr(C->M, tail) != RTL_NIL) {
+	  rtl_emitByteToPage(C->M, pageID, RTL_OP_POP);
+	}
+      }
+
+      printf("Done w/ PROGN\n");
+
+      rtl_popWorkingSet(C->M);
+      return;
+
+    } else {
+      fnDef = rtl_lookupFn(C, head);
+      if (fnDef != NULL && fnDef->isMacro) {
+	rtl_compile(C, ns, pageID,
+		    rtl_macroExpand(C, ns,
+				    rtl_applyList(C->M, fnDef->addr,
+						  rtl_cdr(C->M, in))));
+	rtl_popWorkingSet(C->M);
+	return;
+
+      } else {
+	out = rtl_cons(C->M, head, RTL_NIL);
+
+	for (tail = rtl_cdr(C->M, in);
+	     rtl_isCons(tail);
+	     tail = rtl_cdr(C->M, tail))
+	{
+	  arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+	  out = rtl_cons(C->M, arg, out);
+	}
+
+	out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
+
+
+      } break;
+    }
+
+  default:
+    out = rtl_macroExpand(C, ns, in);
+    break;
+  }
+
+  ir = rtl_exprToIntrinsic(C, out);
+  ir = rtl_transformIntrinsic(ir);
+  rtl_emitIntrinsicCode(C, pageID, ir);
+
+  rtl_popWorkingSet(C->M);
+}
+
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
   rtl_Word head, tail, name, _else;
@@ -404,6 +530,10 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   argNamesCap = argNamesLen = 0;
 
   hasRestArg = false;
+
+  printf("Generating intrinsics for: ");
+  rtl_formatExpr(C->M, sxp);
+  printf("\n");
 
   if (rtl_isCons(sxp)) {
     head = rtl_car(C->M, sxp);
@@ -1081,6 +1211,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
 
     rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), false);
+
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+    rtl_emitWordToPage(C->M, pageID, x->as.defun.name);
     break;
 
   case RTL_INTRINSIC_DEFMACRO:
@@ -1105,6 +1238,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
 
     rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), true);
+
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+    rtl_emitWordToPage(C->M, pageID, x->as.defun.name);
     break;
 
   case RTL_INTRINSIC_EXPORT:

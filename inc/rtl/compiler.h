@@ -126,6 +126,11 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 // pageID'th code page of C->M.
 void rtl_compileExpr(rtl_Compiler *C, uint16_t pageID, rtl_Word sxp);
 
+void rtl_compile(rtl_Compiler *C,
+		 rtl_NameSpace const *ns,
+		 uint16_t pageID,
+		 rtl_Word in);
+
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M);
 
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in);

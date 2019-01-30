@@ -30,16 +30,8 @@ int main() {
 
   while (!feof(stdin)) {
     w = rtl_read(&C, stdin);
-    w = rtl_macroExpand(&C, &ns, w);
 
-    printf("\n Input source was: ");
-    rtl_formatExpr(&M, w);
-    printf("\n");
-
-    ir = rtl_exprToIntrinsic(&C, w);
-    ir = rtl_transformIntrinsic(ir);
-
-    rtl_emitIntrinsicCode(&C, replPageID, ir);
+    rtl_compile(&C, &ns, replPageID, w);
 
     if (C.error.type) {
       printf("Error compiling expression!\n");
