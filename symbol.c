@@ -86,7 +86,7 @@ uint32_t rtl_internUnresolvedID(char const *pkg, char const *name)
 
   for (usym = unresTable[idx]; usym; usym = usym->next)
   {
-    if (((!pkg && !usym->pkg) || (pkg && !strcmp(usym->pkg, pkg)))
+    if (((!pkg && !usym->pkg) || (pkg && usym->pkg && !strcmp(usym->pkg, pkg)))
 	&& !strcmp(name, usym->name))
     {
       return usym->id;
