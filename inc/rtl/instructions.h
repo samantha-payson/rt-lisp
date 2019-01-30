@@ -48,9 +48,11 @@ typedef enum rtl_Opcode {
   RTL_OP_RETURN,
   RTL_OP_REST,
 
-  // This opcode is placed wherever there is a call site that hasn't been
-  // resolved yet. It will print an error and exit the interpreter if executed.
+  // This opcode is placed wherever there is a call site (or load site) that
+  // hasn't been resolved yet. It will print an error and exit the interpreter
+  // if executed.
   RTL_OP_UNDEFINED_FUNCTION,
+  RTL_OP_UNDEFINED_VAR,
 
   // Load a variable onto the stack.
   RTL_OP_VAR,

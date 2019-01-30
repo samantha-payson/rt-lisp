@@ -73,11 +73,29 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
     if (site->version == page->version) {
       csa->sites[w++] = csa->sites[r];
 
-      code[0] = RTL_OP_STATIC_CALL;
-      code[1] = (fn >>  0) & 0xFF;
-      code[2] = (fn >>  8) & 0xFF;
-      code[3] = (fn >> 16) & 0xFF;
-      code[4] = (fn >> 24) & 0xFF;
+      switch (code[0]) {
+      case RTL_OP_UNDEFINED_FUNCTION:
+      case RTL_OP_STATIC_CALL:
+	code[0] = RTL_OP_STATIC_CALL;
+	code[1] = (fn >>  0) & 0xFF;
+	code[2] = (fn >>  8) & 0xFF;
+	code[3] = (fn >> 16) & 0xFF;
+	code[4] = (fn >> 24) & 0xFF;
+	break;
+
+      case RTL_OP_UNDEFINED_VAR:
+      case RTL_OP_CONST:
+	code[0] = RTL_OP_CONST;
+	code[1] = (fn >>  0) & 0xFF;
+	code[2] = (fn >>  8) & 0xFF;
+	code[3] = (fn >> 16) & 0xFF;
+	code[4] = (fn >> 24) & 0xFF;
+	break;
+
+      default:
+	printf("   !!! Invalid call site !!!\n");
+	abort();
+      }
     }
   }
 
@@ -204,6 +222,7 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   M(lambda,       "lambda")			\
   M(defun,        "defun")			\
   M(defmacro,     "defmacro")			\
+  M(load,         "load")			\
   M(quote,        "quote")			\
   M(inPackage,    "in-package")			\
   M(usePackage,   "use-package")		\
@@ -284,10 +303,21 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   memset(C->pkgByID,         0, sizeof C->pkgByID);
 }
 
-// In the future, this will check if w is the name of a macro... right now it
-// just returns false 100% of the time.
-bool rtl_isMacroName(rtl_Compiler *C, rtl_Word w) {
-  return false;
+rtl_Word rtl_resolveAllSymbols(rtl_Compiler *C,
+			       rtl_NameSpace const *ns,
+			       rtl_Word sxp)
+{
+  switch (rtl_typeOf(sxp)) {
+  case RTL_UNRESOLVED_SYMBOL:
+    return rtl_resolveSymbol(C, ns, rtl_symbolID(sxp));
+
+  case RTL_CONS:
+    return rtl_cons(C->M, rtl_resolveAllSymbols(C, ns, rtl_car(C->M, sxp)),
+		    rtl_resolveAllSymbols(C, ns, rtl_cdr(C->M, sxp)));
+
+  default:
+    return sxp;
+  }
 }
 
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
@@ -325,7 +355,6 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 			      rtl_cons(C->M,
 				       rtl_intern("intrinsic", "progn"),
 				       rtl_cddr(C->M, in)));
-      break;
 
     } else if (head == symCache.intrinsic.usePackage) {
       name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
@@ -334,7 +363,6 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 			      rtl_cons(C->M,
 				       rtl_intern("intrinsic", "progn"),
 				       rtl_cddr(C->M, in)));
-      break;
 
     } else if (head == symCache.intrinsic.aliasPackage) {
       name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
@@ -345,31 +373,37 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 			      rtl_cons(C->M,
 				       rtl_intern("intrinsic", "progn"),
 				       rtl_cddr(C->M, in)));
-      break;
 
     } else if (head == symCache.intrinsic.alias) {
-      break;
+      out = in;
+    } else if (head == symCache.intrinsic.quote) {
+      out = rtl_resolveAllSymbols(C, ns, in);
+    } else {
+      fnDef = rtl_lookupFn(C, head);
 
-    }
+      if (fnDef != NULL && fnDef->isMacro) {
+	printf("'%s:%s' is a '%s' which names a macro!\n",
+	       rtl_symbolPackageName(head),
+	       rtl_symbolName(head),
+	       rtl_typeNameOf(head));
 
-    fnDef = rtl_lookupFn(C, head);
-    if (fnDef != NULL && fnDef->isMacro) {
-      out = rtl_macroExpand(C, ns, rtl_applyList(C->M,
-						 fnDef->addr,
-						 rtl_cdr(C->M, in)));
-      break;
-    }
+	out = rtl_macroExpand(C, ns, rtl_applyList(C->M,
+						   fnDef->addr,
+						   rtl_cdr(C->M, in)));
 
-    out = rtl_cons(C->M, head, RTL_NIL);
+     } else {
+	out = rtl_cons(C->M, head, RTL_NIL);
 
-    for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
-    {
-      arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-      out = rtl_cons(C->M, arg, out);
-    }
+	for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
+	  {
+	    arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+	    out = rtl_cons(C->M, arg, out);
+	  }
 
-    out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
-    break;
+	out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
+      }
+
+    } break;
 
   default:
     out = in;
@@ -899,6 +933,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   rtl_Intrinsic **argsTmp;
   size_t        argsLenTmp;
   Environment   newEnv;
+  rtl_FnDef     *fnDef;
 
   size_t i;
 
@@ -917,17 +952,10 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     break;
 
   case RTL_INTRINSIC_VAR:
-    if (!env ||
-	!lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))
-    {
-      printf("\n   error: No variable named '%s:%s' in scope!\n\n",
-	     rtl_symbolPackageName(x->as.var.name),
-	     rtl_symbolName(x->as.var.name));
-      abort();
-    }
-
-    // If we didn't abort, then the correct frame/idx values were written by
-    // lookupVar.
+    if ((!env ||
+	 !lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))) {
+      x->as.var.global = true;
+    } // If lookupVar returned true, then frame and idx were set.
     break;
 
   case RTL_INTRINSIC_CALL:
@@ -1119,9 +1147,26 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     break;
 
   case RTL_INTRINSIC_VAR:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_VAR);
-    rtl_emitShortToPage(C->M, pageID, x->as.var.frame);
-    rtl_emitShortToPage(C->M, pageID, x->as.var.idx);
+    if (x->as.var.global) {
+      fnDef = rtl_lookupFn(C, x->as.var.name);
+
+      if (fnDef != NULL && !fnDef->isMacro) {
+	addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+
+	rtl_emitWordToPage(C->M, pageID, fnDef->addr);
+      } else {
+	addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_VAR);
+
+	rtl_emitWordToPage(C->M, pageID, x->as.var.name);
+      }
+
+      rtl_registerCallSite(C, x->as.var.name, addr0);
+
+    } else {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_VAR);
+      rtl_emitShortToPage(C->M, pageID, x->as.var.frame);
+      rtl_emitShortToPage(C->M, pageID, x->as.var.idx);
+    }
     break;
 
   case RTL_INTRINSIC_CALL:

@@ -212,5 +212,6 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     }
   }
 
+  printf("Got bad character %X '%c'.\n", (unsigned int)ch, (char)ch);
   abort();
 }

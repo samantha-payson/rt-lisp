@@ -53,6 +53,7 @@ struct rtl_Intrinsic {
       rtl_Word name;
       uint16_t frame;
       uint16_t idx;
+      bool     global;
     } var;
 
     rtl_Word quote;

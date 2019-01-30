@@ -1026,9 +1026,15 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       printf("tried to call undefined function: '%s:%s'\n",
 	     rtl_symbolPackageName(literal),
 	     rtl_symbolName(literal));
+      abort();
 
-      M->pc = readShort(M->pc, &size);
-      break;
+    case RTL_OP_UNDEFINED_VAR:
+      M->pc = readWord(M->pc, &literal);
+
+      printf("tried to load undefined function: '%s:%s'\n",
+	     rtl_symbolPackageName(literal),
+	     rtl_symbolName(literal));
+      abort();
 
     case RTL_OP_RETURN:
       if (M->rStackLen == 0) {
