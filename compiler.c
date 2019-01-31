@@ -334,7 +334,12 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
            tail  = RTL_NIL,
            out   = RTL_NIL;
 
+  rtl_Word const *rptr;
+  rtl_Word       *wptr;
+
   rtl_FnDef *fnDef;
+
+  size_t len, i;
 
   rtl_NameSpace newNS;
 
@@ -349,6 +354,13 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
   case RTL_UNRESOLVED_SYMBOL:
     out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
     break;
+
+  case RTL_TUPLE:
+    rptr = rtl_reifyTuple(C->M, in, &len);
+    wptr = rtl_allocTuple(C->M, &out, len);
+    for (i = 0; i < len; i++) {
+      wptr[i] = rtl_macroExpand(C, ns, rptr[i]);
+    } break;
 
   case RTL_CONS:
     head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
@@ -448,10 +460,6 @@ void rtl_compile(rtl_Compiler *C,
   RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &tail, &out);
 
   switch (rtl_typeOf(in)) {
-  case RTL_UNRESOLVED_SYMBOL:
-    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
-    break;
-
   case RTL_CONS:
     head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
 
@@ -496,7 +504,6 @@ void rtl_compile(rtl_Compiler *C,
 	   tail != RTL_NIL;
 	   tail = rtl_cdr(C->M, tail))
       {
-	printf("Emitting PROGN elem...\n");
 	rtl_compile(C, ns, pageID, rtl_car(C->M, tail));
 
 	if (rtl_cdr(C->M, tail) != RTL_NIL) {
@@ -504,36 +511,9 @@ void rtl_compile(rtl_Compiler *C,
 	}
       }
 
-      printf("Done w/ PROGN\n");
-
       rtl_popWorkingSet(C->M);
       return;
 
-    } else {
-      fnDef = rtl_lookupFn(C, head);
-      if (fnDef != NULL && fnDef->isMacro) {
-	rtl_compile(C, ns, pageID,
-		    rtl_macroExpand(C, ns,
-				    rtl_applyList(C->M, fnDef->addr,
-						  rtl_cdr(C->M, in))));
-	rtl_popWorkingSet(C->M);
-	return;
-
-      } else {
-	out = rtl_cons(C->M, head, RTL_NIL);
-
-	for (tail = rtl_cdr(C->M, in);
-	     rtl_isCons(tail);
-	     tail = rtl_cdr(C->M, tail))
-	{
-	  arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-	  out = rtl_cons(C->M, arg, out);
-	}
-
-	out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
-
-
-      } break;
     }
 
   default:
@@ -551,7 +531,8 @@ void rtl_compile(rtl_Compiler *C,
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
   rtl_Word head, tail, name, _else;
-  size_t len;
+  rtl_Word const *rptr;
+  size_t len, i;
   rtl_Intrinsic **buf;
   size_t        bufLen;
   size_t        bufCap;
@@ -576,7 +557,21 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   rtl_formatExpr(C->M, sxp);
   printf("\n");
 
-  if (rtl_isCons(sxp)) {
+  switch (rtl_typeOf(sxp)) {
+  case RTL_TUPLE:
+    rptr = rtl_reifyTuple(C->M, sxp, &len);
+    for (i = 0; i < len; i++) {
+      if (bufCap == bufLen) {
+	bufCap = !bufCap ? 4 : 2*bufCap;
+	buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+      }
+
+      buf[bufLen++] = rtl_exprToIntrinsic(C, rptr[i]);
+    }
+
+    return rtl_mkTupleIntrinsic(buf, bufLen);
+
+  case RTL_CONS:
     head = rtl_car(C->M, sxp);
     len  = rtl_listLength(C->M, sxp);
 
@@ -907,21 +902,17 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkCallIntrinsic(rtl_exprToIntrinsic(C, rtl_car(C->M, sxp)),
 				 buf,
 				 bufLen);
-    }
+    } break;
 
-  } else if (rtl_isSymbol(sxp)) {
+  case RTL_SYMBOL:
     return rtl_mkVarIntrinsic(sxp);
-    
-  } else if (rtl_isInt28(sxp)) {
+
+  case RTL_INT28:
+  case RTL_NIL:
+  case RTL_TOP:
     return rtl_mkConstantIntrinsic(sxp);
-
-  } else if (rtl_isNil(sxp)) {
-    return rtl_mkConstantIntrinsic(RTL_NIL);
-
-  } else if (rtl_isTop(sxp)) {
-    return rtl_mkConstantIntrinsic(RTL_TOP);
-
   }
+
   printf("   !!! Unhandled intrinsic in rtl_exprToIntrinsic !!!\n   expr:");
   rtl_formatExpr(C->M, sxp);
   printf("\n");

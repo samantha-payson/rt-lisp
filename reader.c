@@ -159,6 +159,7 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 {
   int ch, n, i;
+  rtl_Word w, *ptr;
 
   eatWhitespace(f);
 
@@ -166,7 +167,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
   switch (ch) {
   case EOF:
     return rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
-		    rtl_cons(C->M, rtl_intern("io", "EOF"),
+		    rtl_cons(C->M, rtl_intern("std", "EOF"),
 			     RTL_NIL));
 
   case ')':
@@ -183,8 +184,11 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     abort();
 
   case '[':
-    printf("\n   !!! RTL CAN'T READ TUPLES YET !!!\n\n");
-    abort();
+    n   = rtl_readDelim(C, f, ']');
+    ptr = rtl_allocTuple(C->M, &w, n);
+    memcpy(ptr, C->M->vStack + C->M->vStackLen - n, sizeof(rtl_Word)*n);
+    C->M->vStackLen -= n;
+    return w;
 
   case '"':
     printf("\n   !!! RTL CAN'T READ STRINGS YET !!!\n\n");
