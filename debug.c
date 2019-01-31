@@ -249,8 +249,12 @@ uint8_t *rtl_disasm(uint8_t *bc)
     return bc + 1;
 
   case RTL_OP_UNDEFINED_FUNCTION:
-    printf("undefined-fn\n");
+    printf("   undefined-fn\n");
     return bc + 7;
+
+  case RTL_OP_UNDEFINED_VAR:
+    printf("   undefined-var");
+    return bc + 5;
 
   case RTL_OP_RETURN:
     printf("   return\n");

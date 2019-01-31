@@ -381,8 +381,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
     } else if (head == symCache.intrinsic.alias) {
       out = in;
+
     } else if (head == symCache.intrinsic.quote) {
       out = rtl_resolveAllSymbols(C, ns, in);
+
     } else {
       fnDef = rtl_lookupFn(C, head);
 
@@ -1389,6 +1391,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
   case RTL_INTRINSIC_EXPORT:
     rtl_export(C, x->as.export);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
     break;
 
   case RTL_INTRINSIC_QUOTE:
