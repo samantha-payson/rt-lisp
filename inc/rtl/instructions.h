@@ -18,7 +18,6 @@ typedef enum rtl_Opcode {
 
   // Basic tuple operations
   RTL_OP_TUPLE,
-  RTL_OP_EXPLODE,
   RTL_OP_GET,
   RTL_OP_LEN,
 

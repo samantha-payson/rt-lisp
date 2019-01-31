@@ -215,6 +215,9 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   M(cons,         "cons")			\
   M(car,          "car")			\
   M(cdr,          "cdr")			\
+  M(tuple,        "tuple")			\
+  M(len,          "len")			\
+  M(get,          "get")			\
   M(var,          "var")			\
   M(call,         "call")			\
   M(namedCall,    "named-call")			\
@@ -587,6 +590,28 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else if (head == symCache.intrinsic.cdr) {
       assert(len == 2);
       return rtl_mkCdrIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.tuple) {
+      for (tail = rtl_cdr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	if (bufCap == bufLen) {
+	  bufCap = !bufCap ? 4 : 2*bufCap;
+	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	}
+
+	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkTupleIntrinsic(buf, bufLen);
+
+    } else if (head == symCache.intrinsic.len) {
+      return rtl_mkLenIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.get) {
+      return rtl_mkGetIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.progn) {
       for (tail = rtl_cdr(C->M, sxp);
@@ -965,6 +990,20 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as.cdr.arg = __impl_transformIntrinsic(env, x->as.cdr.arg);
     break;
 
+  case RTL_INTRINSIC_TUPLE:
+    for (i = 0; i < x->as.tuple.elemsLen; i++) {
+      x->as.tuple.elems[i] = __impl_transformIntrinsic(env, x->as.tuple.elems[i]);
+    } break;
+
+  case RTL_INTRINSIC_LEN:
+    x->as.len.tuple = __impl_transformIntrinsic(env, x->as.len.tuple);
+    break;
+
+  case RTL_INTRINSIC_GET:
+    x->as.get.tuple = __impl_transformIntrinsic(env, x->as.get.tuple);
+    x->as.get.index = __impl_transformIntrinsic(env, x->as.get.index);
+    break;
+
   case RTL_INTRINSIC_VAR:
     if ((!env ||
 	 !lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))) {
@@ -1170,6 +1209,28 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
   case RTL_INTRINSIC_CDR:
     rtl_emitIntrinsicCode(C, pageID, x->as.cdr.arg);
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CDR);
+    break;
+
+  case RTL_INTRINSIC_TUPLE:
+    assert(x->as.tuple.elemsLen < (1 << 16));
+
+    for (i = 0; i < x->as.tuple.elemsLen; i++) {
+      rtl_emitIntrinsicCode(C, pageID, x->as.tuple.elems[i]);
+    }
+
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_TUPLE);
+    rtl_emitShortToPage(C->M, pageID, x->as.tuple.elemsLen);
+    break;
+
+  case RTL_INTRINSIC_LEN:
+    rtl_emitIntrinsicCode(C, pageID, x->as.len.tuple);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_LEN);
+    break;
+
+  case RTL_INTRINSIC_GET:
+    rtl_emitIntrinsicCode(C, pageID, x->as.get.tuple);
+    rtl_emitIntrinsicCode(C, pageID, x->as.get.index);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_GET);
     break;
 
   case RTL_INTRINSIC_VAR:

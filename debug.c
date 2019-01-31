@@ -74,16 +74,11 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     ptr = rtl_reifyTuple(M, w, &len);
 
     printf("[ ");
-    if (len != 0) {
-      rtl_formatExprIndented(M, ptr[0], indent + 1);
-    }
-    for (i = 1; i < len; i++) {
-      for (j = 0; j < indent; j++) {
-	printf("  ");
-      }
+    for (i = 0; i < len; i++) {
       rtl_formatExprIndented(M, ptr[i], indent + 1);
+      printf(" ");
     }
-    printf(" ]");
+    printf("]");
     break;
 
   case RTL_CONS:
@@ -290,13 +285,12 @@ uint8_t *rtl_disasm(uint8_t *bc)
 	   (unsigned int)rtl_addrOffs(literal));
     return bc + 5;
 
-  case RTL_OP_EXPLODE:
-    printf("   explode\n");
-    return bc + 1;
-
   case RTL_OP_TUPLE:
-    printf("   tuple\n");
-    return bc + 1;
+    size = (uint16_t)bc[1] << 0
+         | (uint16_t)bc[2] << 8;
+
+    printf("   tuple %d\n", (int)size);
+    return bc + 3;
 
   case RTL_OP_GET:
     printf("   get\n");

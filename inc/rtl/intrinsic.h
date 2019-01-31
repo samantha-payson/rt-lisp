@@ -8,6 +8,9 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_CONS,
   RTL_INTRINSIC_CAR,
   RTL_INTRINSIC_CDR,
+  RTL_INTRINSIC_TUPLE,
+  RTL_INTRINSIC_LEN,
+  RTL_INTRINSIC_GET,
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_NAMED_CALL,
@@ -50,6 +53,20 @@ struct rtl_Intrinsic {
     struct {
       rtl_Intrinsic *arg;
     } car, cdr;
+
+    struct {
+      rtl_Intrinsic **elems;
+      size_t        elemsLen;
+    } tuple;
+
+    struct {
+      rtl_Intrinsic *tuple;
+    } len;
+
+    struct {
+      rtl_Intrinsic *tuple;
+      rtl_Intrinsic *index;
+    } get;
 
     struct {
       rtl_Word name;
@@ -168,6 +185,57 @@ rtl_Intrinsic *rtl_mkCdrIntrinsic(rtl_Intrinsic *arg)
     .as = {
       .cdr = {
 	.arg = arg,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkTupleIntrinsic(rtl_Intrinsic **elems, size_t elemsLen)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_TUPLE,
+    .as = {
+      .tuple = {
+	.elems    = elems,
+	.elemsLen = elemsLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkLenIntrinsic(rtl_Intrinsic *tuple)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_LEN,
+    .as = {
+      .len = { .tuple = tuple },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkGetIntrinsic(rtl_Intrinsic *tuple, rtl_Intrinsic *index)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_GET,
+    .as = {
+      .get = {
+	.tuple = tuple,
+	.index = index,
       },
     },
   };

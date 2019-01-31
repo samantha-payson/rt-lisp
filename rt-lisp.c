@@ -822,6 +822,39 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       VPUSH(rptr[1]);
       break;
 
+    case RTL_OP_TUPLE:
+      M->pc = readShort(M->pc, &size);
+
+      VSTACK_ASSERT_LEN(size);
+
+      wptr = rtl_allocTuple(M, &a, size);
+
+      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
+
+      VPOPK(size);
+
+      VPUSH(a);
+      break;
+
+    case RTL_OP_GET:
+      VSTACK_ASSERT_LEN(2);
+
+      i    = rtl_int28Value(VPOP());
+      rptr = rtl_reifyTuple(M, VPOP(), &len);
+
+      assert(i < len);
+
+      VPUSH(rptr[i]);
+      break;
+
+    case RTL_OP_LEN:
+      VSTACK_ASSERT_LEN(1);
+
+      rtl_reifyTuple(M, VPOP(), &len);
+
+      VPUSH(rtl_int28(len));
+      break;
+
     case RTL_OP_POP:
       VSTACK_ASSERT_LEN(1);
 
@@ -936,7 +969,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       wptr = rtl_allocTuple(M, &a, size);
 
       memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
-      M->vStackLen -= size;
+      VPOPK(size);
 
       f = VPOP();
 
@@ -1001,7 +1034,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       wptr = rtl_allocTuple(M, &a, size);
 
       memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
-      M->vStackLen -= size;
+      VPOPK(size);
 
       wptr = rtl_allocTuple(M, &b, 1);
       wptr[0] = a;
