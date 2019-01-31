@@ -308,6 +308,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr);
 
 rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 
+rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list);
+
 rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len);
 
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,

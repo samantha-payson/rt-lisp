@@ -11,6 +11,8 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_NAMED_CALL,
+  RTL_INTRINSIC_APPLY_TUPLE,
+  RTL_INTRINSIC_APPLY_LIST,
   RTL_INTRINSIC_PROGN,
   RTL_INTRINSIC_LAMBDA,
   RTL_INTRINSIC_DEFUN,
@@ -69,6 +71,10 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **args;
       size_t        argsLen;
     } namedCall;
+
+    struct {
+      rtl_Intrinsic *fn, *arg;
+    } applyList, applyTuple;
 
     struct {
       rtl_WordType  type;
@@ -221,6 +227,42 @@ rtl_Intrinsic *rtl_mkNamedCallIntrinsic(rtl_Word      name,
 	.name    = name,
 	.args    = args,
 	.argsLen = argsLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkApplyListIntrinsic(rtl_Intrinsic *fn, rtl_Intrinsic *arg)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_APPLY_LIST,
+    .as = {
+      .applyList = {
+	.fn = fn,
+	.arg = arg,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkApplyTupleIntrinsic(rtl_Intrinsic *fn, rtl_Intrinsic *arg)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_APPLY_TUPLE,
+    .as = {
+      .applyList = {
+	.fn = fn,
+	.arg = arg,
       },
     },
   };

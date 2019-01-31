@@ -1020,6 +1020,73 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       M->pc = rtl_resolveAddr(M, f);
       break;
 
+    case RTL_OP_APPLY_LIST:
+      VSTACK_ASSERT_LEN(2);
+      a = rtl_listToTuple(M, VPOP());
+
+      VPUSH(a);
+
+      // fallthrough ..
+
+    case RTL_OP_APPLY_TUPLE:
+      VSTACK_ASSERT_LEN(2);
+
+      a = VPOP();
+      f = VPOP();
+
+      switch (rtl_typeOf(f)) {
+      case RTL_ADDR:
+	wptr = rtl_allocTuple(M, &b, 1);
+	wptr[0] = a;
+
+	if (unlikely(M->rStackLen == M->rStackCap)) {
+	  M->rStackCap = M->rStackCap*2;
+	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	}
+
+	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	  .pc  = M->pc,
+	  .env = M->env,
+	};
+
+	M->env = b;
+	M->pc = rtl_resolveAddr(M, f);
+
+	break;
+
+      case RTL_CLOSURE:
+	rptr = reifyPtr(M, f);
+
+	f = rptr[0];
+
+	if (rptr[1] != RTL_NIL) {
+	  rptr = rtl_reifyTuple(M, rptr[1], &len);
+	} else {
+	  len  = 0;
+	  rptr = NULL;
+	}
+
+	wptr      = rtl_allocTuple(M, &b, len + 1);
+	wptr[0] = a;
+	memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
+
+	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	  .pc  = M->pc,
+	  .env = M->env,
+	};
+
+	M->env = b;
+	M->pc  = rtl_resolveAddr(M, f);
+
+	break;
+
+      default:
+	printf(" error: Can't call object of type '%s'!\n",
+	       rtl_typeNameOf(f));
+	goto interp_cleanup;
+
+      } break;
+
     case RTL_OP_UNDEFINED_FUNCTION:
       M->pc = readWord(M->pc, &literal);
 
@@ -1139,6 +1206,25 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
   return M->vStackLen ? VPOP() : RTL_NIL;
 }
 
+rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
+{
+  size_t   len;
+  rtl_Word *ptr;
+  rtl_Word tuple;
+  size_t   i;
+
+  assert(rtl_isCons(list));
+
+  len = rtl_listLength(M, list);
+  ptr = rtl_allocTuple(M, &tuple, len);
+
+  for (i = 0; list != RTL_NIL; list = rtl_cdr(M, list), i++) {
+    ptr[i] = rtl_car(M, list);
+  }
+
+  return tuple;
+}
+
 rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 {
   size_t   len;
@@ -1146,12 +1232,7 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
   rtl_Word args, env;
   size_t   i;
 
-  len = rtl_listLength(M, argList);
-  ptr = rtl_allocTuple(M, &args, len);
-
-  for (i = 0; argList != RTL_NIL; argList = rtl_cdr(M, argList), i++) {
-    ptr[i] = rtl_car(M, argList);
-  }
+  args = rtl_listToTuple(M, argList);
 
   ptr    = rtl_allocTuple(M, &env, 1);
   ptr[0] = args;

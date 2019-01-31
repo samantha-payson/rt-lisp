@@ -218,6 +218,8 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   M(var,          "var")			\
   M(call,         "call")			\
   M(namedCall,    "named-call")			\
+  M(applyList,    "apply-list")			\
+  M(applyTuple,   "apply-tuple")		\
   M(progn,        "progn")			\
   M(lambda,       "lambda")			\
   M(defun,        "defun")			\
@@ -848,6 +850,18 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 			       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
 			       rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
 
+    } else if (head == symCache.intrinsic.applyList) {
+      assert(len == 3);
+
+      return rtl_mkApplyListIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				      rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.applyTuple) {
+      assert(len == 3);
+
+      return rtl_mkApplyTupleIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
     } else {
       assert(len >= 1);
 
@@ -990,10 +1004,22 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
       x->as.call.fn = __impl_transformIntrinsic(env, x->as.call.fn);
     } break;
 
+
+  case RTL_INTRINSIC_APPLY_LIST:
+    x->as.applyList.fn  = __impl_transformIntrinsic(env, x->as.applyList.fn);
+    x->as.applyList.arg = __impl_transformIntrinsic(env, x->as.applyList.arg);
+    break;
+
+  case RTL_INTRINSIC_APPLY_TUPLE:
+    x->as.applyTuple.fn  = __impl_transformIntrinsic(env, x->as.applyTuple.fn);
+    x->as.applyTuple.arg = __impl_transformIntrinsic(env, x->as.applyTuple.arg);
+    break;
+
   case RTL_INTRINSIC_PROGN:
     for (i = 0; i < x->as.progn.formsLen; i++) {
       x->as.progn.forms[i] = __impl_transformIntrinsic(env, x->as.progn.forms[i]);
     }
+    break;
 
   case RTL_INTRINSIC_LAMBDA:
     newEnv.super = env;
@@ -1199,6 +1225,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_registerCallSite(C, x->as.namedCall.name, addr0);
+    break;
+
+  case RTL_INTRINSIC_APPLY_LIST:
+    rtl_emitIntrinsicCode(C, pageID, x->as.applyList.fn);
+    rtl_emitIntrinsicCode(C, pageID, x->as.applyList.arg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_APPLY_LIST);
+    break;
+
+  case RTL_INTRINSIC_APPLY_TUPLE:
+    rtl_emitIntrinsicCode(C, pageID, x->as.applyList.fn);
+    rtl_emitIntrinsicCode(C, pageID, x->as.applyList.arg);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_APPLY_TUPLE);
     break;
 
   case RTL_INTRINSIC_PROGN:

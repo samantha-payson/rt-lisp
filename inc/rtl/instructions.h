@@ -45,6 +45,8 @@ typedef enum rtl_Opcode {
   RTL_OP_CJMP,
   RTL_OP_CALL,
   RTL_OP_STATIC_CALL,
+  RTL_OP_APPLY_LIST,
+  RTL_OP_APPLY_TUPLE,
   RTL_OP_RETURN,
   RTL_OP_REST,
 
