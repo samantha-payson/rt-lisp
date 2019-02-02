@@ -40,8 +40,8 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("String#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
     break;
 
-  case RTL_RECORD:
-    printf("Record#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
+  case RTL_MAP:
+    printf("Map#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
     break;
 
   case RTL_CONS:
@@ -62,9 +62,38 @@ void rtl_formatExprShallow(rtl_Word w)
   }
 }
 
+static
+void formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
+{
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i;
+
+  if (rtl_isEmptyMap(map)) return;
+
+  rptr = __rtl_reifyPtr(M, map);
+  len  = __builtin_popcount(mask);
+
+  // printf("<len: %d> ", (int)len);
+
+  for (i = 0; i < len; i++) {
+    entry = rptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      formatMap(M, entry[1], indent, rtl_headerValue(entry[0]));
+    } else {
+      rtl_formatExprIndented(M, entry[0], indent + 1);
+      printf(" ");
+      rtl_formatExprIndented(M, entry[1], indent + 1);
+      printf(", ");
+    }
+  }
+}
+
 void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 {
   rtl_Word const *ptr;
+
   size_t         len,
                  i,
                  j;
@@ -97,6 +126,11 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     }
     printf(")");
     break;
+
+  case RTL_MAP:
+    printf("{ ");
+    formatMap(M, w, indent, 1);
+    printf("}");
 
   default:
     rtl_formatExprShallow(w);
@@ -302,6 +336,18 @@ uint8_t *rtl_disasm(uint8_t *bc)
 
   case RTL_OP_LEN:
     printf("   len\n");
+    return bc + 1;
+
+  case RTL_OP_MAP:
+    printf("   map\n");
+    return bc + 1;
+
+  case RTL_OP_INSERT:
+    printf("   insert\n");
+    return bc + 1;
+
+  case RTL_OP_LOOKUP:
+    printf("   lookup\n");
     return bc + 1;
 
   case RTL_OP_IADD:

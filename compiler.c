@@ -218,6 +218,9 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   M(tuple,        "tuple")			\
   M(len,          "len")			\
   M(get,          "get")			\
+  M(map,          "map")			\
+  M(insert,       "insert")			\
+  M(lookup,       "lookup")			\
   M(var,          "var")			\
   M(call,         "call")			\
   M(namedCall,    "named-call")			\
@@ -253,7 +256,7 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   M(fix14p,       "fix14?")			\
   M(tuplep,       "tuple?")			\
   M(stringp,      "string?")			\
-  M(recordp,      "record?")			\
+  M(mapp,         "map?")			\
   M(consp,        "cons?")			\
   M(addrp,        "addr?")			\
   M(builtinp,     "builtin?")			\
@@ -610,6 +613,18 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkGetIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
+    } else if (head == symCache.intrinsic.map) {
+      return rtl_mkConstantIntrinsic(RTL_MAP);
+
+    } else if (head == symCache.intrinsic.insert) {
+      return rtl_mkInsertIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+				   rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+
+    } else if (head == symCache.intrinsic.lookup) {
+      return rtl_mkLookupIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
     } else if (head == symCache.intrinsic.progn) {
       for (tail = rtl_cdr(C->M, sxp);
 	   tail != RTL_NIL;
@@ -830,9 +845,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkTypePredIntrinsic(RTL_STRING,
 				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
-    } else if (head == symCache.intrinsic.recordp) {
+    } else if (head == symCache.intrinsic.mapp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_RECORD,
+      return rtl_mkTypePredIntrinsic(RTL_MAP,
 				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.consp) {
@@ -990,6 +1005,17 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
   case RTL_INTRINSIC_LEN:
     x->as.len.tuple = __impl_transformIntrinsic(env, x->as.len.tuple);
+    break;
+
+  case RTL_INTRINSIC_INSERT:
+    x->as.insert.map = __impl_transformIntrinsic(env, x->as.insert.map);
+    x->as.insert.key = __impl_transformIntrinsic(env, x->as.insert.key);
+    x->as.insert.val = __impl_transformIntrinsic(env, x->as.insert.val);
+    break;
+
+  case RTL_INTRINSIC_LOOKUP:
+    x->as.lookup.map = __impl_transformIntrinsic(env, x->as.lookup.map);
+    x->as.lookup.key = __impl_transformIntrinsic(env, x->as.lookup.key);
     break;
 
   case RTL_INTRINSIC_GET:
@@ -1224,6 +1250,19 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitIntrinsicCode(C, pageID, x->as.get.tuple);
     rtl_emitIntrinsicCode(C, pageID, x->as.get.index);
     rtl_emitByteToPage(C->M, pageID, RTL_OP_GET);
+    break;
+
+  case RTL_INTRINSIC_INSERT:
+    rtl_emitIntrinsicCode(C, pageID, x->as.insert.map);
+    rtl_emitIntrinsicCode(C, pageID, x->as.insert.key);
+    rtl_emitIntrinsicCode(C, pageID, x->as.insert.val);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_INSERT);
+    break;
+
+  case RTL_INTRINSIC_LOOKUP:
+    rtl_emitIntrinsicCode(C, pageID, x->as.lookup.map);
+    rtl_emitIntrinsicCode(C, pageID, x->as.lookup.key);
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_LOOKUP);
     break;
 
   case RTL_INTRINSIC_VAR:
@@ -1517,6 +1556,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     } else if (x->as.constant == RTL_TOP) {
       rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
+
+    } else if (x->as.constant == RTL_MAP) {
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_MAP);
 
     } else {
       rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);

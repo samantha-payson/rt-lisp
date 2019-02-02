@@ -11,6 +11,8 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_TUPLE,
   RTL_INTRINSIC_LEN,
   RTL_INTRINSIC_GET,
+  RTL_INTRINSIC_INSERT,
+  RTL_INTRINSIC_LOOKUP,
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_NAMED_CALL,
@@ -67,6 +69,17 @@ struct rtl_Intrinsic {
       rtl_Intrinsic *tuple;
       rtl_Intrinsic *index;
     } get;
+
+    struct {
+      rtl_Intrinsic *map;
+      rtl_Intrinsic *key;
+      rtl_Intrinsic *val;
+    } insert;
+
+    struct {
+      rtl_Intrinsic *map;
+      rtl_Intrinsic *key;
+    } lookup;
 
     struct {
       rtl_Word name;
@@ -219,6 +232,46 @@ rtl_Intrinsic *rtl_mkLenIntrinsic(rtl_Intrinsic *tuple)
     .type = RTL_INTRINSIC_LEN,
     .as = {
       .len = { .tuple = tuple },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkInsertIntrinsic(rtl_Intrinsic *map,
+				     rtl_Intrinsic *key,
+				     rtl_Intrinsic *val)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_INSERT,
+    .as = {
+      .insert = {
+	.map = map,
+	.key = key,
+	.val = val,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
+				     rtl_Intrinsic *key)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_LOOKUP,
+    .as = {
+      .lookup = {
+	.map = map,
+	.key = key,
+      },
     },
   };
 

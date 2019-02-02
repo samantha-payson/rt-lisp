@@ -30,13 +30,21 @@ typedef enum rtl_WordType {
   RTL_FIX14    = 4,
   RTL_TUPLE    = 5,
   RTL_STRING   = 6,
-  RTL_RECORD   = 7,
+  RTL_MAP      = 7,
   RTL_CONS     = 8,
 
   // This is a special word type which only exists on the heap. Its upper 28
-  // bits are a an unsigned integer indicating the number of words occupied by a
-  // string or tuple immediately after it on the heap.
-  RTL_LENGTH = 9,
+  // bits depend on the type of word pointing at it:
+  //
+  //    RTL_TUPLE:  an unsigned 28-bit integer encoding the number of elements in
+  //                the tuple.
+  //
+  //    RTL_STRING: an unsigned 28-bit integer encoding the number of (ASCII)
+  //                characters in the string, including a null terminator byte.
+  //
+  //    RTL_MAP: a 28-bit bitmap, indicating the number of key/value pairs in
+  //            this level of the HAMT.
+  RTL_HEADER = 9,
 
   // This word type is used to encode addresses in the code segment, rather than
   // the heap segment.
@@ -67,6 +75,15 @@ char const *rtl_typeNameOf(rtl_Word w)
 {
   return rtl_typeName(rtl_typeOf(w));
 }
+
+static inline
+bool rtl_isHeader(rtl_Word w) { return rtl_typeOf(w) == RTL_HEADER; }
+
+static inline
+uint32_t rtl_headerValue(rtl_Word w) { return w >> 4; }
+
+static inline
+rtl_Word rtl_header(uint32_t val28) { return (val28 << 4) | RTL_HEADER; }
 
 typedef struct rtl_Generation {
   // The number of this generation.
@@ -251,7 +268,7 @@ char const *rtl_errString(rtl_Error err);
 //
 //   - RTL_TUPLE
 //   - RTL_STRING
-//   - RTL_RECORD
+//   - RTL_MAP
 //   - RTL_CONS
 //
 // Errors:
@@ -268,7 +285,7 @@ void rtl_testGarbageCollector(size_t count);
 //
 //   - RTL_TUPLE
 //   - RTL_STRING
-//   - RTL_RECORD
+//   - RTL_MAP
 //   - RTL_CONS
 //
 static inline
@@ -276,7 +293,7 @@ int rtl_isPtr(rtl_Word w) {
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
   case RTL_STRING:
-  case RTL_RECORD:
+  case RTL_MAP:
   case RTL_CONS:
     return 1;
 
@@ -291,7 +308,7 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/fix14.h"
 #include "rtl/tuple.h"
 // #include "rtl/string.h"
-// #include "rtl/record.h"
+#include "rtl/map.h"
 #include "rtl/cons.h"
 #include "rtl/addr.h"
 #include "rtl/top.h"

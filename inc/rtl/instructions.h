@@ -21,6 +21,11 @@ typedef enum rtl_Opcode {
   RTL_OP_GET,
   RTL_OP_LEN,
 
+  // Basic map operations
+  RTL_OP_MAP,
+  RTL_OP_INSERT,
+  RTL_OP_LOOKUP,
+
   // Stack Operations
   RTL_OP_POP,
   RTL_OP_SWAP,

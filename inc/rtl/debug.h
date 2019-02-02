@@ -36,4 +36,6 @@ uint32_t __rtl_ptrOffs(rtl_Word ptr) {
   return ~__rtl_genCapacity(__rtl_ptrGen(ptr)) & (ptr >> 4);
 }
 
+rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr);
+
 void rtl_disasmPage(rtl_Machine *M, uint16_t pageID);
