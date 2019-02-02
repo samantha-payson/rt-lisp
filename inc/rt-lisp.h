@@ -48,14 +48,12 @@ typedef enum rtl_WordType {
 
   // This word type is used to encode addresses in the code segment, rather than
   // the heap segment.
-  RTL_ADDR = 10,
-
+  RTL_ADDR    = 10,
   RTL_BUILTIN = 11,
   RTL_CLOSURE = 12,
 
-  RTL_UNRESOLVED_SYMBOL = 13,
-
-  // 14 is unused still ..
+  RTL_UNRESOLVED_SYMBOL   = 13,
+  RTL_UNRESOLVED_SELECTOR = 14,
 
   RTL_TOP = 15,
 
@@ -304,6 +302,7 @@ int rtl_isPtr(rtl_Word w) {
 
 #include "rtl/nil.h"
 #include "rtl/symbol.h"
+#include "rtl/selector.h"
 #include "rtl/int28.h"
 #include "rtl/fix14.h"
 #include "rtl/tuple.h"

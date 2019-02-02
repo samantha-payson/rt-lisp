@@ -23,7 +23,7 @@ void eatWhitespace(FILE *f)
 {
   int ch;
 
-  while (isspace(ch = fgetc(f)))
+  while (isspace(ch = fgetc(f)) || ch == ',')
     ;;
 
   ungetc(ch, f);
@@ -43,7 +43,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
 
   ch = fgetc(f);
 
-  while (isgraph(ch) && ch != ')' && ch != '}' && ch != ']') {
+  while (isgraph(ch) && ch != ')' && ch != '}' && ch != ']' && ch != ',') {
     if (next == 511) {
       // This atom is too long, complain and abort ...
       buf[next] = '\0';
@@ -81,10 +81,23 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
 
   ptr = strchr(buf, ':');
   if (ptr == NULL) {
-    return rtl_unresolvedSymbol(rtl_internUnresolvedID(NULL, buf));
+    if (buf[0] == '.') {
+      return rtl_unresolvedSelector(rtl_internUnresolvedID(NULL, buf + 1));
+
+    } else {
+      return rtl_unresolvedSymbol(rtl_internUnresolvedID(NULL, buf));
+
+    }
+
   } else {
     *ptr = '\0';
-    return rtl_unresolvedSymbol(rtl_internUnresolvedID(buf, ptr + 1));
+    if (buf[0] == '.') {
+      return rtl_unresolvedSelector(rtl_internUnresolvedID(buf + 1, ptr + 1));
+
+    } else {
+      return rtl_unresolvedSymbol(rtl_internUnresolvedID(buf, ptr + 1));
+
+    }
   }
 }
 
@@ -136,8 +149,9 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
       assert(ch == ')');
       return w;
     } else {
-      printf("\n   !!! SELECTORS NOT YET SUPPORTED! !!!\n");
-      abort();
+      ungetc(ch, f);
+      w = rtl_readAtom(C, f, '.');
+      return rtl_cons(C->M, w, readList(C, f));
     }
 
   default:

@@ -169,35 +169,6 @@ rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
   return NULL;
 }
 
-rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *pkgName)
-{
-  uint32_t    pkgID;
-  uint32_t    idx;
-  rtl_Package *pkg;
-
-  pkgID = rtl_internPackageID(pkgName);
-  idx   = pkgID % RTL_COMPILER_PKG_HASH_SIZE;
-
-  for (pkg = C->pkgByID[idx]; pkg != NULL; pkg = pkg->next) {
-    if (pkg->id == pkgID) {
-      return pkg;
-    }
-  }
-
-  pkg = malloc(sizeof(rtl_Package));
-
-  pkg->name       = strdup(pkgName);
-  pkg->id         = pkgID;
-  pkg->exports    = NULL;
-  pkg->exportsCap = 0;
-  pkg->exportsLen = 0;
-
-  pkg->next       = C->pkgByID[idx];
-  C->pkgByID[idx] = pkg;
-
-  return pkg;
-}
-
 // Intern a symbol, with a given package and name. 
 rtl_Word rtl_intern(char const *pkg, char const *name)
 {
@@ -311,17 +282,25 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   memset(C->pkgByID,         0, sizeof C->pkgByID);
 }
 
-rtl_Word rtl_resolveAllSymbols(rtl_Compiler *C,
-			       rtl_NameSpace const *ns,
-			       rtl_Word sxp)
+rtl_Word rtl_resolveAll(rtl_Compiler *C,
+			rtl_NameSpace const *ns,
+			rtl_Word sxp)
 {
   switch (rtl_typeOf(sxp)) {
   case RTL_UNRESOLVED_SYMBOL:
     return rtl_resolveSymbol(C, ns, rtl_symbolID(sxp));
 
+  case RTL_UNRESOLVED_SELECTOR:
+    return rtl_resolveSelector(C, ns, rtl_selectorID(sxp));
+
+  case RTL_MAP:
+    if (rtl_isEmptyMap(sxp)) return sxp;
+
+    return rtl_resolveMap(C, ns, 1, sxp);
+    
   case RTL_CONS:
-    return rtl_cons(C->M, rtl_resolveAllSymbols(C, ns, rtl_car(C->M, sxp)),
-		    rtl_resolveAllSymbols(C, ns, rtl_cdr(C->M, sxp)));
+    return rtl_cons(C->M, rtl_resolveAll(C, ns, rtl_car(C->M, sxp)),
+		    rtl_resolveAll(C, ns, rtl_cdr(C->M, sxp)));
 
   default:
     return sxp;
@@ -396,6 +375,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
     break;
 
+  case RTL_UNRESOLVED_SELECTOR:
+    out = rtl_resolveSelector(C, ns, rtl_selectorID(in));
+    break;
+
   case RTL_TUPLE:
     rptr = rtl_reifyTuple(C->M, in, &len);
     wptr = rtl_allocTuple(C->M, &out, len);
@@ -443,7 +426,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       out = in;
 
     } else if (head == symCache.intrinsic.quote) {
-      out = rtl_resolveAllSymbols(C, ns, in);
+      out = rtl_resolveAll(C, ns, in);
 
     } else {
       fnDef = rtl_lookupFn(C, head);
@@ -1001,6 +984,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   case RTL_SYMBOL:
     return rtl_mkVarIntrinsic(sxp);
 
+  case RTL_SELECTOR:
   case RTL_INT28:
   case RTL_NIL:
   case RTL_TOP:
@@ -1263,7 +1247,6 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
     rtl_emitWordToPage(C->M, pageID, expr);
     break;
-
 
   case RTL_TOP:
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);

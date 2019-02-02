@@ -7,6 +7,8 @@
 // atoms, and addresses for non-atoms.
 void rtl_formatExprShallow(rtl_Word w)
 {
+  char const *pkgName;
+
   switch (rtl_typeOf(w)) {
   case RTL_NIL:
     printf("nil");
@@ -20,9 +22,17 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("<unres-sym>");
     break;
 
-  case RTL_SELECTOR:
-    printf("<selector>");
+  case RTL_UNRESOLVED_SELECTOR:
+    printf("<unres-sel>");
     break;
+
+  case RTL_SELECTOR:
+    pkgName = rtl_selectorPackageName(w);
+    if (pkgName[0] != '\0') {
+      printf(".%s:%s", pkgName, rtl_selectorName(w));
+    } else {
+      printf(".%s", rtl_selectorName(w));
+    } break;
 
   case RTL_INT28:
     printf("%d", (int)rtl_int28Value(w));
@@ -126,9 +136,13 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     break;
 
   case RTL_MAP:
-    printf("{ ");
-    formatMap(M, w, indent, 1);
-    printf("}");
+    if (rtl_isEmptyMap(w)) {
+      printf("{}");
+    } else {
+      printf("{ ");
+      formatMap(M, w, indent, 1);
+      printf("}");
+    }
     break;
 
   default:

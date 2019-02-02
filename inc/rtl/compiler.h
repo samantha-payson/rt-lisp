@@ -122,6 +122,11 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   rtl_NameSpace const *ns,
 			   uint32_t            unresID);
 
+// Resolve a symbol in the given namespace.
+rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
+			     rtl_NameSpace const *ns,
+			     uint32_t            unresID);
+
 // Compile the (already macro-expanded) S-Expr and emit the resulting to the
 // pageID'th code page of C->M.
 void rtl_compileExpr(rtl_Compiler *C, uint16_t pageID, rtl_Word sxp);

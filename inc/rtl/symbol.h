@@ -51,18 +51,27 @@ typedef enum rtl_NSType {
   RTL_NS_ALIAS,
 } rtl_NSType;
 
-typedef struct rtl_PkgExport {
+typedef struct rtl_PkgSymbolExport {
   char const *name;
   rtl_Word   symbol;
-} rtl_PkgExport;
+} rtl_PkgSymbolExport;
+
+typedef struct rtl_PkgSelectorExport {
+  char const *name;
+  rtl_Word   selector;
+} rtl_PkgSelectorExport;
 
 typedef struct rtl_Package {
   char const *name;
   uint32_t   id;
 
-  rtl_PkgExport *exports;
-  size_t        exportsCap,
-                exportsLen;
+  rtl_PkgSymbolExport *symbolExports;
+  size_t              symbolExportsCap,
+                      symbolExportsLen;
+
+  rtl_PkgSelectorExport *selectorExports;
+  size_t                selectorExportsCap,
+                        selectorExportsLen;
 
   // Points to the next package in the rtl_Compiler's package hash table.
   struct rtl_Package *next;
