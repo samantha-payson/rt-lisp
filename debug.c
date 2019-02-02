@@ -74,8 +74,6 @@ void formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
   rptr = __rtl_reifyPtr(M, map);
   len  = __builtin_popcount(mask);
 
-  // printf("<len: %d> ", (int)len);
-
   for (i = 0; i < len; i++) {
     entry = rptr + 2*i;
 
@@ -131,6 +129,7 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     printf("{ ");
     formatMap(M, w, indent, 1);
     printf("}");
+    break;
 
   default:
     rtl_formatExprShallow(w);

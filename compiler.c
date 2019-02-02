@@ -328,6 +328,44 @@ rtl_Word rtl_resolveAllSymbols(rtl_Compiler *C,
   }
 }
 
+rtl_Word macroExpandMap(rtl_Compiler        *C,
+			rtl_NameSpace const *ns,
+			rtl_Word            map,
+			uint32_t            mask)
+{
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i;
+
+  rtl_Word *wptr, *newEntry;
+
+  rtl_Word newMap = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
+
+  rptr = __rtl_reifyPtr(C->M, map);
+  len  = __builtin_popcount(mask);
+
+  wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
+
+  memset(wptr, 0, sizeof(rtl_Word)*2*len);
+
+  for (i = 0; i < len; i++) {
+    entry    = rptr + 2*i;
+    newEntry = wptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      newEntry[1] = macroExpandMap(C, ns, entry[1], rtl_headerValue(entry[0]));
+      newEntry[0] = entry[0];
+    } else {
+      newEntry[0] = rtl_macroExpand(C, ns, entry[0]);
+      newEntry[1] = rtl_macroExpand(C, ns, entry[1]);
+    }
+  }
+
+  return newMap;
+}
+
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
   rtl_Word head  = RTL_NIL,
@@ -363,6 +401,13 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     wptr = rtl_allocTuple(C->M, &out, len);
     for (i = 0; i < len; i++) {
       wptr[i] = rtl_macroExpand(C, ns, rptr[i]);
+    } break;
+
+  case RTL_MAP:
+    if (rtl_isEmptyMap(in)) {
+      out = in;
+    } else {
+      out = macroExpandMap(C, ns, in, 1);
     } break;
 
   case RTL_CONS:
@@ -531,6 +576,33 @@ void rtl_compile(rtl_Compiler *C,
   rtl_popWorkingSet(C->M);
 }
 
+rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
+			      rtl_Intrinsic *soFar,
+			      rtl_Word      map,
+			      uint32_t      mask)
+{
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i;
+
+  rptr = __rtl_reifyPtr(C->M, map);
+  len  = __builtin_popcount(mask);
+
+  for (i = 0; i < len; i++) {
+    entry = rptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      soFar = mapToIntrinsic(C, soFar, entry[1], rtl_headerValue(entry[0]));
+    } else {
+      soFar = rtl_mkInsertIntrinsic(soFar,
+				    rtl_exprToIntrinsic(C, entry[0]),
+				    rtl_exprToIntrinsic(C, entry[1]));
+    }
+  }
+
+  return soFar;
+}
+
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
   rtl_Word head, tail, name, _else;
@@ -573,6 +645,13 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     }
 
     return rtl_mkTupleIntrinsic(buf, bufLen);
+
+  case RTL_MAP:
+    if (rtl_isEmptyMap(sxp)) {
+      return rtl_mkConstantIntrinsic(RTL_MAP);
+    } else {
+      return mapToIntrinsic(C, rtl_mkConstantIntrinsic(RTL_MAP), sxp, 1);
+    } abort(); // unreachable ..
 
   case RTL_CONS:
     head = rtl_car(C->M, sxp);

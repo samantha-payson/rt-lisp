@@ -179,9 +179,25 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
   case '(':
     return readList(C, f);
 
-  case '{':
-    printf("\n   !!! RTL CAN'T READ RECORDS YET !!!\n\n");
-    abort();
+  case '{': {
+    RTL_PUSH_WORKING_SET(C->M, &w);
+
+    n = rtl_readDelim(C, f, '}');
+
+    assert((n & 1) == 0); // Must be even numbered!
+
+    w = rtl_emptyMap();
+
+    for (i = 0; i*2 < n; i++) {
+      w = rtl_mapInsert(C->M,
+			w,
+			C->M->vStack[C->M->vStackLen - n + i*2],
+			C->M->vStack[C->M->vStackLen - n + i*2 + 1]);
+    }
+
+    C->M->vStackLen -= n;
+
+  } return w;
 
   case '[':
     n   = rtl_readDelim(C, f, ']');
