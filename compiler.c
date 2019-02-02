@@ -284,27 +284,94 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
 
 rtl_Word rtl_resolveAll(rtl_Compiler *C,
 			rtl_NameSpace const *ns,
-			rtl_Word sxp)
+			rtl_Word sxp);
+
+rtl_Word rtl_resolveMap(rtl_Compiler *C,
+			rtl_NameSpace const *ns,
+			uint32_t mask,
+			rtl_Word map)
 {
-  switch (rtl_typeOf(sxp)) {
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i;
+
+  rtl_Word *wptr, *newEntry;
+
+  rtl_Word newMap = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
+
+  rptr = __rtl_reifyPtr(C->M, map);
+  len  = __builtin_popcount(mask);
+
+  wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
+
+  memcpy(wptr, rptr, sizeof(rtl_Word)*2*len);
+
+  for (i = 0; i < len; i++) {
+    entry    = rptr + 2*i;
+    newEntry = wptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      newEntry[1] = rtl_resolveMap(C, ns, rtl_headerValue(entry[0]), entry[1]);
+      newEntry[0] = rtl_resolveAll(C, ns, entry[0]);
+    } else {
+      newEntry[0] = rtl_resolveAll(C, ns, entry[0]);
+      newEntry[1] = rtl_resolveAll(C, ns, entry[1]);
+    }
+  }
+
+  return newMap;
+}
+
+rtl_Word rtl_resolveAll(rtl_Compiler *C,
+			rtl_NameSpace const *ns,
+			rtl_Word in)
+{
+  rtl_Word out = RTL_NIL;
+
+  rtl_Word const *rptr;
+  rtl_Word *wptr;
+  size_t i, len;
+
+  RTL_PUSH_WORKING_SET(C->M, &in, &out);
+
+  switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
-    return rtl_resolveSymbol(C, ns, rtl_symbolID(sxp));
+    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
+    break;
 
   case RTL_UNRESOLVED_SELECTOR:
-    return rtl_resolveSelector(C, ns, rtl_selectorID(sxp));
+    out = rtl_resolveSelector(C, ns, rtl_selectorID(in));
+    break;
 
   case RTL_MAP:
-    if (rtl_isEmptyMap(sxp)) return sxp;
+    if (rtl_isEmptyMap(in)) {
+      out = in;
+    } else {
+      out = rtl_resolveMap(C, ns, 1, in);
+    } break;
 
-    return rtl_resolveMap(C, ns, 1, sxp);
+  case RTL_TUPLE:
+    rptr = rtl_reifyTuple(C->M, in, &len);
+    wptr = rtl_allocTuple(C->M, &out, len);
+    for (i = 0; i < len; i++) {
+      wptr[i] = rtl_resolveAll(C, ns, rptr[i]);
+    } break;
     
   case RTL_CONS:
-    return rtl_cons(C->M, rtl_resolveAll(C, ns, rtl_car(C->M, sxp)),
-		    rtl_resolveAll(C, ns, rtl_cdr(C->M, sxp)));
+    out = rtl_cons(C->M, rtl_resolveAll(C, ns, rtl_car(C->M, in)),
+		   rtl_resolveAll(C, ns, rtl_cdr(C->M, in)));
+    break;
 
   default:
-    return sxp;
+    out = in;
+    break;
   }
+
+  rtl_popWorkingSet(C->M);
+
+  return out;
 }
 
 rtl_Word macroExpandMap(rtl_Compiler        *C,
@@ -1230,15 +1297,46 @@ void writeWordAtAddr(rtl_Machine *M, rtl_Word addr, rtl_Word w)
 }
 
 static
+void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr);
+
+static
+void emitMapQuoteCode(rtl_Compiler        *C,
+		      uint16_t            pageID,
+		      rtl_Word            map,
+		      uint32_t            mask)
+{
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i;
+
+  rtl_Word *wptr, *newEntry;
+
+  rptr = __rtl_reifyPtr(C->M, map);
+  len  = __builtin_popcount(mask);
+
+  for (i = 0; i < len; i++) {
+    entry = rptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      emitMapQuoteCode(C, pageID, entry[1], rtl_headerValue(entry[0]));
+    } else {
+      emitQuoteCode(C, pageID, entry[0]);
+      emitQuoteCode(C, pageID, entry[1]);
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_INSERT);
+    }
+  }
+}
+
+static
 void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
 {
+  rtl_Word const *rptr;
+  size_t i, len;
+
   switch (rtl_typeOf(expr)) {
   case RTL_NIL:
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
     break;
-
-  // TODO: Should this exist at all?
-  case RTL_UNRESOLVED_SYMBOL:
 
   case RTL_SYMBOL:
   case RTL_SELECTOR:
@@ -1256,6 +1354,21 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
     emitQuoteCode(C, pageID, rtl_car(C->M, expr));
     emitQuoteCode(C, pageID, rtl_cdr(C->M, expr));
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONS);
+    break;
+
+  case RTL_MAP:
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_MAP);
+    if (!rtl_isEmptyMap(expr)) {
+      emitMapQuoteCode(C, pageID, expr, 1);
+    } break;
+
+  case RTL_TUPLE:
+    rptr = rtl_reifyTuple(C->M, expr, &len);
+    for (i = 0; i < len; i++) {
+      emitQuoteCode(C, pageID, rptr[i]);
+    }
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_TUPLE);
+    rtl_emitShortToPage(C->M, pageID, len);
     break;
 
   default:
