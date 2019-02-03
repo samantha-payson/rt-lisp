@@ -1,5 +1,5 @@
 CC     = gcc
-CFLAGS = -Iinc -g -O0 -march=native
+CFLAGS = -Iinc -g -O0 -march=native -D RTL_TRACE_WORKING_SETS
 
 LD      = gcc
 LDFLAGS =

@@ -93,6 +93,7 @@ typedef struct rtl_Generation {
   // This is where the fill pointer was at the beginning of this collection
   // cycle. This is used by the moveWord helper in rt-lisp.c, it has no other
   // purpose.
+
   size_t preMoveFillPtr;
 
   // The total number of words this generation can contribute.
@@ -232,9 +233,11 @@ rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID);
 // Create a new empty page and return its ID.
 uint16_t rtl_newPageID(rtl_Machine *M);
 
-void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws);
+void  __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName);
+#define rtl_pushWorkingSet(M, WS) __rtl_pushWorkingSet(M, WS, __func__)
 
-void rtl_popWorkingSet(rtl_Machine *M);
+void  __rtl_popWorkingSet(rtl_Machine *M, char const *fName);
+#define rtl_popWorkingSet(M) __rtl_popWorkingSet(M, __func__)
 
 #define RTL_PUSH_WORKING_SET(M, PTRS...)		\
   rtl_Word *___rtl_workingSet___[] = { PTRS, NULL };	\

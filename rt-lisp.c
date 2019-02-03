@@ -218,10 +218,14 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   uint32_t oldOffs, newOffs;
   rtl_Generation *gen, *nextGen;
 
-  if (!rtl_isPtr(w)) return w;
+  if (!rtl_isPtr(w)) {
+    return w;
+  }
 
   g = __rtl_ptrGen(w);
-  if (g > highestGen) return w;
+  if (g > highestGen) {
+    return w;
+  }
 
   type = rtl_typeOf(w);
 
@@ -229,8 +233,9 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   assert(gen);
 
   nextGen = M->heap.gen[g + 1];
-  if (!nextGen)
+  if (!nextGen) {
     nextGen = M->heap.gen[g + 1] = mkGeneration(g + 1);
+  }
 
   oldOffs = __rtl_ptrOffs(w);
   newOffs = rtl_bmpRank(gen->marks, oldOffs)
@@ -286,8 +291,8 @@ int collectGen(rtl_Machine *M, int g)
 
   // .. any words in live working sets ..
   for (i = 0; i < M->wsStackLen; i++) {
-    for (pp = M->wsStack[i]; *pp != NULL; pp++) {
-      markWord(M, gen, **pp);
+    for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
+      markWord(M, gen, *pp[j]);
     }
   }
 
@@ -361,8 +366,8 @@ int collectGen(rtl_Machine *M, int g)
 
     // .. any words in live working sets ..
     for (i = 0; i < M->wsStackLen; i++) {
-      for (pp = M->wsStack[i]; *pp != NULL; pp++) {
-	**pp = moveWord(M, highest, **pp);
+      for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
+	*pp[j] = moveWord(M, highest, *pp[j]);
       }
     }
   }
@@ -1675,8 +1680,15 @@ size_t rtl_listLength(rtl_Machine *M, rtl_Word ls)
 }
 
 
-void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws)
+void __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName)
 {
+
+#ifdef RTL_TRACE_WORKING_SETS
+  size_t i;
+  for (i = 0; i < M->wsStackLen; i++) printf("  ");
+  printf("> PUSH '%s'\n", fName);
+#endif
+
   if (M->wsStackLen == M->wsStackCap) {
     M->wsStackCap = !M->wsStackCap ? 8 : 2*M->wsStackCap;
     M->wsStack = realloc(M->wsStack, M->wsStackCap*sizeof(rtl_WorkingSet *));
@@ -1685,8 +1697,15 @@ void rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws)
   M->wsStack[M->wsStackLen++] = ws;
 }
 
-void rtl_popWorkingSet(rtl_Machine *M)
+void __rtl_popWorkingSet(rtl_Machine *M, char const *fName)
 {
+
+#ifdef RTL_TRACE_WORKING_SETS
+  size_t i;
+  for (i = 1; i < M->wsStackLen; i++) printf("  ");
+  printf("< POP  '%s'\n", fName);
+#endif
+
   assert(M->wsStackLen > 0);
 
   M->wsStackLen--;
