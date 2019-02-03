@@ -211,6 +211,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 
     C->M->vStackLen -= n;
 
+    rtl_popWorkingSet(C->M);
+
   } return w;
 
   case '[':

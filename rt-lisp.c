@@ -474,22 +474,24 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 
   if (mask & (1 << hash)) { // There's something in this slot already
     if (rtl_isHeader(entry[0])) { // It's a sub-map.
+      innerMask = rtl_headerValue(entry[0]);
+
+      newInnerMap = __rtl_mapInsert(M,
+				    &newInnerMask,
+				    innerMask,
+				    entry[1],
+				    key,
+				    val,
+				    depth + 1);
+
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
       *newMask   = mask; // Mask doesn't change
 
       memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
       newEntry = newBacking + 2*index;
 
-      innerMask = rtl_headerValue(entry[0]);
-
-      newEntry[1] = __rtl_mapInsert(M,
-				    &newInnerMask,
-				    innerMask,
-				    newEntry[1],
-				    key,
-				    val,
-				    depth + 1);
       newEntry[0] = rtl_header(newInnerMask);
+      newEntry[1] = newInnerMap;
 
     } else if (entry[0] == key) { // It's an entry with the same key.
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
@@ -541,7 +543,9 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
     newEntry[1] = val;
 
     // .. then copy everything after the new slot.
-    memcpy(newBacking + 2*index + 2, backing + 2*index, sizeof(rtl_Word)*2*(len - index));
+    memcpy(newBacking + 2*index + 2,
+	   backing + 2*index,
+	   sizeof(rtl_Word)*2*(len - index));
   }
 
   rtl_popWorkingSet(M);

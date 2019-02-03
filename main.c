@@ -58,5 +58,7 @@ int main() {
     rtl_newPageVersion(&M, replPageID);
   }
 
+  rtl_popWorkingSet(&M);
+
   return 0;
 }
