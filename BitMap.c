@@ -147,6 +147,44 @@ void rtl_bmpRelease(rtl_BitMap *bmp)
   free(bmp);
 }
 
+
+// A very slow but extremely straightforward implementation of RANK, for testing
+// purposes.
+static
+uint32_t controlRank(rtl_BitMap *B, uint32_t k)
+{
+  uint32_t rank, select;
+
+  for (rank = select = 0; select < k; select++)
+    if (rtl_bmpGetBit(B, select))
+      rank++;
+
+  return rank;
+}
+
+
+// A very slow but extremely straightforward implementation of SELECT, for testing
+// purposes.
+static
+uint32_t controlSelect(rtl_BitMap *B, uint32_t k)
+{
+  uint32_t rank, select;
+
+  rank = 0;
+  select = -1;
+
+  do {
+    select++;
+    if (rtl_bmpGetBit(B, select)) rank++;
+  } while (rank <= k);
+  
+  /* for (rank = select = 0; rank < k; select++) */
+  /*   if (select > 0 && rtl_bmpGetBit(B, select)) */
+  /*     rank++; */
+
+  return select;
+}
+
 // Return the number of bits that are set before index k in B.
 uint32_t rtl_bmpRank(rtl_BitMap *B, uint32_t k)
 {
@@ -172,6 +210,10 @@ uint32_t rtl_bmpRank(rtl_BitMap *B, uint32_t k)
 	      // past the end of the array!
     rank += __builtin_popcount(mask & B->blocks[i]);
   }
+
+#ifndef NDEBUG
+  assert(rank == controlRank(B, k));
+#endif
 
   return rank;
 }
@@ -220,42 +262,9 @@ uint32_t rtl_bmpSelect(rtl_BitMap *B, uint32_t k)
     asm("int3");
   }
 
-  return select;
-}
-
-// A very slow but extremely straightforward implementation of RANK, for testing
-// purposes.
-static
-uint32_t controlRank(rtl_BitMap *B, uint32_t k)
-{
-  uint32_t rank, select;
-
-  for (rank = select = 0; select < k; select++)
-    if (rtl_bmpGetBit(B, select))
-      rank++;
-
-  return rank;
-}
-
-
-// A very slow but extremely straightforward implementation of SELECT, for testing
-// purposes.
-static
-uint32_t controlSelect(rtl_BitMap *B, uint32_t k)
-{
-  uint32_t rank, select;
-
-  rank = 0;
-  select = -1;
-
-  do {
-    select++;
-    if (rtl_bmpGetBit(B, select)) rank++;
-  } while (rank <= k);
-  
-  /* for (rank = select = 0; rank < k; select++) */
-  /*   if (select > 0 && rtl_bmpGetBit(B, select)) */
-  /*     rank++; */
+#ifndef NDEBUG
+  assert(select == controlSelect(B, k));
+#endif
 
   return select;
 }
