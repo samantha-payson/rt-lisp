@@ -14,7 +14,7 @@ void rtl_formatExprShallow(rtl_Word w);
 
 // Useful for debugging the map implementation. formatExpr or formatExprIndented
 // should be used outside of map code.
-void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask);
+void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask);
 
 // Print the next instruction in bytecode, and return a pointer to the beginning
 // of the next instruction.

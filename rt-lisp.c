@@ -147,10 +147,16 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
   rtl_Word const *entry,
                  *rptr;
 
+  rtl_Generation *mapGen;
+
+  bool alreadyMarked;
+
   uint32_t offs, entryOffs;
 
   if (rtl_isEmptyMap(map) || !rtl_isMap(map)) return;
-  if (__rtl_ptrGen(map) != gen->nbr) return;
+
+  mapGen = M->heap.gen[__rtl_ptrGen(map)];
+  if (mapGen->nbr > gen->nbr) return;
 
   offs = __rtl_ptrOffs(map);
   rptr  = __rtl_reifyPtr(M, map);
@@ -160,16 +166,17 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
     entry     = rptr + 2*i;
     entryOffs = offs + 2*i;
 
-    if (!rtl_bmpSetBit(gen->marks, entryOffs, true) |
-	!rtl_bmpSetBit(gen->marks, entryOffs + 1, true))
-    {
-      if (rtl_isHeader(entry[0])) {
-	markMap(M, gen, entry[1], rtl_headerValue(entry[0]));
-      } else {
-	markWord(M, gen, entry[0]);
-	markWord(M, gen, entry[1]);
+    alreadyMarked  = rtl_bmpSetBit(mapGen->marks, entryOffs, true);
+    alreadyMarked &= rtl_bmpSetBit(mapGen->marks, entryOffs + 1, true);
 
+    if (rtl_isHeader(entry[0])) {
+      if (mapGen->nbr != gen->nbr || !alreadyMarked) {
+	markMap(M, gen, entry[1], rtl_headerValue(entry[0]));
       }
+    } else if (!alreadyMarked) {
+      markWord(M, gen, entry[0]);
+      markWord(M, gen, entry[1]);
+
       printf(" > Marked [%04Xg%d] ", entryOffs, gen->nbr);
       rtl_formatExprShallow(entry[0]);
       printf("\n");
@@ -196,19 +203,26 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   wOffs = __rtl_ptrOffs(w);
 
   // Don't bother with pointers into other generations.
-  if (__rtl_ptrGen(w) != gen->nbr) return;
+  if (!rtl_isMap(w) && __rtl_ptrGen(w) != gen->nbr) return;
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
     fields = rtl_reifyTuple(M, w, &len);
 
     // Mark the length word ..
-    rtl_bmpSetBit(gen->marks, wOffs, true);
+    if (!rtl_bmpSetBit(gen->marks, wOffs, true)) {
+      printf(" > Marked [%04Xg%d] ", (unsigned int)(wOffs), gen->nbr);
+      rtl_formatExprShallow(fields[-1]);
+      printf("\n");
+    }
 
     // .. then each of the element words.
     for (i = 0; i < len; i++) {
       if (!rtl_bmpSetBit(gen->marks, wOffs + i + 1, true)) {
 	markWord(M, gen, fields[i]);
+	printf(" > Marked [%04Xg%d] ", (unsigned int)(wOffs + i + 1), gen->nbr);
+	rtl_formatExprShallow(fields[i]);
+	printf("\n");
       }
     }
     break;
@@ -304,6 +318,8 @@ int collectGen(rtl_Machine *M, int g)
 
   // Mark any pointers into this generation in ..
 
+  printf(">> Marking gen %d\n", (int)gen->nbr);
+
   // .. the current environment frame ..
   markWord(M, gen, M->env);
 
@@ -336,6 +352,8 @@ int collectGen(rtl_Machine *M, int g)
 			// think.
     for (j = 0; j < youngerGen->marks->nbrOnes; j++) {
       k = rtl_bmpSelect(youngerGen->marks, j);
+      printf("Checking %04Xg%d for a pointer to g%d\n",
+	     (unsigned int)k, youngerGen->nbr, gen->nbr);
       markWord(M, gen, youngerGen->words[k]);
     }
   }
@@ -359,6 +377,8 @@ int collectGen(rtl_Machine *M, int g)
 
   // If there was an error, just return up the stack.
   if (highest < 0) return highest;
+
+  printf("<< Moving gen %d (to gen %d)\n", (int)gen->nbr, (int)nextGen->nbr);
 
   // This is where we record the pre-move fill ptr, which makes all of the
   // rank/select math work consistently even after we start adjusting the
@@ -619,11 +639,11 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
   rtl_popWorkingSet(M);
 
   printf("      IN: ");
-  __rtl_formatMap(M, map, 0, mask);
+  __rtl_debugFormatMap(M, map, 0, mask);
   printf("\n");
 
   printf(" (%d) OUT: ", path);
-  __rtl_formatMap(M, newMap, 0, *newMask);
+  __rtl_debugFormatMap(M, newMap, 0, *newMask);
   printf("\n");
 
   return newMap;

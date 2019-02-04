@@ -19,6 +19,16 @@ typedef struct rtl_BitMap {
 // Allocate a new bitmap of size nbrBits in contiguous memory.
 rtl_BitMap *rtl_newBitMap(size_t nbrBits);
 
+static inline
+bool rtl_bmpGetBit(rtl_BitMap const *bmp, uint32_t idx)
+{
+  assert(idx < bmp->nbrBits);
+
+  uint32_t bit = 1 << (idx & 0x1F);
+
+  return bmp->blocks[idx >> 5] & bit;
+}
+
 // Set the value of a bit and return the old value.
 static inline
 bool rtl_bmpSetBit(rtl_BitMap *bmp, uint32_t idx, bool value)
@@ -37,17 +47,9 @@ bool rtl_bmpSetBit(rtl_BitMap *bmp, uint32_t idx, bool value)
   }
   bmp->blocks[idx >> 5] = block;
 
+  assert(rtl_bmpGetBit(bmp, idx) == value);
+
   return oldValue;
-}
-
-static inline
-bool rtl_bmpGetBit(rtl_BitMap const *bmp, uint32_t idx)
-{
-  assert(idx < bmp->nbrBits);
-
-  uint32_t bit = 1 << (idx & 0x1F);
-
-  return bmp->blocks[idx >> 5] & bit;
 }
 
 // Populates the rank/select tables, according to the current state of the bitmap.
