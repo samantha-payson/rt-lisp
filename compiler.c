@@ -430,9 +430,6 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
   rtl_NameSpace newNS;
 
-  uint32_t    pkgID;
-  rtl_Package *pkg;
-
   ensureSymCache(C);
 
   RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &tail, &out);
@@ -544,12 +541,7 @@ void rtl_compile(rtl_Compiler *C,
            tail  = RTL_NIL,
            out   = RTL_NIL;
 
-  rtl_FnDef *fnDef;
-
   rtl_NameSpace newNS;
-
-  uint32_t    pkgID;
-  rtl_Package *pkg;
 
   rtl_Intrinsic *ir;
 
@@ -655,7 +647,7 @@ rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
-  rtl_Word head, tail, name, _else;
+  rtl_Word head, tail, name;
   rtl_Word const *rptr;
   size_t len, i;
   rtl_Intrinsic **buf;
@@ -1110,7 +1102,6 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   rtl_Intrinsic **argsTmp;
   size_t        argsLenTmp;
   Environment   newEnv;
-  rtl_FnDef     *fnDef;
 
   size_t i;
 
@@ -1159,6 +1150,9 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
       x->as.var.global = true;
     } // If lookupVar returned true, then frame and idx were set.
     break;
+
+  case RTL_INTRINSIC_NAMED_CALL:
+    abort(); // This should never happen
 
   case RTL_INTRINSIC_CALL:
     // Start by transforming all of the args
@@ -1309,8 +1303,6 @@ void emitMapQuoteCode(rtl_Compiler        *C,
   size_t   len,
            i;
 
-  rtl_Word *wptr, *newEntry;
-
   rptr = __rtl_reifyPtr(C->M, map);
   len  = __builtin_popcount(mask);
 
@@ -1386,7 +1378,6 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
   uint16_t  newPageID;
   rtl_Word  addr0, addr1;
   rtl_FnDef *fnDef;
-  uint8_t   *ptr;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -1516,7 +1507,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
 	// Ignore the result of all but the last expression.
 	if (i + 1 < x->as.progn.formsLen)
-	  rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+	  rtl_emitByteToPage(C->M, pageID, RTL_OP_POP);
       }
     } break;
 
@@ -1562,6 +1553,13 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
 
     rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), false);
+
+    printf("  _____\n");
+    printf(" | Compiled function '%s' to page %d |\n",
+	   rtl_symbolName(x->as.defun.name),
+	   (int)newPageID);
+    printf("       ------------");
+    rtl_disasmPage(C->M, newPageID);
 
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
     rtl_emitWordToPage(C->M, pageID, x->as.defun.name);
@@ -1667,6 +1665,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitByteToPage(C->M, pageID, RTL_OP_ISO);
       break;
 
+    default:
+      abort(); // Unreachable
+
     } break;
 
   case RTL_INTRINSIC_TYPE_PRED:
@@ -1705,6 +1706,8 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_TOP);
       break;
 
+    default:
+      abort(); // Type not handled yet...
     } break;
 
   case RTL_INTRINSIC_IF:

@@ -22,7 +22,6 @@ uint8_t *rtl_resolveAddr(rtl_Machine *M, rtl_Word w)
 {
   uint16_t pageID,
            offs;
-  rtl_Page *page;
 
   assert(rtl_isAddr(w));
 

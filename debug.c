@@ -69,11 +69,18 @@ void rtl_formatExprShallow(rtl_Word w)
   case RTL_TOP:
     printf("T");
     break;
+
+  case RTL_HEADER:
+    printf("Header#%X", rtl_headerValue(w));
+    break;
+
+  default:
+    printf("<Unhandled type '%s'>", rtl_typeNameOf(w));
+    break;
   }
 }
 
-static
-void formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
+void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
 {
   rtl_Word const *rptr, *entry;
   size_t   len,
@@ -88,7 +95,7 @@ void formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
     entry = rptr + 2*i;
 
     if (rtl_isHeader(entry[0])) {
-      formatMap(M, entry[1], indent, rtl_headerValue(entry[0]));
+      __rtl_formatMap(M, entry[1], indent, rtl_headerValue(entry[0]));
     } else {
       rtl_formatExprIndented(M, entry[0], indent + 1);
       printf(" ");
@@ -103,8 +110,7 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
   rtl_Word const *ptr;
 
   size_t         len,
-                 i,
-                 j;
+                 i;
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
@@ -140,7 +146,7 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
       printf("{}");
     } else {
       printf("{ ");
-      formatMap(M, w, indent, 1);
+      __rtl_formatMap(M, w, indent, 1);
       printf("}");
     }
     break;

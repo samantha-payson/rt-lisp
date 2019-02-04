@@ -4,20 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// This function has the same effect as the RTL_OP_CONS instruction.
-static
-void consStackTop(rtl_Machine *M) {
-  rtl_Word w;
-
-  assert(M->vStackLen >= 2);
-
-
-  w = rtl_cons(M, rtl_peek(M, 1), rtl_peek(M, 0));
-
-  rtl_popK(M, 2);
-  rtl_push(M, w);
-}
-
 static
 void eatWhitespace(FILE *f)
 {

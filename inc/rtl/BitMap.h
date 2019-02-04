@@ -10,7 +10,6 @@
 typedef struct rtl_BitMap {
   uint32_t nbrBits, nbrBlocks, nbrOnes;
 
-
   uint32_t *sampleRank, *sampleSelect;
 
   uint32_t blocks[];
@@ -36,7 +35,6 @@ bool rtl_bmpSetBit(rtl_BitMap *bmp, uint32_t idx, bool value)
   } else {
     block &= ~bit;
   }
-
   bmp->blocks[idx >> 5] = block;
 
   return oldValue;

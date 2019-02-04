@@ -12,6 +12,10 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int n);
 // atoms, and addresses for non-atoms.
 void rtl_formatExprShallow(rtl_Word w);
 
+// Useful for debugging the map implementation. formatExpr or formatExprIndented
+// should be used outside of map code.
+void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask);
+
 // Print the next instruction in bytecode, and return a pointer to the beginning
 // of the next instruction.
 uint8_t *rtl_disasm(uint8_t *bytecode);

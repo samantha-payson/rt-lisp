@@ -28,7 +28,6 @@ rtl_BitMap *rtl_newBitMap(size_t nbrBits)
   bmp->nbrBits   = nbrBits;
   bmp->nbrBlocks = nbrBlocks;
 
-
   // This will be filled out when rtl_bmpTabulate is called.
   bmp->nbrOnes = 0;
 
@@ -53,8 +52,6 @@ uint32_t mask32(uint32_t n)
 // in x.
 uint32_t rtl_scanForKth(uint32_t x, uint32_t k)
 {
-  uint32_t popcnt;
-
   uint32_t lo, mid, hi;
 
   lo = 0, hi = 31;
@@ -72,12 +69,24 @@ uint32_t rtl_scanForKth(uint32_t x, uint32_t k)
   return lo;
 }
 
+static
+uint32_t debugNbrOnes(rtl_BitMap *bmp) {
+  uint32_t i, count;
+
+  for (count = 0, i = 0; i < bmp->nbrBits; i++) {
+    if (rtl_bmpGetBit(bmp, i)) {
+      count++;
+    }
+  }
+
+  return count;
+}
+
 void rtl_bmpTabulate(rtl_BitMap *bmp)
 {
   uint32_t i, rankIdx, selectIdx, blockIdx;
 
   uint32_t nbrRankSamples,
-           bitsThisWord,
            accumulatedRank;
 
   uint32_t word, popcnt;
@@ -98,8 +107,8 @@ void rtl_bmpTabulate(rtl_BitMap *bmp)
 	 i < RANK_STRIDE >> 5 && blockIdx < bmp->nbrBlocks;
 	 i++, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i)
     {
-      word     = bmp->blocks[blockIdx];
-      popcnt   = __builtin_popcount(word);
+      word   = bmp->blocks[blockIdx];
+      popcnt = __builtin_popcount(word);
 
       if (accumulatedRank + popcnt > nextSelect) {
 	// Since a selectSample just points at the 32-bit block CONTAINING the
@@ -125,6 +134,10 @@ void rtl_bmpTabulate(rtl_BitMap *bmp)
   }
 
   bmp->nbrOnes = accumulatedRank;
+
+#ifndef NDEBUG
+  assert(bmp->nbrOnes == debugNbrOnes(bmp));
+#endif
 }
 
 void rtl_bmpClearAll(rtl_BitMap *bmp)

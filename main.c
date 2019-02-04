@@ -17,7 +17,6 @@ int main() {
   rtl_Word      w, a, b;
   uint16_t      replPageID;
   rtl_NameSpace ns;
-  rtl_Intrinsic *ir;
 
   rtl_initMachine(&M);
   rtl_initCompiler(&C, &M);

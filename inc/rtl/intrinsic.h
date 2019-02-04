@@ -570,6 +570,8 @@ rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
       },
     },
   };
+
+  return intr;
 }
 
 static inline

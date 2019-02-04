@@ -43,7 +43,8 @@ uint32_t hashStr(char const *str)
   c = *str;
   while (c) {
     h = (h << 5) ^ c;
-    if (g = h & 0xFC000000) {
+    g = h & 0xFC000000;
+    if (g) {
       // Recycle the top 6 bits back into the lower part of the array.
       h ^= (g >> 25);
     }
@@ -326,7 +327,6 @@ rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
 			     uint32_t            unresID)
 {
   UnresolvedSymbol const *usym;
-  rtl_NameSpace const    *seek;
 
   uint32_t    pkgID;
   rtl_Package *pkg;

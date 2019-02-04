@@ -4,6 +4,15 @@
 #include <string.h>
 #include <stdio.h>
 
+
+// These macros are to be used for operating on the VM from the main
+// loop. Hopefully this gives the compiler more freedom to keep things in
+// registers, etc...
+
+#define likely(x)       __builtin_expect(!!(x),1)
+#define unlikely(x)     __builtin_expect((x),0)
+
+// Reviewed
 static
 rtl_Generation *mkGeneration(int genNbr)
 {
@@ -21,14 +30,17 @@ rtl_Generation *mkGeneration(int genNbr)
   gen->capacity = capacity;
   gen->marks    = rtl_newBitMap(capacity);
 
+  gen->preMoveFillPtr = 0;
+
   return gen;
 }
-
+// Reviewed
 void rtl_initHeap(rtl_Heap *h)
 {
   memset(h->gen, 0, sizeof(rtl_Generation *)*RTL_MAX_GENERATIONS);
 }
 
+// Reviewed
 rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
 {
   uint32_t       genNum,
@@ -49,6 +61,7 @@ rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
   return gen->words + offs;
 }
 
+// Reviewed
 rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   rtl_Word *backing;
 
@@ -75,6 +88,7 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   }
 }
 
+// Reviewed
 rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
@@ -111,6 +125,7 @@ rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons)
   return ptr[1];
 }
 
+// Reviewed
 static
 rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 {
@@ -122,6 +137,7 @@ rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w);
 
+// Reviewed
 static
 void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
 {
@@ -131,9 +147,9 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
   rtl_Word const *entry,
                  *rptr;
 
-  uint32_t offs;
+  uint32_t offs, entryOffs;
 
-  if (rtl_isEmptyMap(map)) return;
+  if (rtl_isEmptyMap(map) || !rtl_isMap(map)) return;
   if (__rtl_ptrGen(map) != gen->nbr) return;
 
   offs = __rtl_ptrOffs(map);
@@ -141,21 +157,32 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
   len   = __builtin_popcount(mask);
 
   for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
+    entry     = rptr + 2*i;
+    entryOffs = offs + 2*i;
 
-    if (!rtl_bmpSetBit(gen->marks, offs + i*2, true) ||
-	!rtl_bmpSetBit(gen->marks, offs + i*2 + 1, true))
+    if (!rtl_bmpSetBit(gen->marks, entryOffs, true) |
+	!rtl_bmpSetBit(gen->marks, entryOffs + 1, true))
     {
       if (rtl_isHeader(entry[0])) {
 	markMap(M, gen, entry[1], rtl_headerValue(entry[0]));
       } else {
 	markWord(M, gen, entry[0]);
 	markWord(M, gen, entry[1]);
+
       }
+      printf(" > Marked [%04Xg%d] ", entryOffs, gen->nbr);
+      rtl_formatExprShallow(entry[0]);
+      printf("\n");
+      printf(" > Marked [%04Xg%d] ", entryOffs + 1, gen->nbr);
+      rtl_formatExprShallow(entry[1]);
+      printf("\n");
+
     }
   }
 }
 
+// Reviewed
+//
 // Mark the memory w points to, for generation g.
 static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
@@ -165,8 +192,6 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
                  len;
 
   rtl_Word const *fields;
-
-  rtl_Generation *wGen;
 
   wOffs = __rtl_ptrOffs(w);
 
@@ -210,6 +235,7 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   }
 }
 
+// Reviewed
 static
 rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
 {
@@ -233,9 +259,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   assert(gen);
 
   nextGen = M->heap.gen[g + 1];
-  if (!nextGen) {
-    nextGen = M->heap.gen[g + 1] = mkGeneration(g + 1);
-  }
+  assert(nextGen);
 
   oldOffs = __rtl_ptrOffs(w);
   newOffs = rtl_bmpRank(gen->marks, oldOffs)
@@ -244,13 +268,14 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   return mkPtr(type, g + 1, newOffs);
 }
 
+// Still needs reviewing.......... too drunk right now <(^_^)>
+//
 // Returns the number of the highest generation that was collected.
 static
 int collectGen(rtl_Machine *M, int g)
 {
-  size_t i, j, k, count, space;
+  size_t i, j, k;
   rtl_Generation *gen, *youngerGen, *nextGen;
-  rtl_BitMap *bmp;
   int highest;
   rtl_Word **pp;
 
@@ -267,6 +292,9 @@ int collectGen(rtl_Machine *M, int g)
   if (!gen) {
     // If this generation doesn't exist yet, then it's already empty so there's
     // no need to collect.
+    //
+    // We still need to allocate it though, so the previous generation can move
+    // words into it.
     gen = M->heap.gen[g] = mkGeneration(g);
     return g - 1;
   }
@@ -292,7 +320,12 @@ int collectGen(rtl_Machine *M, int g)
   // .. any words in live working sets ..
   for (i = 0; i < M->wsStackLen; i++) {
     for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
-      markWord(M, gen, *pp[j]);
+      if (unlikely(rtl_isHeader(*pp[j]))) {
+	markMap(M, gen, *pp[j+1], rtl_headerValue(*pp[j]));
+	j++;
+      } else {
+	markWord(M, gen, *pp[j]);
+      }
     }
   }
 
@@ -301,9 +334,8 @@ int collectGen(rtl_Machine *M, int g)
     youngerGen = M->heap.gen[i];
     assert(youngerGen); // Shouldn't be any un-populated younger generations, I
 			// think.
-    bmp = youngerGen->marks;
-    for (j = 0; j < bmp->nbrOnes; j++) {
-      k = rtl_bmpSelect(bmp, j);
+    for (j = 0; j < youngerGen->marks->nbrOnes; j++) {
+      k = rtl_bmpSelect(youngerGen->marks, j);
       markWord(M, gen, youngerGen->words[k]);
     }
   }
@@ -335,13 +367,16 @@ int collectGen(rtl_Machine *M, int g)
 
   for (i = 0; i < gen->marks->nbrOnes; i++) {
     rtl_Word old, new;
-
     k = rtl_bmpSelect(gen->marks, i);
 
-    nextGen->words[nextGen->fillPtr++] = new
-                                       = moveWord(M,
-						  highest,
-						  old = gen->words[k]);
+    nextGen->words[nextGen->fillPtr++] = new 
+                                       = moveWord(M, highest, old = gen->words[k]);
+
+    printf("  %04Xg%d: Moved [%04Xg%d] ", (uint32_t)i, nextGen->nbr, (uint32_t)k, gen->nbr);
+    rtl_formatExprShallow(old);
+    printf(" -> ");
+    rtl_formatExprShallow(new);
+    printf("\n");
   }
 
   gen->fillPtr = 0;
@@ -349,19 +384,17 @@ int collectGen(rtl_Machine *M, int g)
   // This is the last generation to be moved, now we need to fix-up the pointers
   // in the machine.
   if (g == 0) {
-    rtl_Word old, new;
-
     // .. the current environment frame ..
     M->env = moveWord(M, highest, M->env);
 
     // .. any words on the value stack ..
     for (i = 0; i < M->vStackLen; i++) {
-      M->vStack[i] = new = moveWord(M, highest, old = M->vStack[i]);
+      M->vStack[i] = moveWord(M, highest, M->vStack[i]);
     }
 
     // .. any environment frames on the return stack ..
     for (i = 0; i < M->rStackLen; i++) {
-      M->rStack[i].env = new = moveWord(M, highest, old = M->rStack[i].env);
+      M->rStack[i].env = moveWord(M, highest, M->rStack[i].env);
     }
 
     // .. any words in live working sets ..
@@ -402,7 +435,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   // Allocate this generation if it doesn't exist.
   if (!gen0) gen0 = heap->gen[0] = mkGeneration(0);
 
-  if (gen0->capacity - gen0->fillPtr < nbr) {
+  if (gen0->fillPtr + nbr >= gen0->capacity) {
     collectGen(M, 0);
   }
 
@@ -457,6 +490,9 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
   rtl_Word newMap      = RTL_NIL,
            newInnerMap = RTL_NIL;
 
+  rtl_Word newMapTmpMask      = RTL_HEADER,
+           newInnerMapTmpMask = RTL_HEADER;
+
   uint32_t index,
            hash,
            otherHash,
@@ -464,16 +500,22 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
            innerMask,
            newInnerMask;
 
-  RTL_PUSH_WORKING_SET(M, &map, &key, &val, &newMap, &newInnerMap);
+  int path;
 
-  backing = __rtl_reifyPtr(M, map);
+  RTL_PUSH_WORKING_SET(M, &map, &key, &val,
+		       &newMapTmpMask,      &newMap,
+		       &newInnerMapTmpMask, &newInnerMap);
+
   hash    = hashKey(key, depth);
   len     = __builtin_popcount(mask);
   index   = __builtin_popcount(mask32(hash) & mask);
+  backing = __rtl_reifyPtr(M, map);
   entry   = backing + 2*index;
 
   if (mask & (1 << hash)) { // There's something in this slot already
     if (rtl_isHeader(entry[0])) { // It's a sub-map.
+      path = 1;
+
       innerMask = rtl_headerValue(entry[0]);
 
       newInnerMap = __rtl_mapInsert(M,
@@ -483,9 +525,14 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 				    key,
 				    val,
 				    depth + 1);
+      newInnerMapTmpMask = rtl_header(newInnerMask);
 
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
       *newMask   = mask; // Mask doesn't change
+
+      newMapTmpMask = rtl_header(mask);
+
+      backing = __rtl_reifyPtr(M, map);
 
       memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
       newEntry = newBacking + 2*index;
@@ -494,8 +541,14 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = newInnerMap;
 
     } else if (entry[0] == key) { // It's an entry with the same key.
+      path = 2;
+
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
       *newMask   = mask; // Mask doesn't change
+      newMapTmpMask = rtl_header(mask);
+
+      backing = __rtl_reifyPtr(M, map);
+      entry   = backing + 2*index;
 
       memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
       newEntry = newBacking + 2*index;
@@ -503,11 +556,16 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = val;
 
     } else { // It's an entry with a different key.
+      path = 3;
 
       // Create a new singleton map containing only the old element.
       newBacking = rtl_allocGC(M, RTL_MAP, &newInnerMap, 2);
       otherHash  = hashKey(entry[0], depth + 1);
       innerMask  = 1 << otherHash;
+      newInnerMapTmpMask = rtl_header(innerMask);
+
+      backing = __rtl_reifyPtr(M, map);
+      entry   = backing + 2*index;
 
       newBacking[0] = entry[0];
       newBacking[1] = entry[1];
@@ -520,9 +578,14 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 				    key,
 				    val,
 				    depth + 1);
+      newInnerMapTmpMask = rtl_header(newInnerMask);
 
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
       *newMask   = mask;
+      newMapTmpMask = rtl_header(mask);
+
+      backing = __rtl_reifyPtr(M, map);
+      entry   = backing + 2*index;
 
       memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
       newEntry = newBacking + 2*index;
@@ -531,8 +594,13 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = newInnerMap;
     }
   } else { // There's nothing in this slot yet
+    path = 4;
+
     newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*(len + 1));
     *newMask   = mask | (1 << hash);
+
+    backing = __rtl_reifyPtr(M, map);
+    entry   = backing + 2*index;
 
     // Copy everything before the new slot ..
     memcpy(newBacking, backing, sizeof(rtl_Word)*2*index);
@@ -549,6 +617,14 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
   }
 
   rtl_popWorkingSet(M);
+
+  printf("      IN: ");
+  __rtl_formatMap(M, map, 0, mask);
+  printf("\n");
+
+  printf(" (%d) OUT: ", path);
+  __rtl_formatMap(M, newMap, 0, *newMask);
+  printf("\n");
 
   return newMap;
 }
@@ -640,28 +716,6 @@ void rtl_initMachine(rtl_Machine *M)
   M->error = RTL_OK;
 }
 
-static
-void pushVStack(rtl_Machine *M, rtl_Word w)
-{
-  if (M->vStackLen == M->vStackCap) {
-    M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;
-    M->vStack = realloc(M->vStack, M->vStackCap * sizeof(rtl_Word));
-  }
-
-  M->vStack[M->vStackLen++] = w;
-}
-
-static
-rtl_Word popVStack(rtl_Machine *M)
-{
-  if (M->vStackLen > 0) {
-    return M->vStack[--M->vStackLen];
-  }
-
-  M->error = RTL_ERR_STACK_UNDERFLOW;
-  return RTL_NIL;
-}
-
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 {
   rtl_Word w = RTL_NIL, *ptr;
@@ -681,7 +735,6 @@ rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 void rtl_testGarbageCollector(size_t count)
 {
   rtl_Machine    M;
-  rtl_Word       w;
   rtl_Word const *ptr;
   int            i;
 
@@ -723,6 +776,9 @@ void rtl_testGarbageCollector(size_t count)
       abort();
     }
   }
+
+  (void)straggler0;
+  (void)straggler1;
 
   for (i = count - 1, ptr = rtl_reifyCons(&M, M.vStack[0]);
        !rtl_isNil(ptr[1]);
@@ -781,13 +837,6 @@ char const *rtl_typeName(rtl_WordType type)
     return "[Unknown RTL type]";
   }
 }
-
-// These macros are to be used for operating on the VM from the main
-// loop. Hopefully this gives the compiler more freedom to keep things in
-// registers, etc...
-
-#define likely(x)       __builtin_expect(!!(x),1)
-#define unlikely(x)     __builtin_expect((x),0)
 
 #define VPUSH(W) ({							\
       if (unlikely(M->vStackLen == M->vStackCap)) {			\
@@ -942,6 +991,9 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       }
 
       return subResult;
+
+    default:
+      abort();
     }
   }
 }
@@ -951,7 +1003,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
   uint8_t opcode;
 
   uint16_t frame, idx, size;
-  ssize_t   len, i;
+  size_t    len;
+  ssize_t   i;
 
   rtl_Word literal;
 
@@ -1069,7 +1122,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       i    = rtl_int28Value(VPOP());
       rptr = rtl_reifyTuple(M, VPOP(), &len);
 
-      assert(i < len);
+      assert(i < (int)len);
 
       VPUSH(rptr[i]);
       break;
@@ -1124,7 +1177,9 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
     case RTL_OP_DUP:
       VSTACK_ASSERT_LEN(1);
 
-      VPUSH(VPEEK(0));
+      a = VPEEK(0);
+
+      VPUSH(a);
       break;
 
     case RTL_OP_IS_INT28:
@@ -1394,8 +1449,6 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
       M->rStackLen--;
 
-      printf("rStackLen: %d\n", (int)M->rStackLen);
-
       M->pc  = M->rStack[M->rStackLen].pc;
       M->env = M->rStack[M->rStackLen].env;
 
@@ -1409,7 +1462,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       assert(0 <= idx && idx <= len);
 
       a = RTL_NIL;
-      for (i = len - 1; i >= idx; i--) {
+      for (i = (ssize_t)len - 1; i >= idx; i--) {
 	a = rtl_cons(M, rptr[i], a);
       }
 
@@ -1510,10 +1563,8 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
 
 rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 {
-  size_t   len;
   rtl_Word *ptr;
   rtl_Word args, env;
-  size_t   i;
 
   args = rtl_listToTuple(M, argList);
 
@@ -1682,7 +1733,6 @@ size_t rtl_listLength(rtl_Machine *M, rtl_Word ls)
 
   return n;
 }
-
 
 void __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName)
 {
