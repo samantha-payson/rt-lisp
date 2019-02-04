@@ -431,9 +431,9 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   gen0 = heap->gen[0];
 
   // Allocate this generation if it doesn't exist.
-  if (!gen0) gen0 = heap->gen[0] = mkGeneration(0);
+  if (unlikely(!gen0)) gen0 = heap->gen[0] = mkGeneration(0);
 
-  if (gen0->fillPtr + nbr >= gen0->capacity) {
+  if (unlikely(gen0->fillPtr + nbr >= gen0->capacity)) {
     collectGen(M, 0);
   }
 
