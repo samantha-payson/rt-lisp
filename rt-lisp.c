@@ -1549,7 +1549,7 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
   rtl_Word tuple;
   size_t   i;
 
-  assert(rtl_isCons(list));
+  assert(rtl_isCons(list) || rtl_isNil(list));
 
   len = rtl_listLength(M, list);
   ptr = rtl_allocTuple(M, &tuple, len);
