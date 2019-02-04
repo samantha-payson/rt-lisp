@@ -337,8 +337,11 @@ int collectGen(rtl_Machine *M, int g)
   for (i = 0; i < M->wsStackLen; i++) {
     for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
       if (unlikely(rtl_isHeader(*pp[j]))) {
-	markMap(M, gen, *pp[j+1], rtl_headerValue(*pp[j]));
-	j++;
+	rtl_Word const *header, *map;
+	header = pp[j++];
+	map    = pp[j];
+
+	markMap(M, gen, *map, rtl_headerValue(*header));
       } else {
 	markWord(M, gen, *pp[j]);
       }

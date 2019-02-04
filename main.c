@@ -14,7 +14,9 @@
 int main() {
   rtl_Machine   M;
   rtl_Compiler  C;
-  rtl_Word      w, a, b;
+  rtl_Word      w = RTL_NIL,
+                a = RTL_NIL,
+                b = RTL_NIL;
   uint16_t      replPageID;
   rtl_NameSpace ns;
 
