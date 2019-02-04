@@ -468,7 +468,7 @@ uint32_t mask32(unsigned k) {
 
 // IMPORTANT: Always returns 0 at depth 0.
 uint32_t hashKey(uint32_t key, uint32_t depth) {
-  return (key ^ (key >> (4*depth))) % 28;
+  return (key ^ key*(depth + 1)) % 28;
 }
 
 rtl_Word __rtl_mapInsert(rtl_Machine *M,
