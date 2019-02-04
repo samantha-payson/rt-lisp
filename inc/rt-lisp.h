@@ -106,7 +106,7 @@ typedef struct rtl_Generation {
   rtl_Word words[];
 } rtl_Generation;
 
-#define RTL_MAX_GENERATIONS 16
+#define RTL_MAX_GENERATIONS 18
 
 typedef struct rtl_Heap {
   // Each generation is twice the size of the previous generation.

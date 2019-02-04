@@ -135,7 +135,7 @@ void rtl_bmpTabulate(rtl_BitMap *bmp)
 
   bmp->nbrOnes = accumulatedRank;
 
-#ifndef NDEBUG
+#ifndef RTL_BITMAP_SANITY_CHECKS
   assert(bmp->nbrOnes == debugNbrOnes(bmp));
 #endif
 }
@@ -224,7 +224,7 @@ uint32_t rtl_bmpRank(rtl_BitMap *B, uint32_t k)
     rank += __builtin_popcount(mask & B->blocks[i]);
   }
 
-#ifndef NDEBUG
+#ifndef RTL_BITMAP_SANITY_CHECKS
   assert(rank == controlRank(B, k));
 #endif
 
@@ -275,7 +275,7 @@ uint32_t rtl_bmpSelect(rtl_BitMap *B, uint32_t k)
     asm("int3");
   }
 
-#ifndef NDEBUG
+#ifndef RTL_BITMAP_SANITY_CHECKS
   assert(select == controlSelect(B, k));
 #endif
 

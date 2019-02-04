@@ -1,5 +1,8 @@
 CC     = gcc
-CFLAGS = -Wall -Werror -Iinc -g -O0 -march=native # -D RTL_TRACE_WORKING_SETS
+CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
+  -Wno-error=unused-function \
+#  -D RTL_TRACE_WORKING_SETS \
+#  -D RTL_BITMAP_SANITY_CHECKS \
 
 LD      = gcc
 LDFLAGS =

@@ -177,13 +177,6 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
       markWord(M, gen, entry[0]);
       markWord(M, gen, entry[1]);
 
-      printf(" > Marked [%04Xg%d] ", entryOffs, gen->nbr);
-      rtl_formatExprShallow(entry[0]);
-      printf("\n");
-      printf(" > Marked [%04Xg%d] ", entryOffs + 1, gen->nbr);
-      rtl_formatExprShallow(entry[1]);
-      printf("\n");
-
     }
   }
 }
@@ -210,19 +203,12 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     fields = rtl_reifyTuple(M, w, &len);
 
     // Mark the length word ..
-    if (!rtl_bmpSetBit(gen->marks, wOffs, true)) {
-      printf(" > Marked [%04Xg%d] ", (unsigned int)(wOffs), gen->nbr);
-      rtl_formatExprShallow(fields[-1]);
-      printf("\n");
-    }
+    rtl_bmpSetBit(gen->marks, wOffs, true);
 
     // .. then each of the element words.
     for (i = 0; i < len; i++) {
       if (!rtl_bmpSetBit(gen->marks, wOffs + i + 1, true)) {
 	markWord(M, gen, fields[i]);
-	printf(" > Marked [%04Xg%d] ", (unsigned int)(wOffs + i + 1), gen->nbr);
-	rtl_formatExprShallow(fields[i]);
-	printf("\n");
       }
     }
     break;
@@ -318,8 +304,6 @@ int collectGen(rtl_Machine *M, int g)
 
   // Mark any pointers into this generation in ..
 
-  printf(">> Marking gen %d\n", (int)gen->nbr);
-
   // .. the current environment frame ..
   markWord(M, gen, M->env);
 
@@ -355,8 +339,6 @@ int collectGen(rtl_Machine *M, int g)
 			// think.
     for (j = 0; j < youngerGen->marks->nbrOnes; j++) {
       k = rtl_bmpSelect(youngerGen->marks, j);
-      printf("Checking %04Xg%d for a pointer to g%d\n",
-	     (unsigned int)k, youngerGen->nbr, gen->nbr);
       markWord(M, gen, youngerGen->words[k]);
     }
   }
@@ -381,8 +363,6 @@ int collectGen(rtl_Machine *M, int g)
   // If there was an error, just return up the stack.
   if (highest < 0) return highest;
 
-  printf("<< Moving gen %d (to gen %d)\n", (int)gen->nbr, (int)nextGen->nbr);
-
   // This is where we record the pre-move fill ptr, which makes all of the
   // rank/select math work consistently even after we start adjusting the
   // real fill ptr to add items to the generation.
@@ -395,11 +375,6 @@ int collectGen(rtl_Machine *M, int g)
     nextGen->words[nextGen->fillPtr++] = new 
                                        = moveWord(M, highest, old = gen->words[k]);
 
-    printf("  %04Xg%d: Moved [%04Xg%d] ", (uint32_t)i, nextGen->nbr, (uint32_t)k, gen->nbr);
-    rtl_formatExprShallow(old);
-    printf(" -> ");
-    rtl_formatExprShallow(new);
-    printf("\n");
   }
 
   gen->fillPtr = 0;
@@ -523,8 +498,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
            innerMask,
            newInnerMask;
 
-  int path;
-
   RTL_PUSH_WORKING_SET(M, &map, &key, &val,
 		       &newMapTmpMask,      &newMap,
 		       &newInnerMapTmpMask, &newInnerMap);
@@ -537,8 +510,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 
   if (mask & (1 << hash)) { // There's something in this slot already
     if (rtl_isHeader(entry[0])) { // It's a sub-map.
-      path = 1;
-
       innerMask = rtl_headerValue(entry[0]);
 
       newInnerMap = __rtl_mapInsert(M,
@@ -564,8 +535,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = newInnerMap;
 
     } else if (entry[0] == key) { // It's an entry with the same key.
-      path = 2;
-
       newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
       *newMask   = mask; // Mask doesn't change
       newMapTmpMask = rtl_header(mask);
@@ -579,7 +548,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = val;
 
     } else { // It's an entry with a different key.
-      path = 3;
 
       // Create a new singleton map containing only the old element.
       newBacking = rtl_allocGC(M, RTL_MAP, &newInnerMap, 2);
@@ -617,8 +585,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
       newEntry[1] = newInnerMap;
     }
   } else { // There's nothing in this slot yet
-    path = 4;
-
     newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*(len + 1));
     *newMask   = mask | (1 << hash);
 
@@ -640,14 +606,6 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
   }
 
   rtl_popWorkingSet(M);
-
-  printf("      IN: ");
-  __rtl_debugFormatMap(M, map, 0, mask);
-  printf("\n");
-
-  printf(" (%d) OUT: ", path);
-  __rtl_debugFormatMap(M, newMap, 0, *newMask);
-  printf("\n");
 
   return newMap;
 }
@@ -1067,7 +1025,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
     /* printf("\n"); */
 
-    rtl_disasm(M->pc);
+    // rtl_disasm(M->pc);
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
