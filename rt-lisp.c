@@ -138,6 +138,19 @@ static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w);
 
 // Reviewed
+//
+// TODO: Profiling shows that this is the slowest function in the interpreter BY
+//       FAR. It takes more than 50% of our runtime, probably more than 80% if I
+//       did the math out...
+//
+//       The most likely way to fix this is to have the bitmap stored at the
+//       beginning of each node in the HAMT, rather than keeping it in a
+//       header. This will allow us to avoid marking the same words over and
+//       over, which is what we're currently doing.
+//
+//       The current version doesn't allow the GC to capitalize on shared state
+//       between maps, which is completely unacceptable from a performance
+//       perspective.
 static
 void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
 {
