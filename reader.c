@@ -24,8 +24,10 @@ void eatWhitespace(FILE *f)
 {
   int ch;
 
-  while (isspace(ch = fgetc(f)) || ch == ',')
-    ;;
+  while (isspace(ch = fgetc(f)) || ch == ',' || ch == ';')
+    if (ch == ';')
+      while (fgetc(f) != '\n' && !feof(f))
+	;;
 
   ungetc(ch, f);
 }
