@@ -112,7 +112,7 @@
 
   (defun length (ls)
     (if ls
-	(iadd 1 (length (cdr ls)))
+	(intrinsic:iadd 1 (length (cdr ls)))
       0))
 
   (defmacro lambda (arg* . body)
@@ -140,9 +140,13 @@
 	   (progn @(cdar arm*))
 	   (cond @(cdr arm*)))))
 
+  (defmacro export sym*
+    `(progn
+       @(mapcar-1 (lambda (sym)
+  		    `(intrinsic:export ~sym))
+  		  sym*)))
 
-  (intrinsic:export let)
-  (intrinsic:export +)
+  (export length + let mapcar-1 when)
 
   (defmacro + arg*
     (cond
@@ -158,3 +162,20 @@
 
 (std:let ((a 1) (b 2) (c 3))
   (std:+ a b c))
+
+(use-package std
+
+  (defun repeat (n x)
+    (when (gt n 0)
+      (cons x
+	    (repeat (isub n 1) x))))
+
+  (defun repeat-of (n f)
+    (when (gt n 0)
+      (cons (f)
+	    (repeat-of (isub n 1) f))))
+
+  (idiv (length (repeat-of (imul 256 1024)
+			   (lambda ()
+			     "hello, world")))
+	1024))
