@@ -148,6 +148,40 @@ void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mas
   printf("} ");
 }
 
+static
+void formatString(char const *cstr)
+{
+  printf("\"");
+  for (; *cstr; cstr++) {
+    switch (*cstr) {
+    case '\\':
+      printf("\\\\");
+      break;
+
+    case '\n':
+      printf("\\n");
+      break;
+
+    case '\r':
+      printf("\\r");
+      break;
+
+    case '\t':
+      printf("\\t");
+      break;
+
+    case '"':
+      printf("\\\"");
+      break;
+
+    default:
+      printf("%c", *cstr);
+      break;
+    }
+  }
+  printf("\"");
+}
+
 void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 {
   rtl_Word const *ptr;
@@ -194,6 +228,10 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     }
     break;
 
+  case RTL_STRING:
+    formatString(rtl_reifyString(M, w, &len));
+    break;
+
   default:
     rtl_formatExprShallow(w);
     break;
@@ -236,6 +274,17 @@ uint8_t *rtl_disasm(uint8_t *bc)
   case RTL_OP_CONST_TOP:
     printf("   top\n");
     return bc + 1;
+
+  case RTL_OP_STRING:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   string %d ", (int)literal);
+    formatString((char const *)bc + 5);
+    printf("\n");
+    return bc + 5 + strlen((char const *)bc + 5) + 1;
 
   case RTL_OP_CONS:
     printf("   cons\n");

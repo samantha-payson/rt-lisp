@@ -25,6 +25,7 @@ typedef enum rtl_Opcode {
   RTL_OP_CONST,
   RTL_OP_CONST_NIL,
   RTL_OP_CONST_TOP,
+  RTL_OP_STRING,
 
   // Basic list operations
   RTL_OP_CONS,

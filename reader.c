@@ -175,10 +175,64 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
     break;
   }
 
-
   rtl_popWorkingSet(C->M);
 
   return w;
+}
+
+static
+rtl_Word readString(rtl_Compiler *C, FILE *f)
+{
+  int ch;
+
+  char buf[2048];
+  int  idx;
+
+  for (ch = fgetc(f), idx = 0;
+       ch != '"' && ch != EOF && idx < 2048;
+       ch = fgetc(f), idx++)
+  {
+    if (ch == '\\') {
+      switch ((ch = fgetc(f))) {
+      case '\\':
+	ch = '\\';
+	break;
+
+      case 'n':
+	ch = '\n';
+	break;
+
+      case 'r':
+	ch = '\r';
+	break;
+
+      case 't':
+	ch = '\t';
+	break;
+
+      case '"':
+	ch = '"';
+	break;
+
+      default:
+	printf(" !!! BAD ESCAPE '%c' (%02X) IN STRING !!!", ch, (unsigned)ch);
+	break;
+      }
+    }
+
+    buf[idx] = ch;
+  }
+
+  if (idx == 2048) {
+    buf[32] = '\0';
+    printf(" READ ERROR: String longer than 2048 characters,"
+	   " beginning with \"%s...\n", buf);
+    abort();
+  }
+
+  buf[idx] = '\0';
+
+  return rtl_string(C->M, buf);
 }
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
@@ -240,8 +294,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     break;
 
   case '"':
-    printf("\n   !!! RTL CAN'T READ STRINGS YET !!!\n\n");
-    abort();
+    w = readString(C, f);
+    break;
 
   case '\'':
     w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"),

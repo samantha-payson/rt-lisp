@@ -242,7 +242,13 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     break;
 
   case RTL_STRING:
-    // TODO: Implement strings.
+    rtl_reifyString(M, w, &len);
+    for (i = 0; i < len / sizeof(rtl_Word) + 2; i++) {
+      if (rtl_bmpSetBit(gen->marks, wOffs + i, true)) {
+	// If any one bit is set, then all of them are.
+	break;
+      }
+    }
     break;
 
   case RTL_MAP:
@@ -503,7 +509,42 @@ rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
   return ptr + 1;
 }
 
+rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
+{
+  return rtl_stringWithLen(M, cstr, strlen(cstr));
+}
 
+rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t sLen)
+{
+  rtl_Word w;
+
+  size_t   wLen;
+
+  rtl_Word *wBacking;
+
+  char     *cBacking;
+
+
+  wLen = sLen / sizeof(rtl_Word) + 2;
+
+  wBacking    = rtl_allocGC(M, RTL_STRING, &w, wLen);
+  wBacking[0] = rtl_header(sLen);
+  cBacking    = (char *)(wBacking + 1);
+
+  strcpy(cBacking, cstr);
+
+  return w;
+}
+
+char const *rtl_reifyString(rtl_Machine *M, rtl_Word str, size_t *len)
+{
+  rtl_Word const *wPtr;
+
+  wPtr = __rtl_reifyPtr(M, str);
+  *len = rtl_headerValue(wPtr[0]);
+
+  return (char const *)(wPtr + 1);
+}
 
 uint32_t mask32(unsigned k) {
   return (1 << k) - 1;
@@ -1086,6 +1127,16 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
     case RTL_OP_CONST_TOP:
       VPUSH(RTL_TOP);
+      break;
+
+    case RTL_OP_STRING:
+      // Here, literal is actually just a 32-bit integer
+      M->pc = readWord(M->pc, &literal);
+
+      a      = rtl_stringWithLen(M, (char const *)M->pc, literal);
+      M->pc += literal + 1;
+
+      VPUSH(a);
       break;
 
     case RTL_OP_CONS:
@@ -1735,6 +1786,14 @@ rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
   rtl_emitByteToPage(M, pageID, (w >> 24) & 0xFF);
 
   return addr;
+}
+
+void rtl_emitStringToPage(rtl_Machine *M, uint16_t pageID, char const *cstr)
+{
+  for (; *cstr != '\0'; cstr++) {
+    rtl_emitByteToPage(M, pageID, *cstr);
+  }
+  rtl_emitByteToPage(M, pageID, '\0');
 }
 
 rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)

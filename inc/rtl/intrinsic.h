@@ -18,6 +18,7 @@
 #endif
 
 #include <stdlib.h>
+#include <string.h>
 
 typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_CONS,
@@ -53,6 +54,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_NEQ,
   RTL_INTRINSIC_ISO,
   RTL_INTRINSIC_TYPE_PRED,
+  RTL_INTRINSIC_STRING,
   RTL_INTRINSIC_CONSTANT,
 } rtl_IntrinsicType;
 
@@ -152,6 +154,11 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **body;
       size_t        bodyLen;
     } defun, defmacro;
+
+    struct {
+      char const *str;
+      size_t     strLen;
+    } string;
 
     rtl_Word export;
 
@@ -582,6 +589,28 @@ rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
 	.test  = test,
 	.then  = then,
 	._else = _else,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkStringIntrinsic(rtl_Machine *M, rtl_Word str)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+  char const    *cstr;
+  size_t        len;
+
+  cstr = rtl_reifyString(M, str, &len);
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_STRING,
+    .as = {
+      .string = {
+	.str    = strdup(cstr),
+	.strLen = len,
       },
     },
   };

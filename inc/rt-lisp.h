@@ -55,7 +55,8 @@ typedef enum rtl_WordType {
   //                the tuple.
   //
   //    RTL_STRING: an unsigned 28-bit integer encoding the number of (ASCII)
-  //                characters in the string, including a null terminator byte.
+  //                characters in the string, excluding null terminator byte (in
+  //                other words, the result of calling strlen).
   //
   //    RTL_MAP: a 28-bit bitmap, indicating the number of key/value pairs in
   //            this level of the HAMT.
@@ -243,6 +244,9 @@ rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
 // Returns the address of that word.
 rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
 
+// Add a string at the end of the PageID'th page, with null terminator.
+void rtl_emitStringToPage(rtl_Machine *M, uint16_t pageID, char const *cstr);
+
 rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID);
 
 // Create a new empty page and return its ID.
@@ -325,7 +329,7 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/int28.h"
 #include "rtl/fix14.h"
 #include "rtl/tuple.h"
-// #include "rtl/string.h"
+#include "rtl/string.h"
 #include "rtl/map.h"
 #include "rtl/cons.h"
 #include "rtl/addr.h"

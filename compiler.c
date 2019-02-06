@@ -1058,6 +1058,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   case RTL_SYMBOL:
     return rtl_mkVarIntrinsic(sxp);
 
+  case RTL_STRING:
+    return rtl_mkStringIntrinsic(C->M, sxp);
+
   case RTL_SELECTOR:
   case RTL_INT28:
   case RTL_NIL:
@@ -1282,6 +1285,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
   case RTL_INTRINSIC_EXPORT:
   case RTL_INTRINSIC_QUOTE:
+  case RTL_INTRINSIC_STRING:
   case RTL_INTRINSIC_CONSTANT:
     break;
   }
@@ -1741,6 +1745,12 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitIntrinsicCode(C, pageID, x->as._if._else);
 
     writeWordAtAddr(C->M, addr1, rtl_nextAddrInPage(C->M, pageID));
+    break;
+
+  case RTL_INTRINSIC_STRING:
+    rtl_emitByteToPage(C->M, pageID, RTL_OP_STRING);
+    rtl_emitWordToPage(C->M, pageID, x->as.string.strLen);
+    rtl_emitStringToPage(C->M, pageID, x->as.string.str);
     break;
 
   case RTL_INTRINSIC_CONSTANT:
