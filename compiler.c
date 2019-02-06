@@ -1548,6 +1548,14 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+
+    printf("  _____\n");
+    printf(" | Compiled %d-ary lambda to page %d |\n",
+	   (int)x->as.lambda.argNamesLen,
+	   (int)newPageID);
+    printf("       ------------");
+    rtl_disasmPage(C->M, newPageID);
+
     break;
 
   case RTL_INTRINSIC_DEFUN:
