@@ -1109,7 +1109,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
     /* printf("\n"); */
 
-    // rtl_disasm(M->pc);
+    /* rtl_disasm(M->pc); */
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
@@ -1385,8 +1385,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	}
 
 	wptr      = rtl_allocTuple(M, &b, len + 1);
-	wptr[0] = a;
-	memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
+	wptr[len] = a;
+	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
 	if (unlikely(M->rStackLen == M->rStackCap)) {
 	  M->rStackCap = M->rStackCap*2;
@@ -1485,8 +1485,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	}
 
 	wptr      = rtl_allocTuple(M, &b, len + 1);
-	wptr[0] = a;
-	memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
+	wptr[len] = a;
+	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
 	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
 	  .pc  = M->pc,
@@ -1523,6 +1523,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
     case RTL_OP_RETURN:
       if (M->rStackLen == 0) {
+	M->env = RTL_NIL;
+
 	// If the return stack is empty, return means exit the interpreter.
 	goto interp_cleanup;
       }
@@ -1538,7 +1540,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       M->pc = readShort(M->pc, &idx);
 
       rptr = rtl_reifyTuple(M, M->env, &len);
-      rptr = rtl_reifyTuple(M, rptr[0], &len);
+      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
       assert(0 <= idx && idx <= len);
 
       a = RTL_NIL;
@@ -1553,7 +1555,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       rptr = rtl_reifyTuple(M, M->env, &len);
       wptr = rtl_allocTuple(M, &c, len);
       memcpy(wptr, rptr, sizeof(rtl_Word)*len);
-      wptr[0] = b;
+      wptr[len - 1] = b;
 
       M->env = c;
 
