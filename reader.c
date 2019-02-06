@@ -132,15 +132,18 @@ int rtl_readDelim(rtl_Compiler *C, FILE *f, int delim)
 static
 rtl_Word readList(rtl_Compiler *C, FILE *f)
 {
-  int ch, n;
-  rtl_Word w;
+  int ch;
+  rtl_Word w = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(C->M, &w);
 
   eatWhitespace(f);
   ch = fgetc(f);
 
   switch (ch) {
   case ')':
-    return RTL_NIL;
+    w = RTL_NIL;
+    break;
 
   case '.':
     // TODO: make this code selector-friendly
@@ -150,42 +153,52 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
       eatWhitespace(f);
       ch = fgetc(f);
       assert(ch == ')');
-      return w;
+
     } else {
       ungetc(ch, f);
       w = rtl_readAtom(C, f, '.');
-      return rtl_cons(C->M, w, readList(C, f));
-    }
+      w = rtl_cons(C->M, w, readList(C, f));
+
+    } break;
 
   default:
+    if (ch == EOF) {
+      printf("\n   !!! EOF WHILE READING LIST EXPRESSION  { .delim ')' }\n\n");
+      abort();
+    }
+
     ungetc(ch, f);
     w = rtl_read(C, f);
-    return rtl_cons(C->M,
-		    w,
-		    readList(C, f));
+    w = rtl_cons(C->M,
+		 w,
+		 readList(C, f));
+    break;
   }
 
-  if (ch == EOF) {
-    printf("\n   !!! EOF WHILE READING LIST EXPRESSION  { .delim ')' }\n\n");
-    abort();
-  }
 
-  return n;
+  rtl_popWorkingSet(C->M);
+
+  return w;
 }
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 {
-  int ch, n, i;
-  rtl_Word w, *ptr;
+  int      ch,
+           n,
+           i;
+
+  rtl_Word w,
+           *ptr;
 
   eatWhitespace(f);
 
   ch = fgetc(f);
   switch (ch) {
   case EOF:
-    return rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
-		    rtl_cons(C->M, rtl_intern("std", "EOF"),
-			     RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
+		 rtl_cons(C->M, rtl_intern("std", "EOF"),
+			  RTL_NIL));
+    break;
 
   case ')':
   case '}':
@@ -194,7 +207,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     abort();
 
   case '(':
-    return readList(C, f);
+    w = readList(C, f);
+    break;
 
   case '{': {
     RTL_PUSH_WORKING_SET(C->M, &w);
@@ -216,41 +230,47 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 
     rtl_popWorkingSet(C->M);
 
-  } return w;
+  } break;
 
   case '[':
     n   = rtl_readDelim(C, f, ']');
     ptr = rtl_allocTuple(C->M, &w, n);
     memcpy(ptr, C->M->vStack + C->M->vStackLen - n, sizeof(rtl_Word)*n);
     C->M->vStackLen -= n;
-    return w;
+    break;
 
   case '"':
     printf("\n   !!! RTL CAN'T READ STRINGS YET !!!\n\n");
     abort();
 
   case '\'':
-    return rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
-		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
+		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    break;
 
   case '`':
-    return rtl_cons(C->M, rtl_intern("std", "semiquote"),
-		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("std", "semiquote"),
+		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    break;
 
   case '~':
-    return rtl_cons(C->M, rtl_intern("std", "escape"),
-		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("std", "escape"),
+		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    break;
 
   case '@':
-    return rtl_cons(C->M, rtl_intern("std", "splice"),
-		    rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("std", "splice"),
+		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    break;
 
   default:
     if (isgraph(ch)) {
-      return rtl_readAtom(C, f, ch);
+      w = rtl_readAtom(C, f, ch);
+    } else {
+      printf("Got bad character %X '%c'.\n", (unsigned int)ch, (char)ch);
+      abort();
     }
   }
 
-  printf("Got bad character %X '%c'.\n", (unsigned int)ch, (char)ch);
-  abort();
+  return w;
 }

@@ -311,6 +311,7 @@ int rtl_isPtr(rtl_Word w) {
   case RTL_STRING:
   case RTL_MAP:
   case RTL_CONS:
+  case RTL_CLOSURE:
     return 1;
 
   default:

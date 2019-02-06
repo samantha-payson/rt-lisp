@@ -562,7 +562,7 @@ void rtl_compile(rtl_Compiler *C,
 
   ensureSymCache(C);
 
-  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &tail, &out);
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &alias, &tail, &out);
 
   switch (rtl_typeOf(in)) {
   case RTL_CONS:

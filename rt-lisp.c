@@ -249,6 +249,18 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     markMap(M, gen, w, 1);
     break;
 
+  case RTL_CLOSURE:
+    fields = __rtl_reifyPtr(M, w);
+
+    if (!rtl_bmpSetBit(gen->marks, wOffs, true)) {
+      markWord(M, gen, fields[0]);
+    }
+
+    if (!rtl_bmpSetBit(gen->marks, wOffs + 1, true)) {
+      markWord(M, gen, fields[1]);
+    }
+    break;
+
   case RTL_CONS:
     fields = rtl_reifyCons(M, w);
 
@@ -256,10 +268,13 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     if (!rtl_bmpSetBit(gen->marks, wOffs, true)) {
       markWord(M, gen, fields[0]);
     }
+
     if (!rtl_bmpSetBit(gen->marks, wOffs + 1, true)) {
       markWord(M, gen, fields[1]);
     }
+
     break;
+
   }
 }
 
@@ -1321,6 +1336,11 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	wptr      = rtl_allocTuple(M, &b, len + 1);
 	wptr[0] = a;
 	memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
+
+	if (unlikely(M->rStackLen == M->rStackCap)) {
+	  M->rStackCap = M->rStackCap*2;
+	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	}
 
 	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
 	  .pc  = M->pc,
