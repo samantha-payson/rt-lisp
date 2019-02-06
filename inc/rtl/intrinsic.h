@@ -63,6 +63,9 @@ typedef struct rtl_Intrinsic rtl_Intrinsic;
 struct rtl_Intrinsic {
   rtl_IntrinsicType type;
 
+  // How many bytes does this intrinsic take up after encoding?
+  size_t codeSize;
+
   union {
     struct {
       rtl_Intrinsic *car,

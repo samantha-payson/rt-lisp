@@ -544,6 +544,9 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
   return out;
 }
 
+static
+size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x);
+
 void rtl_compile(rtl_Compiler *C,
 		 rtl_NameSpace const *ns,
 		 uint16_t pageID,
@@ -626,8 +629,14 @@ void rtl_compile(rtl_Compiler *C,
     break;
   }
 
+  printf("Generating intrinsics for: ");
+  rtl_formatExpr(C->M, out);
+  printf("\n");
+
+
   ir = rtl_exprToIntrinsic(C, out);
   ir = rtl_transformIntrinsic(ir);
+  annotateCodeSize(C->M, ir);
   rtl_emitIntrinsicCode(C, pageID, ir);
 
   rtl_popWorkingSet(C->M);
@@ -638,9 +647,11 @@ rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
 			      rtl_Word      map,
 			      uint32_t      mask)
 {
-  rtl_Word const *rptr, *entry;
-  size_t   len,
-           i;
+  rtl_Word const *rptr,
+                 *entry;
+
+  size_t         len,
+                 i;
 
   rptr = __rtl_reifyPtr(C->M, map);
   len  = __builtin_popcount(mask);
@@ -684,10 +695,6 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   argNamesCap = argNamesLen = 0;
 
   hasRestArg = false;
-
-  printf("Generating intrinsics for: ");
-  rtl_formatExpr(C->M, sxp);
-  printf("\n");
 
   switch (rtl_typeOf(sxp)) {
   case RTL_TUPLE:
@@ -1118,10 +1125,9 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 {
   rtl_Word      nameTmp;
   rtl_Intrinsic **argsTmp;
-  size_t        argsLenTmp;
+  size_t        argsLenTmp,
+                i;
   Environment   newEnv;
-
-  size_t i;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -1139,7 +1145,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
   case RTL_INTRINSIC_TUPLE:
     for (i = 0; i < x->as.tuple.elemsLen; i++) {
-      x->as.tuple.elems[i] = __impl_transformIntrinsic(env, x->as.tuple.elems[i]);
+      x->as.tuple.elems[i]  = __impl_transformIntrinsic(env, x->as.tuple.elems[i]);
     } break;
 
   case RTL_INTRINSIC_LEN:
@@ -1166,16 +1172,21 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     if ((!env ||
 	 !lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))) {
       x->as.var.global = true;
-    } // If lookupVar returned true, then frame and idx were set.
+    }
+
+    x->codeSize = 5;
     break;
 
   case RTL_INTRINSIC_NAMED_CALL:
     abort(); // This should never happen
 
   case RTL_INTRINSIC_CALL:
+    x->codeSize = 0;
+
     // Start by transforming all of the args
     for (i = 0; i < x->as.call.argsLen; i++) {
-      x->as.call.args[i] = __impl_transformIntrinsic(env, x->as.call.args[i]);
+      x->as.call.args[i]  = __impl_transformIntrinsic(env, x->as.call.args[i]);
+      x->codeSize        += x->as.call.args[i]->codeSize;
     }
 
     // Then check if this is a named-call (i.e. a call of a global function
@@ -1296,6 +1307,268 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x) {
   return __impl_transformIntrinsic(NULL, x);
 }
+
+static
+size_t quoteCodeSize(rtl_Machine *M, rtl_Word x);
+
+static
+size_t quoteMapCodeSize(rtl_Machine *M, rtl_Word x, uint32_t mask)
+{
+  rtl_Word const *rptr, *entry;
+  size_t   len,
+           i,
+           codeSize;
+
+  rptr     = __rtl_reifyPtr(M, x);
+  len      = __builtin_popcount(mask);
+  codeSize = 0;
+
+  for (i = 0; i < len; i++) {
+    entry = rptr + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      codeSize += quoteMapCodeSize(M, entry[1], rtl_headerValue(entry[0]));
+    } else {
+      codeSize += quoteCodeSize(M, entry[0])
+	        + quoteCodeSize(M, entry[1])
+		+ 1;
+    }
+  }
+
+  return codeSize;
+}
+
+static
+size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
+{
+  rtl_Word const *rptr;
+  size_t i, len, codeSize;
+
+  switch (rtl_typeOf(x)) {
+  case RTL_NIL:
+  case RTL_TOP:
+    return 1;
+
+  case RTL_SYMBOL:
+  case RTL_SELECTOR:
+  case RTL_INT28:
+  case RTL_FIX14:
+    return 5;
+
+  case RTL_CONS:
+    return quoteCodeSize(M, rtl_car(M, x))
+         + quoteCodeSize(M, rtl_cdr(M, x))
+         + 1;
+
+  case RTL_MAP:
+    if (rtl_isEmptyMap(x)) {
+      return 1;
+    }
+
+    return 1 + quoteMapCodeSize(M, x, 1);
+
+  case RTL_TUPLE:
+    codeSize = 0;
+    rptr = rtl_reifyTuple(M, x, &len);
+
+    for (i = 0; i < len; i++) {
+      codeSize += quoteCodeSize(M, rptr[i]);
+    }
+
+    return codeSize + 3;
+
+  default:
+    printf("Can't quote object of type '%s' ... yet?\n",
+	   rtl_typeNameOf(x));
+    abort();
+  }
+}
+
+static
+size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
+{
+  size_t i,
+         thenSize,
+         elseSize,
+         thenJmpBytes,
+         elseJmpBytes;
+
+  switch (x->type) {
+  case RTL_INTRINSIC_CONS:
+    return x->codeSize = annotateCodeSize(M, x->as.cons.car)
+                       + annotateCodeSize(M, x->as.cons.cdr)
+                       + 1;
+
+  case RTL_INTRINSIC_CAR:
+    return x->codeSize = annotateCodeSize(M, x->as.car.arg)
+                       + 1;
+
+  case RTL_INTRINSIC_CDR:
+    return x->codeSize = annotateCodeSize(M, x->as.cdr.arg)
+                       + 1;
+
+  case RTL_INTRINSIC_TUPLE:
+    x->codeSize = 1;
+    for (i = 0; i < x->as.tuple.elemsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.tuple.elems[i]);
+    }
+
+    return x->codeSize;
+
+  case RTL_INTRINSIC_LEN:
+    return x->codeSize = annotateCodeSize(M, x->as.len.tuple)
+                       + 1;
+
+  case RTL_INTRINSIC_INSERT:
+    return x->codeSize = annotateCodeSize(M, x->as.insert.map)
+                       + annotateCodeSize(M, x->as.insert.key)
+                       + annotateCodeSize(M, x->as.insert.val)
+                       + 1;
+
+  case RTL_INTRINSIC_LOOKUP:
+    return x->codeSize = annotateCodeSize(M, x->as.lookup.map)
+                       + annotateCodeSize(M, x->as.lookup.key)
+                       + 1;
+
+  case RTL_INTRINSIC_GET:
+    return x->codeSize = annotateCodeSize(M, x->as.get.tuple)
+                       + annotateCodeSize(M, x->as.get.index)
+                       + 1;
+
+  case RTL_INTRINSIC_VAR:
+    // Instruction is one of:
+    //
+    //    undef-var <u32>
+    //    const     <u32>
+    //    var       <u16> <u16>
+    //
+    // All cases are 5 bytes
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_NAMED_CALL:
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_CALL:
+    x->codeSize = 3;
+    for (i = 0; i < x->as.call.argsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.call.args[i]);
+    }
+    return x->codeSize;
+
+  case RTL_INTRINSIC_APPLY_LIST:
+    return x->codeSize = annotateCodeSize(M, x->as.applyList.fn)
+                       + annotateCodeSize(M, x->as.applyList.arg)
+                       + 1;
+
+  case RTL_INTRINSIC_APPLY_TUPLE:
+    return x->codeSize = annotateCodeSize(M, x->as.applyTuple.fn)
+                       + annotateCodeSize(M, x->as.applyTuple.arg)
+                       + 1;
+
+  case RTL_INTRINSIC_PROGN:
+    if (x->as.progn.formsLen == 0) {
+      return x->codeSize = 1;
+    }
+
+    x->codeSize = 0;
+    for (i = 0; i < x->as.progn.formsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.progn.forms[i]);
+      if (i + 1 < x->as.progn.formsLen) {
+	x->codeSize++;
+      }
+    }
+    return x->codeSize;
+
+  case RTL_INTRINSIC_LAMBDA:
+    for (i = 0; i < x->as.lambda.bodyLen; i++) {
+      annotateCodeSize(M, x->as.lambda.body[i]);
+    }
+
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_DEFUN:
+    for (i = 0; i < x->as.defun.bodyLen; i++) {
+      annotateCodeSize(M, x->as.defun.body[i]);
+    }
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_DEFMACRO:
+    for (i = 0; i < x->as.defmacro.bodyLen; i++) {
+      annotateCodeSize(M, x->as.defmacro.body[i]);
+    }
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_EXPORT:
+    return x->codeSize = 1;
+
+  case RTL_INTRINSIC_QUOTE:
+    return x->codeSize = quoteCodeSize(M, x->as.quote);
+
+  case RTL_INTRINSIC_IADD:
+  case RTL_INTRINSIC_ISUB:
+  case RTL_INTRINSIC_IMUL:
+  case RTL_INTRINSIC_IDIV:
+  case RTL_INTRINSIC_IMOD:
+  case RTL_INTRINSIC_LT:
+  case RTL_INTRINSIC_LEQ:
+  case RTL_INTRINSIC_GT:
+  case RTL_INTRINSIC_GEQ:
+  case RTL_INTRINSIC_EQ:
+  case RTL_INTRINSIC_NEQ:
+  case RTL_INTRINSIC_ISO:
+    return x->codeSize = annotateCodeSize(M, x->as.binop.leftArg)
+                       + annotateCodeSize(M, x->as.binop.rightArg)
+                       + 1;
+
+  case RTL_INTRINSIC_TYPE_PRED:
+    return x->codeSize = annotateCodeSize(M, x->as.typePred.arg)
+                       + 1;
+
+  case RTL_INTRINSIC_IF:
+    thenSize = annotateCodeSize(M, x->as._if.then);
+    elseSize = annotateCodeSize(M, x->as._if._else);
+
+    if (thenSize + 5 < (1 << 8)) {
+      thenJmpBytes = 1;
+    } else if (thenSize + 5 < (1 << 16)) {
+      thenJmpBytes = 2;
+    } else {
+      thenJmpBytes = 4;
+    }
+
+    if (elseSize < (1 << 8)) {
+      elseJmpBytes = 1;
+    } else if (elseSize < (1 << 16)) {
+      elseJmpBytes = 2;
+    } else {
+      elseJmpBytes = 4;
+    }
+
+    return annotateCodeSize(M, x->as._if.test)
+         + thenSize
+         + thenJmpBytes + 1
+         + elseSize
+         + elseJmpBytes + 1;
+
+  case RTL_INTRINSIC_STRING:
+    return 5 + strlen(x->as.string.str) + 1;
+
+  case RTL_INTRINSIC_CONSTANT:
+    switch (x->as.constant) {
+    case RTL_NIL:
+    case RTL_TOP:
+    case RTL_MAP:
+      return 1;
+
+    default:
+      return 5;
+    }
+
+  default:
+    abort(); // unreachable
+  }
+}
+
 
 static
 void writeWordAtAddr(rtl_Machine *M, rtl_Word addr, rtl_Word w)
@@ -1603,20 +1876,20 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     // TODO: We're not using the argnames at all.. we should probably check
     // arity when resolving call sites.
 
-    for (i = 0; i < x->as.defun.bodyLen; i++) {
-      rtl_emitIntrinsicCode(C, newPageID, x->as.defun.body[i]);
+    for (i = 0; i < x->as.defmacro.bodyLen; i++) {
+      rtl_emitIntrinsicCode(C, newPageID, x->as.defmacro.body[i]);
 
       // Ignore the result of all but the last expression.
-      if (i + 1 < x->as.defun.bodyLen)
+      if (i + 1 < x->as.defmacro.bodyLen)
 	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
     }
 
     rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
 
-    rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), true);
+    rtl_defineFn(C, x->as.defmacro.name, rtl_addr(newPageID, 0), true);
 
     rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-    rtl_emitWordToPage(C->M, pageID, x->as.defun.name);
+    rtl_emitWordToPage(C->M, pageID, x->as.defmacro.name);
     break;
 
   case RTL_INTRINSIC_EXPORT:
