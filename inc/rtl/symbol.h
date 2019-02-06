@@ -24,6 +24,8 @@ char const *rtl_symbolName(rtl_Word w);
 
 char const *rtl_symbolPackageName(rtl_Word w);
 
+char const *rtl_unresolvedSymbolName(rtl_Word w);
+
 static inline
 uint32_t rtl_symbolID(rtl_Word w)
 {

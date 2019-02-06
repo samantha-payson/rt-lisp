@@ -34,7 +34,7 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_UNRESOLVED_SYMBOL:
-    printf("<unres-sym>");
+    printf("unres:%s", rtl_unresolvedSymbolName(w));
     break;
 
   case RTL_UNRESOLVED_SELECTOR:

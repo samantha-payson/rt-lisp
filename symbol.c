@@ -491,6 +491,19 @@ char const *rtl_symbolName(rtl_Word w)
   return sym->name;
 }
 
+char const *rtl_unresolvedSymbolName(rtl_Word w)
+{
+  uint32_t               id;
+  UnresolvedSymbol const *usym;
+
+  id = rtl_symbolID(w);
+  assert(id < unresNextID);
+
+  usym = unresByID[id];
+
+  return usym->name;
+}
+
 char const *rtl_symbolPackageName(rtl_Word w) {
   uint32_t      id;
   Symbol const  *sym;
