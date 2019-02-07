@@ -61,8 +61,12 @@ typedef enum rtl_Opcode {
   RTL_OP_NOT,
 
   // Control flow operations
-  RTL_OP_JMP,
-  RTL_OP_CJMP,
+  RTL_OP_JMP8,
+  RTL_OP_JMP16,
+  RTL_OP_JMP32,
+  RTL_OP_CJMP8,
+  RTL_OP_CJMP16,
+  RTL_OP_CJMP32,
   RTL_OP_CALL,
   RTL_OP_STATIC_CALL,
   RTL_OP_APPLY_LIST,

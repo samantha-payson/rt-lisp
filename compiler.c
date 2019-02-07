@@ -633,7 +633,6 @@ void rtl_compile(rtl_Compiler *C,
   rtl_formatExpr(C->M, out);
   printf("\n");
 
-
   ir = rtl_exprToIntrinsic(C, out);
   ir = rtl_transformIntrinsic(ir);
   annotateCodeSize(C->M, ir);
@@ -1408,7 +1407,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
                        + 1;
 
   case RTL_INTRINSIC_TUPLE:
-    x->codeSize = 1;
+    x->codeSize = 3;
     for (i = 0; i < x->as.tuple.elemsLen; i++) {
       x->codeSize += annotateCodeSize(M, x->as.tuple.elems[i]);
     }
@@ -1446,10 +1445,15 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     return x->codeSize = 5;
 
   case RTL_INTRINSIC_NAMED_CALL:
-    return x->codeSize = 5;
+    x->codeSize = 7;
+
+    for (i = 0; i < x->as.namedCall.argsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.namedCall.args[i]);
+    }
+    return x->codeSize;
 
   case RTL_INTRINSIC_CALL:
-    x->codeSize = 3;
+    x->codeSize = 3 + annotateCodeSize(M, x->as.call.fn);
     for (i = 0; i < x->as.call.argsLen; i++) {
       x->codeSize += annotateCodeSize(M, x->as.call.args[i]);
     }
@@ -1477,6 +1481,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
 	x->codeSize++;
       }
     }
+
     return x->codeSize;
 
   case RTL_INTRINSIC_LAMBDA:
@@ -1528,58 +1533,46 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     thenSize = annotateCodeSize(M, x->as._if.then);
     elseSize = annotateCodeSize(M, x->as._if._else);
 
-    if (thenSize + 5 < (1 << 8)) {
+    if (thenSize + 5 < (1 << 7)) {
       thenJmpBytes = 1;
-    } else if (thenSize + 5 < (1 << 16)) {
+    } else if (thenSize + 5 < (1 << 15)) {
       thenJmpBytes = 2;
     } else {
       thenJmpBytes = 4;
     }
 
-    if (elseSize < (1 << 8)) {
+    if (elseSize < (1 << 7)) {
       elseJmpBytes = 1;
-    } else if (elseSize < (1 << 16)) {
+    } else if (elseSize < (1 << 15)) {
       elseJmpBytes = 2;
     } else {
       elseJmpBytes = 4;
     }
 
-    return annotateCodeSize(M, x->as._if.test)
-         + thenSize
-         + thenJmpBytes + 1
-         + elseSize
-         + elseJmpBytes + 1;
+    return x->codeSize = annotateCodeSize(M, x->as._if.test)
+                       + 1
+                       + thenSize
+                       + thenJmpBytes + 1
+                       + elseSize
+                       + elseJmpBytes + 1;
 
   case RTL_INTRINSIC_STRING:
-    return 5 + strlen(x->as.string.str) + 1;
+    return x->codeSize = 5 + strlen(x->as.string.str) + 1;
 
   case RTL_INTRINSIC_CONSTANT:
     switch (x->as.constant) {
     case RTL_NIL:
     case RTL_TOP:
     case RTL_MAP:
-      return 1;
+      return x->codeSize = 1;
 
     default:
-      return 5;
+      return x->codeSize = 5;
     }
 
   default:
     abort(); // unreachable
   }
-}
-
-
-static
-void writeWordAtAddr(rtl_Machine *M, rtl_Word addr, rtl_Word w)
-{
-  uint8_t *ptr;
-  ptr = rtl_resolveAddr(M, addr);
-
-  ptr[0] = (w >>  0) & 0xFF;
-  ptr[1] = (w >>  8) & 0xFF;
-  ptr[2] = (w >> 16) & 0xFF;
-  ptr[3] = (w >> 24) & 0xFF;
 }
 
 static
@@ -1668,8 +1661,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 {
   size_t    i;
   uint16_t  newPageID;
-  rtl_Word  addr0, addr1;
+  rtl_Word  addr;
   rtl_FnDef *fnDef;
+
+  size_t thenJmpBytes,
+         elseJmpBytes;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -1728,16 +1724,16 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       fnDef = rtl_lookupFn(C, x->as.var.name);
 
       if (fnDef != NULL && !fnDef->isMacro) {
-	addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+	addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
 
 	rtl_emitWordToPage(C->M, pageID, fnDef->addr);
       } else {
-	addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_VAR);
+	addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_VAR);
 
 	rtl_emitWordToPage(C->M, pageID, x->as.var.name);
       }
 
-      rtl_registerCallSite(C, x->as.var.name, addr0);
+      rtl_registerCallSite(C, x->as.var.name, addr);
 
     } else {
       rtl_emitByteToPage(C->M, pageID, RTL_OP_VAR);
@@ -1764,18 +1760,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     fnDef = rtl_lookupFn(C, x->as.namedCall.name);
     printf("fnDef: %p\n", fnDef);
     if (fnDef != NULL && !fnDef->isMacro) {
-      addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
+      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
 
       rtl_emitWordToPage(C->M, pageID, fnDef->addr);
       rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
     } else {
-      addr0 = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
+      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
 
       rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
       rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
     }
 
-    rtl_registerCallSite(C, x->as.namedCall.name, addr0);
+    rtl_registerCallSite(C, x->as.namedCall.name, addr);
     break;
 
   case RTL_INTRINSIC_APPLY_LIST:
@@ -2011,21 +2007,62 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     } break;
 
   case RTL_INTRINSIC_IF:
+    if (x->as._if.then->codeSize + 5 < (1 << 7)) {
+      thenJmpBytes = 1;
+    } else if (x->as._if.then->codeSize + 5 < (1 << 15)) {
+      thenJmpBytes = 2;
+    } else {
+      thenJmpBytes = 4;
+    }
+
+    if (x->as._if._else->codeSize + 5 < (1 << 7)) {
+      elseJmpBytes = 1;
+    } else if (x->as._if._else->codeSize + 5 < (1 << 15)) {
+      elseJmpBytes = 2;
+    } else {
+      elseJmpBytes = 4;
+    }
+
     rtl_emitIntrinsicCode(C, pageID, x->as._if.test);
     rtl_emitByteToPage(C->M, pageID, RTL_OP_NOT);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP);
-    addr0 = rtl_emitWordToPage(C->M, pageID, 0);
+    switch (thenJmpBytes) {
+    case 1:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP8);
+      rtl_emitByteToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      break;
+
+    case 2:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP16);
+      rtl_emitShortToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      break;
+
+    case 4:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP32);
+      rtl_emitWordToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      break;
+    }
 
     rtl_emitIntrinsicCode(C, pageID, x->as._if.then);
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP);
-    addr1 = rtl_emitWordToPage(C->M, pageID, 0);
+    switch (elseJmpBytes) {
+    case 1:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP8);
+      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      break;
 
-    writeWordAtAddr(C->M, addr0, rtl_nextAddrInPage(C->M, pageID));
+    case 2:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP16);
+      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      break;
+
+    case 4:
+      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP32);
+      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      break;
+    }
 
     rtl_emitIntrinsicCode(C, pageID, x->as._if._else);
 
-    writeWordAtAddr(C->M, addr1, rtl_nextAddrInPage(C->M, pageID));
     break;
 
   case RTL_INTRINSIC_STRING:

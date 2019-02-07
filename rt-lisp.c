@@ -1065,11 +1065,13 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
 
 rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 {
-  uint8_t opcode;
+  uint8_t opcode, u8;
 
-  uint16_t frame, idx, size;
-  size_t    len;
-  ssize_t   i;
+  uint16_t frame, idx, size, u16;
+  size_t   len;
+  ssize_t  i;
+
+  uint32_t u32;
 
   rtl_Word literal;
 
@@ -1109,7 +1111,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 
     /* printf("\n"); */
 
-    /* rtl_disasm(M->pc); */
+    // rtl_disasm(M->pc);
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
@@ -1301,20 +1303,52 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
       break;
 
-    case RTL_OP_CJMP:
+    case RTL_OP_CJMP8:
       VSTACK_ASSERT_LEN(1);
 
-      M->pc = readWord(M->pc, &literal);
+      u8 = *(M->pc++);
 
       if (rtl_isNil(VPOP())) break;
 
-      M->pc = rtl_resolveAddr(M, literal);
+      M->pc += (int8_t)u8;
       break;
 
-    case RTL_OP_JMP:
-      M->pc = readWord(M->pc, &literal);
+    case RTL_OP_CJMP16:
+      VSTACK_ASSERT_LEN(1);
 
-      M->pc = rtl_resolveAddr(M, literal);
+      M->pc = readShort(M->pc, &u16);
+
+      if (rtl_isNil(VPOP())) break;
+
+      M->pc += (int16_t)u16;
+      break;
+
+    case RTL_OP_CJMP32:
+      VSTACK_ASSERT_LEN(1);
+
+      M->pc = readWord(M->pc, &u32);
+
+      if (rtl_isNil(VPOP())) break;
+
+      M->pc += (int32_t)u32;
+      break;
+
+    case RTL_OP_JMP8:
+      u8     = *(M->pc++);
+
+      M->pc += (int8_t)u8;
+      break;
+
+    case RTL_OP_JMP16:
+      M->pc  = readShort(M->pc, &u16);
+
+      M->pc += (int16_t)u16;
+      break;
+
+    case RTL_OP_JMP32:
+      M->pc  = readWord(M->pc, &u32);
+
+      M->pc += (int32_t)u32;
       break;
 
     case RTL_OP_VAR:

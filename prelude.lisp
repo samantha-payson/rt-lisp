@@ -175,7 +175,6 @@
       (cons (f)
 	    (repeat-of (isub n 1) f))))
 
-  (idiv (length (repeat-of (imul 256 1024)
-			   (lambda ()
-			     "hello, world")))
+  (idiv (length (repeat (imul 256 1024)
+			"Sam!"))
 	1024))
