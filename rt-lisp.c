@@ -231,10 +231,11 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
 
   rtl_Word const *fields;
 
-  wOffs = __rtl_ptrOffs(w);
-
   // Don't bother with pointers into other generations.
-  if (!rtl_isMap(w) && __rtl_ptrGen(w) != gen->nbr) return;
+  if (!rtl_isMap(w) && __rtl_ptrGen(w) != gen->nbr)
+    return;
+
+  wOffs = __rtl_ptrOffs(w);
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
