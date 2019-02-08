@@ -603,16 +603,21 @@ static inline
 rtl_Intrinsic *rtl_mkStringIntrinsic(rtl_Machine *M, rtl_Word str)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-  char const    *cstr;
-  size_t        len;
+  char          *strBuf;
+  size_t        len, cap;
 
-  cstr = rtl_reifyString(M, str, &len);
+  cap = rtl_stringLength(M, str) + 1;
+  strBuf = malloc(cap);
+
+  rtl_reifyString(M, str, strBuf, cap, &len);
+
+  assert(len + 1 == cap);
 
   *intr = (rtl_Intrinsic) {
     .type = RTL_INTRINSIC_STRING,
     .as = {
       .string = {
-	.str    = strdup(cstr),
+	.str    = strBuf,
 	.strLen = len,
       },
     },

@@ -18,10 +18,12 @@
 #endif
 
 static inline
-bool rtl_isString(rtl_Word w) { return rtl_typeOf(w) == RTL_TUPLE; }
+bool rtl_isString(rtl_Word w) { return rtl_typeOf(w) == RTL_STRING; }
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
 
 rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t len);
 
-char const *rtl_reifyString(rtl_Machine *M, rtl_Word str, size_t *len);
+void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *len);
+
+size_t rtl_stringLength(rtl_Machine *M, rtl_Word str);

@@ -252,8 +252,8 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     break;
 
   case RTL_STRING:
-    rtl_reifyString(M, w, &len);
-    for (i = 0; i < len / sizeof(rtl_Word) + 2; i++) {
+    len = rtl_stringLength(M, w);
+    for (i = 0; i < len / 3 + 2; i++) {
       if (rtl_bmpSetBit(gen->marks, wOffs + i, true)) {
 	// If any one bit is set, then all of them are.
 	break;
@@ -528,31 +528,66 @@ rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t sLen)
 {
   rtl_Word w;
 
-  size_t   wLen;
+  size_t   wLen, i, j;
 
   rtl_Word *wBacking;
 
-  char     *cBacking;
+  wLen = sLen / 3 + 1;
 
-  wLen = sLen / sizeof(rtl_Word) + 2;
-
-  wBacking    = rtl_allocGC(M, RTL_STRING, &w, wLen);
+  wBacking    = rtl_allocGC(M, RTL_STRING, &w, wLen + 1);
   wBacking[0] = rtl_header(sLen);
-  cBacking    = (char *)(wBacking + 1);
 
-  strcpy(cBacking, cstr);
+  for (i = 0; i < wLen; i++) {
+    j = i*3;
+    if (cstr[j] == '\0') {
+      wBacking[i + 1] = RTL_HEADER;
+    } else if (cstr[j + 1] == '\0') {
+      wBacking[i + 1] = ((uint32_t)cstr[j] << 8)
+	              | RTL_HEADER;
+    } else {
+      wBacking[i + 1] = ((uint32_t)cstr[j + 2] << 24)
+	              | ((uint32_t)cstr[j + 1] << 16)
+	              | ((uint32_t)cstr[j + 0] <<  8)
+	              | RTL_HEADER;
+    }
+  }
 
   return w;
 }
 
-char const *rtl_reifyString(rtl_Machine *M, rtl_Word str, size_t *len)
+size_t rtl_stringLength(rtl_Machine *M, rtl_Word str)
 {
   rtl_Word const *wPtr;
 
   wPtr = __rtl_reifyPtr(M, str);
-  *len = rtl_headerValue(wPtr[0]);
 
-  return (char const *)(wPtr + 1);
+  return rtl_headerValue(wPtr[0]);
+}
+
+void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *len)
+{
+  rtl_Word const *wPtr;
+  size_t wLen, i, j, idx;
+
+  wPtr = __rtl_reifyPtr(M, str);
+  wLen = rtl_headerValue(wPtr[0]) / 3 + 1;
+
+  for (i = 0; i < wLen; i++) {
+    for (j = 0; j < 3; j++) {
+      idx = i*3 + j;
+
+      buf[idx] = (char)(0xFF & (wPtr[i + 1] >> (8*(j + 1))));
+
+      if (idx + 1 == cap || buf[idx] == '\0') {
+	buf[idx] = '\0';
+	*len = idx;
+	return;
+      }
+    }
+  }
+
+  abort(); // Unreachable: we should either find a '\0' or hit capacity -- no
+	   // exceptions!
 }
 
 uint32_t mask32(unsigned k) {

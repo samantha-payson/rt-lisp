@@ -175,6 +175,7 @@
       (cons (f)
 	    (repeat-of (isub n 1) f))))
 
-  (idiv (length (repeat (imul 256 1024)
-			"Sam!"))
+  (idiv (length
+	 (repeat (imul 128 1024)
+		 "a b c d e f g h i j k l m n o p q r s t u v w x y z"))
 	1024))

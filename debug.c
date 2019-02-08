@@ -189,6 +189,8 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
   size_t         len,
                  i;
 
+  char strBuf[1024];
+
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
     ptr = rtl_reifyTuple(M, w, &len);
@@ -229,7 +231,8 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     break;
 
   case RTL_STRING:
-    formatString(rtl_reifyString(M, w, &len));
+    rtl_reifyString(M, w, strBuf, 1024, &len);
+    formatString(strBuf);
     break;
 
   default:
