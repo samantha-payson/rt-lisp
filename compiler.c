@@ -50,7 +50,10 @@ rtl_CallSiteArray *getCallSiteArray(rtl_Compiler *C, rtl_Word name)
   return csa;
 }
 
-void rtl_registerCallSite(rtl_Compiler *C, rtl_Word name, rtl_Word siteAddr)
+void rtl_registerCallSite(rtl_Compiler *C,
+			  rtl_Word     name,
+			  rtl_Word     addr,
+			  uint32_t     offs)
 {
   rtl_CallSiteArray *csa;
   uint16_t          pageID;
@@ -62,12 +65,12 @@ void rtl_registerCallSite(rtl_Compiler *C, rtl_Word name, rtl_Word siteAddr)
     csa->sites    = realloc(csa->sites, csa->sitesCap*sizeof(rtl_CallSite));
   }
 
-  pageID = rtl_addrPage(siteAddr);
+  pageID = rtl_addrValue(addr);
 
   csa->sites[csa->sitesLen++] = (rtl_CallSite) {
-    .version = C->M->pages[pageID]->version,
+    .version = C->M->codeBase->pages[pageID]->version,
     .pageID  = pageID,
-    .offs    = rtl_addrOffs(siteAddr),
+    .offs    = offs,
   };
 }
 
@@ -82,7 +85,7 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
   csa = getCallSiteArray(C, name);
   for (r = w = 0; r < csa->sitesLen; r++) {
     site = csa->sites + r;
-    page = C->M->pages[site->pageID];
+    page = C->M->codeBase->pages[site->pageID];
     code = page->code + site->offs;
 
     if (site->version == page->version) {
@@ -117,24 +120,21 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
   csa->sitesLen = w;
 }
 
-void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word addr, bool isMacro)
+void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word fn, bool isMacro)
 {
-  rtl_FnDef *def;
-  size_t    idx;
+  rtl_FnDef    *def;
+  size_t       idx;
+  rtl_CodeBase *codeBase = C->M->codeBase;
 
-  idx = rtl_symbolID(name) % RTL_COMPILER_FN_HASH_SIZE;
+  idx = rtl_symbolID(name) % RTL_CODE_BASE_FN_HASH_SIZE;
 
   if (!isMacro) {
-    rtl_resolveCallSites(C, name, addr);
+    rtl_resolveCallSites(C, name, fn);
   }
 
-  printf("warning: defining '%s:%s' as a %s\n",
-	 rtl_symbolPackageName(name),
-	 rtl_symbolName(name),
-	 isMacro ? "macro" : "function");
-  for (def = C->fnsByName[idx]; def != NULL; def = def->next) {
+  for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
-      def->addr    = addr;
+      def->fn = fn;
 
       if (isMacro && !def->isMacro) {
 	printf("warning: redefining '%s:%s' as a macro (was a function)\n",
@@ -156,11 +156,11 @@ void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word addr, bool isMacro)
   def = malloc(sizeof(rtl_FnDef));
 
   def->name    = name;
-  def->addr    = addr;
+  def->fn      = fn;
   def->isMacro = isMacro;
 
-  def->next         = C->fnsByName[idx];
-  C->fnsByName[idx] = def;
+  def->next                = codeBase->fnsByName[idx];
+  codeBase->fnsByName[idx] = def;
 }
 
 rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
@@ -172,9 +172,9 @@ rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
     return NULL;
   }
 
-  idx = rtl_symbolID(name) % RTL_COMPILER_FN_HASH_SIZE;
+  idx = rtl_symbolID(name) % RTL_CODE_BASE_FN_HASH_SIZE;
 
-  for (def = C->fnsByName[idx]; def != NULL; def = def->next)
+  for (def = C->M->codeBase->fnsByName[idx]; def != NULL; def = def->next)
   {
     if (def->name == name) {
       return def;
@@ -293,7 +293,6 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   C->M = M;
 
   memset(C->callSitesByName, 0, sizeof C->callSitesByName);
-  memset(C->fnsByName,       0, sizeof C->fnsByName);
   memset(C->pkgByID,         0, sizeof C->pkgByID);
 }
 
@@ -516,9 +515,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 	       rtl_symbolName(head),
 	       rtl_typeNameOf(head));
 
-	out = rtl_macroExpand(C, ns, rtl_applyList(C->M,
-						   fnDef->addr,
-						   rtl_cdr(C->M, in)));
+	out = rtl_macroExpand(C, ns,
+			      rtl_applyList(C->M,
+					    fnDef->fn,
+					    rtl_cdr(C->M, in)));
 
      } else {
 	out = rtl_cons(C->M, head, RTL_NIL);
@@ -562,6 +562,8 @@ void rtl_compile(rtl_Compiler *C,
   rtl_NameSpace newNS;
 
   rtl_Intrinsic *ir;
+
+  rtl_CodeBase *codeBase = C->M->codeBase;
 
   ensureSymCache(C);
 
@@ -615,7 +617,7 @@ void rtl_compile(rtl_Compiler *C,
 	rtl_compile(C, ns, pageID, rtl_car(C->M, tail));
 
 	if (rtl_cdr(C->M, tail) != RTL_NIL) {
-	  rtl_emitByteToPage(C->M, pageID, RTL_OP_POP);
+	  rtl_emitByteToPage(codeBase, pageID, RTL_OP_POP);
 	}
       }
 
@@ -1599,7 +1601,7 @@ void emitMapQuoteCode(rtl_Compiler        *C,
     } else {
       emitQuoteCode(C, pageID, entry[0]);
       emitQuoteCode(C, pageID, entry[1]);
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_INSERT);
+      rtl_emitByteToPage(C->M->codeBase, pageID, RTL_OP_INSERT);
     }
   }
 }
@@ -1610,31 +1612,35 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
   rtl_Word const *rptr;
   size_t i, len;
 
+  rtl_CodeBase *codeBase;
+
+  codeBase = C->M->codeBase;
+
   switch (rtl_typeOf(expr)) {
   case RTL_NIL:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_NIL);
     break;
 
   case RTL_SYMBOL:
   case RTL_SELECTOR:
   case RTL_INT28:
   case RTL_FIX14:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-    rtl_emitWordToPage(C->M, pageID, expr);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST);
+    rtl_emitWordToPage(codeBase, pageID, expr);
     break;
 
   case RTL_TOP:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_TOP);
     break;
 
   case RTL_CONS:
     emitQuoteCode(C, pageID, rtl_car(C->M, expr));
     emitQuoteCode(C, pageID, rtl_cdr(C->M, expr));
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONS);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONS);
     break;
 
   case RTL_MAP:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_MAP);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_MAP);
     if (!rtl_isEmptyMap(expr)) {
       emitMapQuoteCode(C, pageID, expr, 1);
     } break;
@@ -1644,8 +1650,8 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t pageID, rtl_Word expr)
     for (i = 0; i < len; i++) {
       emitQuoteCode(C, pageID, rptr[i]);
     }
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_TUPLE);
-    rtl_emitShortToPage(C->M, pageID, len);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_TUPLE);
+    rtl_emitShortToPage(codeBase, pageID, len);
     break;
 
   default:
@@ -1661,27 +1667,31 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 {
   size_t    i;
   uint16_t  newPageID;
-  rtl_Word  addr;
+  uint32_t  offs;
   rtl_FnDef *fnDef;
 
   size_t thenJmpBytes,
          elseJmpBytes;
 
+  rtl_CodeBase *codeBase;
+
+  codeBase = C->M->codeBase;
+
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
     rtl_emitIntrinsicCode(C, pageID, x->as.cons.car);
     rtl_emitIntrinsicCode(C, pageID, x->as.cons.cdr);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONS);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONS);
     break;
 
   case RTL_INTRINSIC_CAR:
     rtl_emitIntrinsicCode(C, pageID, x->as.car.arg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CAR);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CAR);
     break;
 
   case RTL_INTRINSIC_CDR:
     rtl_emitIntrinsicCode(C, pageID, x->as.cdr.arg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CDR);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CDR);
     break;
 
   case RTL_INTRINSIC_TUPLE:
@@ -1691,32 +1701,32 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitIntrinsicCode(C, pageID, x->as.tuple.elems[i]);
     }
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_TUPLE);
-    rtl_emitShortToPage(C->M, pageID, x->as.tuple.elemsLen);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_TUPLE);
+    rtl_emitShortToPage(codeBase, pageID, x->as.tuple.elemsLen);
     break;
 
   case RTL_INTRINSIC_LEN:
     rtl_emitIntrinsicCode(C, pageID, x->as.len.tuple);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_LEN);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_LEN);
     break;
 
   case RTL_INTRINSIC_GET:
     rtl_emitIntrinsicCode(C, pageID, x->as.get.tuple);
     rtl_emitIntrinsicCode(C, pageID, x->as.get.index);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_GET);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_GET);
     break;
 
   case RTL_INTRINSIC_INSERT:
     rtl_emitIntrinsicCode(C, pageID, x->as.insert.map);
     rtl_emitIntrinsicCode(C, pageID, x->as.insert.key);
     rtl_emitIntrinsicCode(C, pageID, x->as.insert.val);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_INSERT);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_INSERT);
     break;
 
   case RTL_INTRINSIC_LOOKUP:
     rtl_emitIntrinsicCode(C, pageID, x->as.lookup.map);
     rtl_emitIntrinsicCode(C, pageID, x->as.lookup.key);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_LOOKUP);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_LOOKUP);
     break;
 
   case RTL_INTRINSIC_VAR:
@@ -1724,21 +1734,23 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       fnDef = rtl_lookupFn(C, x->as.var.name);
 
       if (fnDef != NULL && !fnDef->isMacro) {
-	addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
+	offs = rtl_nextPageOffs(codeBase, pageID);
+	rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST);
 
-	rtl_emitWordToPage(C->M, pageID, fnDef->addr);
+	rtl_emitWordToPage(codeBase, pageID, fnDef->fn);
       } else {
-	addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_VAR);
+	offs = rtl_nextPageOffs(codeBase, pageID);
+	rtl_emitByteToPage(codeBase, pageID, RTL_OP_UNDEFINED_VAR);
 
-	rtl_emitWordToPage(C->M, pageID, x->as.var.name);
+	rtl_emitWordToPage(codeBase, pageID, x->as.var.name);
       }
 
-      rtl_registerCallSite(C, x->as.var.name, addr);
+      rtl_registerCallSite(C, x->as.var.name, rtl_addr(pageID), offs);
 
     } else {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_VAR);
-      rtl_emitShortToPage(C->M, pageID, x->as.var.frame);
-      rtl_emitShortToPage(C->M, pageID, x->as.var.idx);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_VAR);
+      rtl_emitShortToPage(codeBase, pageID, x->as.var.frame);
+      rtl_emitShortToPage(codeBase, pageID, x->as.var.idx);
     }
     break;
 
@@ -1748,8 +1760,8 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitIntrinsicCode(C, pageID, x->as.call.args[i]);
     }
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CALL);
-    rtl_emitShortToPage(C->M, pageID, x->as.call.argsLen);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CALL);
+    rtl_emitShortToPage(codeBase, pageID, x->as.call.argsLen);
     break;
 
   case RTL_INTRINSIC_NAMED_CALL:
@@ -1758,44 +1770,45 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     fnDef = rtl_lookupFn(C, x->as.namedCall.name);
-    printf("fnDef: %p\n", fnDef);
     if (fnDef != NULL && !fnDef->isMacro) {
-      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_STATIC_CALL);
+      offs = rtl_nextPageOffs(codeBase, pageID);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_STATIC_CALL);
 
-      rtl_emitWordToPage(C->M, pageID, fnDef->addr);
-      rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+      rtl_emitWordToPage(codeBase, pageID, fnDef->fn);
+      rtl_emitShortToPage(codeBase, pageID, x->as.namedCall.argsLen);
     } else {
-      addr = rtl_emitByteToPage(C->M, pageID, RTL_OP_UNDEFINED_FUNCTION);
+      offs = rtl_nextPageOffs(codeBase, pageID);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_UNDEFINED_FUNCTION);
 
-      rtl_emitWordToPage(C->M, pageID, x->as.namedCall.name);
-      rtl_emitShortToPage(C->M, pageID, x->as.namedCall.argsLen);
+      rtl_emitWordToPage(codeBase, pageID, x->as.namedCall.name);
+      rtl_emitShortToPage(codeBase, pageID, x->as.namedCall.argsLen);
     }
 
-    rtl_registerCallSite(C, x->as.namedCall.name, addr);
+    rtl_registerCallSite(C, x->as.namedCall.name, rtl_addr(pageID), offs);
     break;
 
   case RTL_INTRINSIC_APPLY_LIST:
     rtl_emitIntrinsicCode(C, pageID, x->as.applyList.fn);
     rtl_emitIntrinsicCode(C, pageID, x->as.applyList.arg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_APPLY_LIST);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_APPLY_LIST);
     break;
 
   case RTL_INTRINSIC_APPLY_TUPLE:
     rtl_emitIntrinsicCode(C, pageID, x->as.applyList.fn);
     rtl_emitIntrinsicCode(C, pageID, x->as.applyList.arg);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_APPLY_TUPLE);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_APPLY_TUPLE);
     break;
 
   case RTL_INTRINSIC_PROGN:
     if (x->as.progn.formsLen == 0) {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_NIL);
     } else {
       for (i = 0; i < x->as.progn.formsLen; i++) {
 	rtl_emitIntrinsicCode(C, pageID, x->as.progn.forms[i]);
 
 	// Ignore the result of all but the last expression.
 	if (i + 1 < x->as.progn.formsLen)
-	  rtl_emitByteToPage(C->M, pageID, RTL_OP_POP);
+	  rtl_emitByteToPage(codeBase, pageID, RTL_OP_POP);
       }
     } break;
 
@@ -1803,36 +1816,36 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     // TODO: Prevent recompilation of the same function from creating the same
     // lambda over and over with a new page each time...
 
-    newPageID = rtl_newPageID(C->M);
+    newPageID = rtl_newPageID(codeBase, rtl_intern("__lambda__", "body"));
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CLOSURE);
-    rtl_emitWordToPage(C->M, pageID, rtl_addr(newPageID, 0));
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CLOSURE);
+    rtl_emitWordToPage(codeBase, pageID, rtl_addr(newPageID));
 
     for (i = 0; i < x->as.lambda.bodyLen; i++) {
       rtl_emitIntrinsicCode(C, newPageID, x->as.lambda.body[i]);
 
       // Ignore the result of all but the last expression.
       if (i + 1 < x->as.lambda.bodyLen)
-	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+	rtl_emitByteToPage(codeBase, newPageID, RTL_OP_POP);
     }
 
-    rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+    rtl_emitByteToPage(codeBase, newPageID, RTL_OP_RETURN);
 
     printf("  _____\n");
     printf(" | Compiled %d-ary lambda to page %d |\n",
 	   (int)x->as.lambda.argNamesLen,
 	   (int)newPageID);
     printf("       ------------");
-    rtl_disasmPage(C->M, newPageID);
+    rtl_disasmFn(codeBase, rtl_addr(newPageID));
 
     break;
 
   case RTL_INTRINSIC_DEFUN:
-    newPageID = rtl_newPageID(C->M);
+    newPageID = rtl_newPageID(codeBase, x->as.defun.name);
 
     if (x->as.defun.hasRestArg) {
-      rtl_emitByteToPage(C->M, newPageID, RTL_OP_REST);
-      rtl_emitShortToPage(C->M, newPageID, x->as.defun.argNamesLen - 1);
+      rtl_emitByteToPage(codeBase, newPageID, RTL_OP_REST);
+      rtl_emitShortToPage(codeBase, newPageID, x->as.defun.argNamesLen - 1);
     }
 
     // TODO: We're not using the argnames at all.. we should probably check
@@ -1843,30 +1856,30 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
       // Ignore the result of all but the last expression.
       if (i + 1 < x->as.defun.bodyLen)
-	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+	rtl_emitByteToPage(codeBase, newPageID, RTL_OP_POP);
     }
 
-    rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+    rtl_emitByteToPage(codeBase, newPageID, RTL_OP_RETURN);
 
-    rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID, 0), false);
+    rtl_defineFn(C, x->as.defun.name, rtl_addr(newPageID), false);
 
     printf("  _____\n");
     printf(" | Compiled function '%s' to page %d |\n",
 	   rtl_symbolName(x->as.defun.name),
 	   (int)newPageID);
     printf("       ------------");
-    rtl_disasmPage(C->M, newPageID);
+    rtl_disasmFn(codeBase, rtl_addr(newPageID));
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-    rtl_emitWordToPage(C->M, pageID, x->as.defun.name);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST);
+    rtl_emitWordToPage(codeBase, pageID, x->as.defun.name);
     break;
 
   case RTL_INTRINSIC_DEFMACRO:
-    newPageID = rtl_newPageID(C->M);
+    newPageID = rtl_newPageID(codeBase, x->as.defmacro.name);
 
     if (x->as.defmacro.hasRestArg) {
-      rtl_emitByteToPage(C->M, newPageID, RTL_OP_REST);
-      rtl_emitShortToPage(C->M, newPageID, x->as.defmacro.argNamesLen - 1);
+      rtl_emitByteToPage(codeBase, newPageID, RTL_OP_REST);
+      rtl_emitShortToPage(codeBase, newPageID, x->as.defmacro.argNamesLen - 1);
     }
 
     // TODO: We're not using the argnames at all.. we should probably check
@@ -1876,21 +1889,22 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitIntrinsicCode(C, newPageID, x->as.defmacro.body[i]);
 
       // Ignore the result of all but the last expression.
+
       if (i + 1 < x->as.defmacro.bodyLen)
-	rtl_emitByteToPage(C->M, newPageID, RTL_OP_POP);
+	rtl_emitByteToPage(codeBase, newPageID, RTL_OP_POP);
     }
 
-    rtl_emitByteToPage(C->M, newPageID, RTL_OP_RETURN);
+    rtl_emitByteToPage(codeBase, newPageID, RTL_OP_RETURN);
 
-    rtl_defineFn(C, x->as.defmacro.name, rtl_addr(newPageID, 0), true);
+    rtl_defineFn(C, x->as.defmacro.name, rtl_addr(newPageID), true);
 
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-    rtl_emitWordToPage(C->M, pageID, x->as.defmacro.name);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST);
+    rtl_emitWordToPage(codeBase, pageID, x->as.defmacro.name);
     break;
 
   case RTL_INTRINSIC_EXPORT:
     rtl_export(C, x->as.export);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_TOP);
     break;
 
   case RTL_INTRINSIC_QUOTE:
@@ -1914,51 +1928,51 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     switch (x->type) {
     case RTL_INTRINSIC_IADD:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IADD);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IADD);
       break;
 
     case RTL_INTRINSIC_ISUB:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_ISUB);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_ISUB);
       break;
 
     case RTL_INTRINSIC_IMUL:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IMUL);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IMUL);
       break;
 
     case RTL_INTRINSIC_IDIV:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IDIV);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IDIV);
       break;
 
     case RTL_INTRINSIC_IMOD:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IMOD);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IMOD);
       break;
 
     case RTL_INTRINSIC_LT:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_LT);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_LT);
       break;
 
     case RTL_INTRINSIC_LEQ:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_LEQ);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_LEQ);
       break;
 
     case RTL_INTRINSIC_GT:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_GT);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_GT);
       break;
 
     case RTL_INTRINSIC_GEQ:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_GEQ);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_GEQ);
       break;
 
     case RTL_INTRINSIC_EQ:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_EQ);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_EQ);
       break;
 
     case RTL_INTRINSIC_NEQ:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_NEQ);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_NEQ);
       break;
 
     case RTL_INTRINSIC_ISO:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_ISO);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_ISO);
       break;
 
     default:
@@ -1971,35 +1985,35 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     switch (x->as.typePred.type) {
     case RTL_INT28:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_INT28);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_INT28);
       break;
 
     case RTL_FIX14:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_FIX14);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_FIX14);
       break;
 
     case RTL_SYMBOL:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_SYMBOL);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_SYMBOL);
       break;
 
     case RTL_SELECTOR:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_SELECTOR);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_SELECTOR);
       break;
 
     case RTL_NIL:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_NIL);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_NIL);
       break;
 
     case RTL_CONS:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_CONS);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_CONS);
       break;
 
     case RTL_TUPLE:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_TUPLE);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_TUPLE);
       break;
 
     case RTL_TOP:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_IS_TOP);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_IS_TOP);
       break;
 
     default:
@@ -2024,21 +2038,21 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_emitIntrinsicCode(C, pageID, x->as._if.test);
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_NOT);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_NOT);
     switch (thenJmpBytes) {
     case 1:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP8);
-      rtl_emitByteToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CJMP8);
+      rtl_emitByteToPage(codeBase, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
       break;
 
     case 2:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP16);
-      rtl_emitShortToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CJMP16);
+      rtl_emitShortToPage(codeBase, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
       break;
 
     case 4:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CJMP32);
-      rtl_emitWordToPage(C->M, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CJMP32);
+      rtl_emitWordToPage(codeBase, pageID, x->as._if.then->codeSize + 1 + elseJmpBytes);
       break;
     }
 
@@ -2046,18 +2060,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     switch (elseJmpBytes) {
     case 1:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP8);
-      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_JMP8);
+      rtl_emitByteToPage(codeBase, pageID, x->as._if._else->codeSize);
       break;
 
     case 2:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP16);
-      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_JMP16);
+      rtl_emitByteToPage(codeBase, pageID, x->as._if._else->codeSize);
       break;
 
     case 4:
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_JMP32);
-      rtl_emitByteToPage(C->M, pageID, x->as._if._else->codeSize);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_JMP32);
+      rtl_emitByteToPage(codeBase, pageID, x->as._if._else->codeSize);
       break;
     }
 
@@ -2066,24 +2080,24 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     break;
 
   case RTL_INTRINSIC_STRING:
-    rtl_emitByteToPage(C->M, pageID, RTL_OP_STRING);
-    rtl_emitWordToPage(C->M, pageID, x->as.string.strLen);
-    rtl_emitStringToPage(C->M, pageID, x->as.string.str);
+    rtl_emitByteToPage(codeBase, pageID, RTL_OP_STRING);
+    rtl_emitWordToPage(codeBase, pageID, x->as.string.strLen);
+    rtl_emitStringToPage(codeBase, pageID, x->as.string.str);
     break;
 
   case RTL_INTRINSIC_CONSTANT:
     if (x->as.constant == RTL_NIL) {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_NIL);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_NIL);
 
     } else if (x->as.constant == RTL_TOP) {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST_TOP);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST_TOP);
 
     } else if (x->as.constant == RTL_MAP) {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_MAP);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_MAP);
 
     } else {
-      rtl_emitByteToPage(C->M, pageID, RTL_OP_CONST);
-      rtl_emitWordToPage(C->M, pageID, x->as.constant);
+      rtl_emitByteToPage(codeBase, pageID, RTL_OP_CONST);
+      rtl_emitWordToPage(codeBase, pageID, x->as.constant);
 
     } break;
   }

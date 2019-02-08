@@ -21,36 +21,27 @@ static inline
 int rtl_isAddr(rtl_Word w) { return rtl_typeOf(w) == RTL_ADDR; }
 
 static inline
-uint16_t rtl_addrPage(rtl_Word w)
+uint32_t rtl_addrValue(rtl_Word w)
 {
-  return (w >> 20) & 0xFFF;
-}
-
-static inline
-uint16_t rtl_addrOffs(rtl_Word w)
-{
-  return (w >> 4) & 0xFFFF;
+  return (w >> 4) & 0xFFFFFFF;
 }
 
 static inline
 uint8_t *rtl_resolveAddr(rtl_Machine *M, rtl_Word w)
 {
-  uint16_t pageID,
-           offs;
+  uint32_t pageID;
 
   assert(rtl_isAddr(w));
 
-  pageID = rtl_addrPage(w);
-  offs   = rtl_addrOffs(w);
+  pageID = rtl_addrValue(w);
 
-  assert(pageID < M->pagesLen);
-  assert(offs   < M->pages[pageID]->len);
+  assert(pageID < M->codeBase->pagesLen);
 
-  return M->pages[pageID]->code + offs;
+  return M->codeBase->pages[pageID]->code;
 }
 
 static inline
-rtl_Word rtl_addr(uint16_t page, uint16_t offs)
+rtl_Word rtl_addr(uint32_t pageID)
 {
-  return ((rtl_Word)page << 20) | ((rtl_Word)offs << 4) | RTL_ADDR;
+  return (pageID << 4) | RTL_ADDR;
 }

@@ -68,7 +68,6 @@ rtl_CompilerError __rtl_errNoSuchPackage(char const  *name)
 
 #define RTL_COMPILER_PKG_HASH_SIZE 17
 #define RTL_COMPILER_CALL_SITE_HASH_SIZE 127
-#define RTL_COMPILER_FN_HASH_SIZE 61
 
 typedef struct rtl_CallSite {
   uint32_t version;
@@ -86,15 +85,6 @@ typedef struct rtl_CallSiteArray {
   struct rtl_CallSiteArray *next;
 } rtl_CallSiteArray;
 
-// TODO: Make this able to represent 
-typedef struct rtl_FnDef {
-  rtl_Word name;
-  rtl_Word addr;
-  bool isMacro;
-
-  struct rtl_FnDef *next;
-} rtl_FnDef;
-
 typedef struct rtl_Compiler {
   rtl_CompilerError error;
 
@@ -104,8 +94,6 @@ typedef struct rtl_Compiler {
   // compiler instance.
   rtl_CallSiteArray *callSitesByName[RTL_COMPILER_CALL_SITE_HASH_SIZE];
 
-  rtl_FnDef *fnsByName[RTL_COMPILER_FN_HASH_SIZE];
-
   // A hash table which maps package IDs to packages for this compiler instance.
   rtl_Package *pkgByID[RTL_COMPILER_PKG_HASH_SIZE];
 
@@ -113,7 +101,10 @@ typedef struct rtl_Compiler {
 
 // Let the compiler know about a location where a particular function is called,
 // so it can be updated when the page changes.
-void rtl_registerCallSite(rtl_Compiler *C, rtl_Word name, rtl_Word siteAddr);
+void rtl_registerCallSite(rtl_Compiler *C,
+			  rtl_Word     name,
+			  rtl_Word     addr,
+			  uint32_t     offs);
 
 // Tell the compiler the address (or other indicator)of a function, so it can
 // update all of its call sites.
@@ -123,7 +114,7 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn);
 
 void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word addr, bool isMacro);
 
-  rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name);
+rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name);
 
 // Declare a package as existing. If the package already exists, this function
 // does nothing.

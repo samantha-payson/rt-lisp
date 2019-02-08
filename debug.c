@@ -395,9 +395,8 @@ uint8_t *rtl_disasm(uint8_t *bc)
     size = (uint16_t)bc[5] << 0
          | (uint16_t)bc[6] << 8;
 
-    printf("   static-call %d#%X %d\n",
-	   (int)rtl_addrPage(literal),
-	   (unsigned int)rtl_addrOffs(literal),
+    printf("   static-call %d %d\n",
+	   (int)rtl_addrValue(literal),
 	   (int)size);
     return bc + 7;
 
@@ -445,9 +444,8 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   closure   %d#%X\n",
-	   (int)rtl_addrPage(literal),
-	   (unsigned int)rtl_addrOffs(literal));
+    printf("   closure   %d\n",
+	   (int)rtl_addrValue(literal));
     return bc + 5;
 
   case RTL_OP_TUPLE:
@@ -547,20 +545,32 @@ uint8_t *rtl_disasm(uint8_t *bc)
   }
 }
 
-void rtl_disasmPage(rtl_Machine *M, uint16_t pageID)
+void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word addr)
 {
-  uint8_t *start, *code, *end;
+  uint8_t  *start,
+           *code,
+           *end;
 
-  assert(pageID < M->pagesLen);
+  uint32_t pageID;
 
-  code  = M->pages[pageID]->code;
-  end   = code + M->pages[pageID]->len;
+  rtl_Page *page;
+
+  pageID = rtl_addrValue(addr);
+
+  assert(pageID < cb->pagesLen);
+
+  page = cb->pages[pageID];
+
+  code  = page->code;
+  end   = code + page->len;
   start = code;
 
-  printf("\n ---- Disassembly of Page #% 3d ----\n\n", (int)pageID);
+  printf("\n ---- Disassembly of Function %s:%s ----\n\n",
+	 rtl_symbolPackageName(page->name),
+	 rtl_symbolName(page->name));
 
   while (code < end) {
-    printf("%d#%04X: ",
+    printf("%d#%-4X: ",
 	   (int)pageID,
 	   (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 

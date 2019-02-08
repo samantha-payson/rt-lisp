@@ -146,6 +146,9 @@ typedef struct rtl_RetAddr {
 } rtl_RetAddr;
 
 typedef struct rtl_Page {
+  // The name of the function implemented by this page.
+  rtl_Word name;
+
   // The number of bytes in this page which are in use.
   uint32_t len;
 
@@ -161,9 +164,46 @@ typedef struct rtl_Page {
   uint8_t code[];
 } rtl_Page;
 
+typedef struct rtl_Machine rtl_Machine;
+
+typedef void (*rtl_BuiltinFn)(rtl_Machine *M);
+
+typedef struct rtl_Builtin {
+  // The LISP name of this function
+  rtl_Word name;
+
+  // The actual C function to call
+  rtl_BuiltinFn fn;
+} rtl_Builtin;
+
+#define RTL_CODE_BASE_FN_HASH_SIZE 61
+
+// TODO: Make this able to represent 
+typedef struct rtl_FnDef {
+  rtl_Word name;
+  rtl_Word fn; // Either a RTL_ADDR or RTL_BUILTIN.
+  bool isMacro;
+
+  struct rtl_FnDef *next;
+} rtl_FnDef;
+
+typedef struct rtl_CodeBase {
+  rtl_Page **pages;
+  size_t   pagesLen;
+  size_t   pagesCap;
+
+  rtl_Builtin *builtins;
+  size_t      builtinsLen;
+  size_t      builtinsCap;
+
+  rtl_FnDef *fnsByName[RTL_CODE_BASE_FN_HASH_SIZE];
+} rtl_CodeBase;
+
+void rtl_initCodeBase(rtl_CodeBase *codeBase);
+
 typedef rtl_Word **rtl_WorkingSet;
 
-typedef struct rtl_Machine {
+struct rtl_Machine {
   rtl_Heap heap;
 
   rtl_Word env;
@@ -182,15 +222,13 @@ typedef struct rtl_Machine {
   size_t         wsStackLen;
   size_t         wsStackCap;
 
-  rtl_Page **pages;
-  size_t   pagesLen;
-  size_t   pagesCap;
+  rtl_CodeBase *codeBase;
 
   rtl_Error error;
-} rtl_Machine;
+};
 
 // Initialize the machine M.
-void rtl_initMachine(rtl_Machine *M);
+void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase);
 
 static inline
 size_t rtl_push(rtl_Machine *M, rtl_Word w)
@@ -224,33 +262,28 @@ void rtl_popK(rtl_Machine *M, int k)
 
 // Replace the pageID'th page with a new empty page and increment the
 // version. This will free the old version of the page.
-void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID);
+void rtl_newPageVersion(rtl_CodeBase *cb, uint32_t pageID);
 
 // Add a byte to the end of the pageID'th page.
-//
-// Returns the address of that byte.
-rtl_Word rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b);
+void rtl_emitByteToPage(rtl_CodeBase *cb, uint32_t pageID, uint8_t b);
 
 // Add an unsigned 16-bit short to the end of the pageID'th page, in
 // little-endian encoding. This is the format expected by instructions with a
 // 16-bit argument.
-//
-// Returns the address of that short.
-rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16);
+void rtl_emitShortToPage(rtl_CodeBase *cb, uint32_t pageID, uint16_t u16);
 
 // Add a word to the end of the pageID'th page, in little-endian encoding. This
 // is the format expected by instructions with a word argument.
-//
-// Returns the address of that word.
-rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w);
+void rtl_emitWordToPage(rtl_CodeBase *cb, uint32_t pageID, rtl_Word w);
 
 // Add a string at the end of the PageID'th page, with null terminator.
-void rtl_emitStringToPage(rtl_Machine *M, uint16_t pageID, char const *cstr);
+void rtl_emitStringToPage(rtl_CodeBase *cb, uint32_t pageID, char const *cstr);
 
-rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID);
+// Return the offset of the next byte to be emitted to this page.
+uint32_t rtl_nextPageOffs(rtl_CodeBase *cb, uint32_t pageID);
 
 // Create a new empty page and return its ID.
-uint16_t rtl_newPageID(rtl_Machine *M);
+uint32_t rtl_newPageID(rtl_CodeBase *cb, rtl_Word name);
 
 void  __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName);
 #define rtl_pushWorkingSet(M, WS) __rtl_pushWorkingSet(M, WS, __func__)

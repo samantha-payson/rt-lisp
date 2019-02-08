@@ -27,6 +27,7 @@
     ((N & 0xFF00000) << 4)			\
 
 int main() {
+  rtl_CodeBase  codeBase;
   rtl_Machine   M;
   rtl_Compiler  C;
   rtl_Word      w = RTL_NIL,
@@ -35,14 +36,15 @@ int main() {
   uint16_t      replPageID;
   rtl_NameSpace ns;
 
-  rtl_initMachine(&M);
+  rtl_initCodeBase(&codeBase);
+  rtl_initMachine(&M, &codeBase);
   rtl_initCompiler(&C, &M);
 
   RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
 
   ns = rtl_nsInPackage(NULL, rtl_internPackage(&C, "intrinsic"));
 
-  replPageID = rtl_newPageID(&M);
+  replPageID = rtl_newPageID(M.codeBase, rtl_intern("repl", "code-page"));
 
   while (!feof(stdin)) {
     w = rtl_read(&C, stdin);
@@ -54,13 +56,13 @@ int main() {
       return 1;
     }
 
-    rtl_emitByteToPage(&M, replPageID, RTL_OP_RETURN);
+    rtl_emitByteToPage(M.codeBase, replPageID, RTL_OP_RETURN);
 
-    rtl_disasmPage(&M, replPageID);
+    rtl_disasmFn(M.codeBase, rtl_addr(replPageID));
 
     printf("\n Running code on VM:\n");
 
-    w = rtl_run(&M, rtl_addr(replPageID, 0));
+    w = rtl_run(&M, rtl_addr(replPageID));
 
     if (rtl_peekError(&M) != RTL_OK) {
       printf("Error running snippet: '%s'\n",
@@ -71,7 +73,7 @@ int main() {
     rtl_formatExpr(&M, w);
     printf("\n");
 
-    rtl_newPageVersion(&M, replPageID);
+    rtl_newPageVersion(M.codeBase, replPageID);
   }
 
   rtl_popWorkingSet(&M);

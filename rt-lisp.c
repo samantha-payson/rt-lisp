@@ -49,6 +49,16 @@ rtl_Generation *mkGeneration(int genNbr)
 
   return gen;
 }
+
+void rtl_initCodeBase(rtl_CodeBase *codeBase)
+{
+  codeBase->pages    = NULL;
+  codeBase->pagesLen = 0;
+  codeBase->pagesCap = 0;
+
+  memset(codeBase->fnsByName, 0, sizeof(codeBase->fnsByName));
+}
+
 // Reviewed
 void rtl_initHeap(rtl_Heap *h)
 {
@@ -524,7 +534,6 @@ rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t sLen)
 
   char     *cBacking;
 
-
   wLen = sLen / sizeof(rtl_Word) + 2;
 
   wBacking    = rtl_allocGC(M, RTL_STRING, &w, wLen);
@@ -754,7 +763,7 @@ rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key)
   return __rtl_mapLookup(M, map, key, 1, 0);
 }
 
-void rtl_initMachine(rtl_Machine *M)
+void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
   rtl_initHeap(&M->heap);
 
@@ -774,9 +783,7 @@ void rtl_initMachine(rtl_Machine *M)
   M->wsStackLen = 0;
   M->wsStackCap = 0;
 
-  M->pages    = NULL;
-  M->pagesLen = 0;
-  M->pagesCap = 0;
+  M->codeBase = codeBase;
 
   M->error = RTL_OK;
 }
@@ -803,7 +810,7 @@ void rtl_testGarbageCollector(size_t count)
   rtl_Word const *ptr;
   int            i;
 
-  rtl_initMachine(&M);
+  rtl_initMachine(&M, NULL);
 
   M.vStackLen = 1;
 
@@ -1693,64 +1700,61 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 
 rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len)
 {
-  uint16_t pageID = rtl_newPageID(M);
+  uint32_t pageID = rtl_newPageID(M->codeBase, rtl_intern("repl", "snippet"));
 
-  for (uint16_t i = 0; i < len; i++) {
-    rtl_emitByteToPage(M, pageID, code[i]);
+  for (uint32_t i = 0; i < len; i++) {
+    rtl_emitByteToPage(M->codeBase, pageID, code[i]);
   }
 
-  return rtl_run(M, rtl_addr(pageID, 0));
+  return rtl_run(M, rtl_addr(pageID));
 }
 
-uint16_t rtl_newPageID(rtl_Machine *M)
+uint32_t rtl_newPageID(rtl_CodeBase *cb, rtl_Word name)
 {
   rtl_Page *page;
 
-  if (M->pagesCap == M->pagesLen) {
-    M->pagesCap = M->pagesCap == 0 ? 32 : 2*M->pagesCap;
-    M->pages    = realloc(M->pages, sizeof(rtl_Page *)*M->pagesCap);
+  if (cb->pagesCap == cb->pagesLen) {
+    cb->pagesCap = cb->pagesCap == 0 ? 32 : 2*cb->pagesCap;
+    cb->pages    = realloc(cb->pages, sizeof(rtl_Page *)*cb->pagesCap);
   }
 
   page = malloc(sizeof(rtl_Page));
 
+  page->name    = name;
   page->len     = 0;
   page->cap     = 0;
   page->version = 0;
 
-  M->pages[M->pagesLen] = page;
+  cb->pages[cb->pagesLen] = page;
 
-  return M->pagesLen++;
+  return cb->pagesLen++;
 }
 
-void rtl_installPage(rtl_Machine *M, uint16_t id, rtl_Page *page)
-{
-  assert(id < M->pagesLen);
+/* void rtl_installPage(rtl_CodeBase *cb, uint32_t id, rtl_Page *page) */
+/* { */
+/*   assert(id < cb->pagesLen); */
 
-  page->version = M->pages[id]->version + 1;
+/*   page->version = cb->pages[id]->version + 1; */
 
-  free(M->pages[id]);
-  M->pages[id] = page;
-}
+/*   free(cb->pages[id]); */
+/*   cb->pages[id] = page; */
+/* } */
 
-void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID)
+void rtl_newPageVersion(rtl_CodeBase *cb, uint32_t pageID)
 {
   rtl_Page *oldPage, *newPage;
 
-  oldPage = M->pages[pageID];
+  oldPage = cb->pages[pageID];
   newPage = malloc(sizeof(rtl_Page));
 
+  newPage->name    = oldPage->name;
   newPage->len     = 0;
   newPage->cap     = 0;
   newPage->version = oldPage->version + 1;
 
-  // TODO: In the future, maybe we'd want to refcount here and share pages
-  //       between machines?
-  //
-  //       Just a thought... definitely not something I have time for right
-  //       now...
   free(oldPage);
 
-  M->pages[pageID] = newPage;
+  cb->pages[pageID] = newPage;
 }
 
 /* static */
@@ -1765,71 +1769,55 @@ void rtl_newPageVersion(rtl_Machine *M, uint16_t pageID)
 /*   return id; */
 /* } */
 
-rtl_Page *rtl_getPageByID(rtl_Machine *M, uint16_t id)
+rtl_Page *rtl_getPageByID(rtl_CodeBase *cb, uint32_t id)
 {
-  assert(id < M->pagesLen);
-  return M->pages[id];
+  assert(id < cb->pagesLen);
+  return cb->pages[id];
 }
 
-rtl_Word rtl_emitByteToPage(rtl_Machine *M, uint16_t pageID, uint8_t b)
+void rtl_emitByteToPage(rtl_CodeBase *cb, uint32_t pageID, uint8_t b)
 {
   rtl_Page *page;
-  rtl_Page *newPage;
-  rtl_Word addr;
 
-  assert(pageID < M->pagesLen);
-  page = M->pages[pageID];
+  assert(pageID < cb->pagesLen);
+  page = cb->pages[pageID];
 
   if (unlikely(page->cap == page->len)) {
     page->cap = !page->cap ? 32 : 4*page->cap/3;
-    newPage   = malloc(sizeof(rtl_Page) + page->cap);
-
-    newPage->len     = page->len;
-    newPage->cap     = page->cap;
-    newPage->version = page->version;
-
-    memcpy(newPage->code, page->code, page->len);
-
-    free(page);
-    page = M->pages[pageID]
-         = newPage;
+    page      = realloc(page, sizeof(rtl_Page) + page->cap);
+    cb->pages[pageID] = page;
   }
-
-  addr = rtl_addr(pageID, page->len);
 
   page->code[page->len++] = b;
-
-  return addr;
 }
 
-rtl_Word rtl_emitShortToPage(rtl_Machine *M, uint16_t pageID, uint16_t u16)
+void rtl_emitShortToPage(rtl_CodeBase *cb, uint32_t pageID, uint16_t u16)
 {
-  rtl_Word addr;
 
-  addr = rtl_emitByteToPage(M, pageID, (u16 >> 0) & 0xFF);
-  rtl_emitByteToPage(M, pageID, (u16 >> 8) & 0xFF);
-
-  return addr;
+  rtl_emitByteToPage(cb, pageID, (u16 >> 0) & 0xFF);
+  rtl_emitByteToPage(cb, pageID, (u16 >> 8) & 0xFF);
 }
 
-rtl_Word rtl_emitWordToPage(rtl_Machine *M, uint16_t pageID, rtl_Word w)
+void rtl_emitWordToPage(rtl_CodeBase *cb, uint32_t pageID, rtl_Word w)
 {
-  rtl_Word addr;
-
-  addr = rtl_emitByteToPage(M, pageID, (w >>  0) & 0xFF);
-  rtl_emitByteToPage(M, pageID, (w >>  8) & 0xFF);
-  rtl_emitByteToPage(M, pageID, (w >> 16) & 0xFF);
-  rtl_emitByteToPage(M, pageID, (w >> 24) & 0xFF);
-
-  return addr;
+  rtl_emitByteToPage(cb, pageID, (w >>  0) & 0xFF);
+  rtl_emitByteToPage(cb, pageID, (w >>  8) & 0xFF);
+  rtl_emitByteToPage(cb, pageID, (w >> 16) & 0xFF);
+  rtl_emitByteToPage(cb, pageID, (w >> 24) & 0xFF);
 }
 
-void rtl_emitStringToPage(rtl_Machine *M, uint16_t pageID, char const *cstr)
+void rtl_emitStringToPage(rtl_CodeBase *cb, uint32_t pageID, char const *cstr)
 {
   for (; *cstr != '\0'; cstr++) {
-    rtl_emitByteToPage(M, pageID, *cstr);
+    rtl_emitByteToPage(cb, pageID, *cstr);
   }
-  rtl_emitByteToPage(M, pageID, '\0');
+  rtl_emitByteToPage(cb, pageID, '\0');
+}
+
+uint32_t rtl_nextPageOffs(rtl_CodeBase *cb, uint32_t pageID)
+{
+  assert(pageID < cb->pagesLen);
+  return cb->pages[pageID]->len;
 }
 
 rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
@@ -1887,14 +1875,4 @@ void __rtl_popWorkingSet(rtl_Machine *M, char const *fName)
   assert(M->wsStackLen > 0);
 
   M->wsStackLen--;
-}
-
-rtl_Word rtl_nextAddrInPage(rtl_Machine *M, uint16_t pageID)
-{
-  rtl_Page *page;
-
-  assert(pageID < M->pagesLen);
-  page = M->pages[pageID];
-
-  return rtl_addr(pageID, page->len);
 }
