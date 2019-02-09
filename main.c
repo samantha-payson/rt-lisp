@@ -26,6 +26,15 @@
     ((N & 0xFF000) << 4),			\
     ((N & 0xFF00000) << 4)			\
 
+rtl_Word builtinHello(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+{
+  assert(argsLen == 0);
+
+  printf("hello, world!\n");
+
+  return RTL_NIL;
+}
+
 int main() {
   rtl_CodeBase  codeBase;
   rtl_Machine   M;
@@ -39,6 +48,11 @@ int main() {
   rtl_initCodeBase(&codeBase);
   rtl_initMachine(&M, &codeBase);
   rtl_initCompiler(&C, &M);
+
+  rtl_internPackage(&C, "std");
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "hello"), builtinHello);
+  rtl_export(&C, rtl_intern("std", "hello"));
 
   RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
 

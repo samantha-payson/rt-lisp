@@ -56,7 +56,84 @@ void rtl_initCodeBase(rtl_CodeBase *codeBase)
   codeBase->pagesLen = 0;
   codeBase->pagesCap = 0;
 
+  codeBase->builtins    = NULL;
+  codeBase->builtinsLen = 0;
+  codeBase->builtinsCap = 0;
+
   memset(codeBase->fnsByName, 0, sizeof(codeBase->fnsByName));
+}
+
+static
+rtl_Word addBuiltin(rtl_CodeBase *cb, rtl_Word name, rtl_BuiltinFn cFn)
+{
+  size_t builtinIdx;
+
+  if (cb->builtinsLen == cb->builtinsCap) {
+    cb->builtinsCap = !cb->builtinsCap ? 32 : 2*cb->builtinsCap;
+    cb->builtins = realloc(cb->builtins, sizeof(rtl_Builtin)*cb->builtinsCap);
+  }
+
+  builtinIdx               = cb->builtinsLen++;
+  cb->builtins[builtinIdx] = (rtl_Builtin) {
+    .name = name,
+    .fn   = cFn,
+  };
+
+  return rtl_builtin(builtinIdx);
+}
+
+rtl_Word rtl_callBuiltin(rtl_Machine    *M,
+			 rtl_Word       builtin,
+			 rtl_Word const *args,
+			 size_t         argsLen)
+{
+  uint32_t idx = rtl_builtinIndex(builtin);
+
+  assert(idx < M->codeBase->builtinsLen);
+
+  return M->codeBase->builtins[idx].fn(M, args, argsLen);
+}
+
+void rtl_registerBuiltin(rtl_Compiler  *C,
+			 rtl_Word      name,
+			 rtl_BuiltinFn cFn)
+{
+  rtl_FnDef    *def;
+  size_t       idx,
+               builtinIdx;
+  rtl_CodeBase *codeBase;
+
+  codeBase = C->M->codeBase;
+
+  idx = rtl_symbolID(name) % RTL_CODE_BASE_FN_HASH_SIZE;
+
+  for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
+    if (def->name == name) {
+      if (rtl_isBuiltin(def->fn)) {
+	builtinIdx = rtl_builtinIndex(def->fn);
+	codeBase->builtins[builtinIdx].fn = cFn;
+      } else {
+	def->fn = addBuiltin(codeBase, name, cFn);
+      }
+
+      def->isMacro = false;
+
+      rtl_resolveCallSites(C, name, def->fn);
+
+      return;
+    }
+  }
+
+  def = malloc(sizeof(rtl_FnDef));
+
+  def->name    = name;
+  def->fn      = addBuiltin(codeBase, name, cFn);
+  def->isMacro = false;
+
+  def->next                = codeBase->fnsByName[idx];
+  codeBase->fnsByName[idx] = def;
+
+  rtl_resolveCallSites(C, name, def->fn);
 }
 
 // Reviewed
@@ -126,6 +203,7 @@ rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 
 rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons)
 {
+
   rtl_Word const *ptr;
 
   if (cons == RTL_NIL) return RTL_NIL;
@@ -1431,6 +1509,11 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       f = VPOP();
 
       switch (rtl_typeOf(f)) {
+      case RTL_BUILTIN:
+	b = rtl_callBuiltin(M, f, wptr, size);
+	VPUSH(b);
+	break;
+
       case RTL_ADDR:
 	wptr = rtl_allocTuple(M, &b, 1);
 	wptr[0] = a;
@@ -1498,22 +1581,26 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
       VPOPK(size);
 
-      wptr = rtl_allocTuple(M, &b, 1);
-      wptr[0] = a;
+      if (rtl_isBuiltin(f)) {
+	b = rtl_callBuiltin(M, f, wptr, size);
+	VPUSH(b);
+      } else {
+	wptr = rtl_allocTuple(M, &b, 1);
+	wptr[0] = a;
 
-      if (unlikely(M->rStackLen == M->rStackCap)) {
-	M->rStackCap = M->rStackCap*2;
-	M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-      }
+	if (unlikely(M->rStackLen == M->rStackCap)) {
+	  M->rStackCap = M->rStackCap*2;
+	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	}
 
-      M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	.pc  = M->pc,
-	.env = M->env,
-      };
+	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	  .pc  = M->pc,
+	  .env = M->env,
+	};
 
-      M->env = b;
-      M->pc = rtl_resolveAddr(M, f);
-      break;
+	M->env = b;
+	M->pc = rtl_resolveAddr(M, f);
+      } break;
 
     case RTL_OP_APPLY_LIST:
       VSTACK_ASSERT_LEN(2);

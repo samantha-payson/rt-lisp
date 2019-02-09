@@ -109,7 +109,6 @@ typedef struct rtl_Generation {
   // This is where the fill pointer was at the beginning of this collection
   // cycle. This is used by the moveWord helper in rt-lisp.c, it has no other
   // purpose.
-
   size_t preMoveFillPtr;
 
   // The total number of words this generation can contribute.
@@ -166,7 +165,9 @@ typedef struct rtl_Page {
 
 typedef struct rtl_Machine rtl_Machine;
 
-typedef void (*rtl_BuiltinFn)(rtl_Machine *M);
+typedef rtl_Word (*rtl_BuiltinFn)(rtl_Machine    *M,
+				  rtl_Word const *args,
+				  size_t         argsLen);
 
 typedef struct rtl_Builtin {
   // The LISP name of this function
@@ -366,6 +367,7 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/map.h"
 #include "rtl/cons.h"
 #include "rtl/addr.h"
+#include "rtl/builtin.h"
 #include "rtl/top.h"
 
 #include "rtl/rto.h"
@@ -375,6 +377,10 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/compiler.h"
 
 #undef _RTL_INSIDE_RT_LISP_H_
+
+void rtl_registerBuiltin(rtl_Compiler  *C,
+			 rtl_Word      name,
+			 rtl_BuiltinFn cFn);
 
 rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr);
 
