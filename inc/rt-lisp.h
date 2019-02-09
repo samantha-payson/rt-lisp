@@ -62,11 +62,12 @@ typedef enum rtl_WordType {
   //            this level of the HAMT.
   RTL_HEADER = 9,
 
-  // This word type is used to encode addresses in the code segment, rather than
-  // the heap segment.
-  RTL_ADDR    = 10,
-  RTL_BUILTIN = 11,
-  RTL_CLOSURE = 12,
+  RTL_FUNCTION = 10,
+  RTL_CLOSURE  = 11,
+
+  // Used to represent arbitrary binary data, mostly useful for encoding native
+  // types.
+  RTL_BYTES = 12,
 
   RTL_UNRESOLVED_SYMBOL   = 13,
   RTL_UNRESOLVED_SELECTOR = 14,
@@ -144,58 +145,59 @@ typedef struct rtl_RetAddr {
   rtl_Word env;
 } rtl_RetAddr;
 
-typedef struct rtl_Page {
-  // The name of the function implemented by this page.
-  rtl_Word name;
-
-  // The number of bytes in this page which are in use.
-  uint32_t len;
-
-  // The number of bytes in this page, including unused space at the end.
-  uint32_t cap;
-
-  // Every time that a new page is installed for a given pageID, the version is
-  // incremented. This allows us to invalidate rtl_CallSites which refer to old
-  // versions of the page.
-  uint32_t version;
-
-  // The actual bytecode.
-  uint8_t code[];
-} rtl_Page;
-
 typedef struct rtl_Machine rtl_Machine;
 
 typedef rtl_Word (*rtl_BuiltinFn)(rtl_Machine    *M,
 				  rtl_Word const *args,
 				  size_t         argsLen);
 
-typedef struct rtl_Builtin {
-  // The LISP name of this function
+
+typedef struct rtl_Function {
+  // The name of this function
   rtl_Word name;
 
-  // The actual C function to call
-  rtl_BuiltinFn fn;
-} rtl_Builtin;
+  // True if this is a builtin function.
+  bool isBuiltin;
+
+  // Every time that a new function is installed for a given fnID, the version
+  // is incremented. This allows us to invalidate rtl_CallSites which refer to
+  // old versions of the function.
+  uint32_t version;
+
+  union {
+    struct {
+      // The builtin function, if isBuiltin is true (otherwise undefined).
+      rtl_BuiltinFn cFn;
+    } builtin;
+
+    struct {
+      // The number of bytes in this function which are in use.
+      uint32_t len;
+
+      // The number of bytes in this function, including unused space at the end.
+      uint32_t cap;
+
+      // The actual bytecode.
+      uint8_t code[];
+    } lisp;
+  } as;
+} rtl_Function;
 
 #define RTL_CODE_BASE_FN_HASH_SIZE 61
 
 // TODO: Make this able to represent 
 typedef struct rtl_FnDef {
   rtl_Word name;
-  rtl_Word fn; // Either a RTL_ADDR or RTL_BUILTIN.
+  rtl_Word fn;
   bool isMacro;
 
   struct rtl_FnDef *next;
 } rtl_FnDef;
 
 typedef struct rtl_CodeBase {
-  rtl_Page **pages;
-  size_t   pagesLen;
-  size_t   pagesCap;
-
-  rtl_Builtin *builtins;
-  size_t      builtinsLen;
-  size_t      builtinsCap;
+  rtl_Function **fns;
+  size_t       fnsLen;
+  size_t       fnsCap;
 
   rtl_FnDef *fnsByName[RTL_CODE_BASE_FN_HASH_SIZE];
 } rtl_CodeBase;
@@ -261,30 +263,30 @@ void rtl_popK(rtl_Machine *M, int k)
   M->vStackLen -= k;
 }
 
-// Replace the pageID'th page with a new empty page and increment the
+// Replace the fnID'th function with a new empty page and increment the
 // version. This will free the old version of the page.
-void rtl_newPageVersion(rtl_CodeBase *cb, uint32_t pageID);
+void rtl_newFuncVersion(rtl_CodeBase *cb, uint32_t fnID);
 
-// Add a byte to the end of the pageID'th page.
-void rtl_emitByteToPage(rtl_CodeBase *cb, uint32_t pageID, uint8_t b);
+// Add a byte to the end of the fnID'th function.
+void rtl_emitByteToFunc(rtl_CodeBase *cb, uint32_t fnID, uint8_t b);
 
-// Add an unsigned 16-bit short to the end of the pageID'th page, in
+// Add an unsigned 16-bit short to the end of the fnID'th function, in
 // little-endian encoding. This is the format expected by instructions with a
 // 16-bit argument.
-void rtl_emitShortToPage(rtl_CodeBase *cb, uint32_t pageID, uint16_t u16);
+void rtl_emitShortToFunc(rtl_CodeBase *cb, uint32_t fnID, uint16_t u16);
 
-// Add a word to the end of the pageID'th page, in little-endian encoding. This
-// is the format expected by instructions with a word argument.
-void rtl_emitWordToPage(rtl_CodeBase *cb, uint32_t pageID, rtl_Word w);
+// Add a word to the end of the fnID'th function, in little-endian
+// encoding. This is the format expected by instructions with a word argument.
+void rtl_emitWordToFunc(rtl_CodeBase *cb, uint32_t fnID, rtl_Word w);
 
-// Add a string at the end of the PageID'th page, with null terminator.
-void rtl_emitStringToPage(rtl_CodeBase *cb, uint32_t pageID, char const *cstr);
+// Add a string at the end of the fnID'th function, with null terminator.
+void rtl_emitStringToFunc(rtl_CodeBase *cb, uint32_t fnID, char const *cstr);
 
 // Return the offset of the next byte to be emitted to this page.
-uint32_t rtl_nextPageOffs(rtl_CodeBase *cb, uint32_t pageID);
+uint32_t rtl_nextFuncOffs(rtl_CodeBase *cb, uint32_t fnID);
 
-// Create a new empty page and return its ID.
-uint32_t rtl_newPageID(rtl_CodeBase *cb, rtl_Word name);
+// Create a new empty function and return its ID.
+uint32_t rtl_newFuncID(rtl_CodeBase *cb, rtl_Word name);
 
 void  __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName);
 #define rtl_pushWorkingSet(M, WS) __rtl_pushWorkingSet(M, WS, __func__)
@@ -366,8 +368,7 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/string.h"
 #include "rtl/map.h"
 #include "rtl/cons.h"
-#include "rtl/addr.h"
-#include "rtl/builtin.h"
+#include "rtl/function.h"
 #include "rtl/top.h"
 
 #include "rtl/rto.h"

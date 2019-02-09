@@ -42,7 +42,7 @@ int main() {
   rtl_Word      w = RTL_NIL,
                 a = RTL_NIL,
                 b = RTL_NIL;
-  uint16_t      replPageID;
+  uint32_t      replFnID;
   rtl_NameSpace ns;
 
   rtl_initCodeBase(&codeBase);
@@ -58,25 +58,25 @@ int main() {
 
   ns = rtl_nsInPackage(NULL, rtl_internPackage(&C, "intrinsic"));
 
-  replPageID = rtl_newPageID(M.codeBase, rtl_intern("repl", "code-page"));
+  replFnID = rtl_newFuncID(M.codeBase, rtl_intern("repl", "code-page"));
 
   while (!feof(stdin)) {
     w = rtl_read(&C, stdin);
 
-    rtl_compile(&C, &ns, replPageID, w);
+    rtl_compile(&C, &ns, replFnID, w);
 
     if (C.error.type) {
       printf("Error compiling expression!\n");
       return 1;
     }
 
-    rtl_emitByteToPage(M.codeBase, replPageID, RTL_OP_RETURN);
+    rtl_emitByteToFunc(M.codeBase, replFnID, RTL_OP_RETURN);
 
-    rtl_disasmFn(M.codeBase, rtl_addr(replPageID));
+    rtl_disasmFn(M.codeBase, rtl_function(replFnID));
 
     printf("\n Running code on VM:\n");
 
-    w = rtl_run(&M, rtl_addr(replPageID));
+    w = rtl_run(&M, rtl_function(replFnID));
 
     if (rtl_peekError(&M) != RTL_OK) {
       printf("Error running snippet: '%s'\n",
@@ -87,7 +87,7 @@ int main() {
     rtl_formatExpr(&M, w);
     printf("\n");
 
-    rtl_newPageVersion(M.codeBase, replPageID);
+    rtl_newFuncVersion(M.codeBase, replFnID);
   }
 
   rtl_popWorkingSet(&M);

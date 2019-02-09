@@ -73,8 +73,8 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("Cons#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
     break;
 
-  case RTL_ADDR:
-    printf("Addr#%X", w >> 4);
+  case RTL_FUNCTION:
+    printf("Function#%X", w >> 4);
     break;
 
   case RTL_CLOSURE:
@@ -246,10 +246,15 @@ void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
   rtl_formatExprIndented(M, w, 0);
 }
 
-uint8_t *rtl_disasm(uint8_t *bc)
+uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
 {
-  rtl_Word literal;
-  uint16_t frame, idx, size;
+  rtl_Word     literal;
+
+  uint16_t     frame,
+               idx,
+               size;
+
+  rtl_Function *func;
 
   switch (*bc) {
   case RTL_OP_NOP:
@@ -341,8 +346,7 @@ uint8_t *rtl_disasm(uint8_t *bc)
     return bc + 1;
 
   case RTL_OP_CJMP8:
-    printf("   cjmp8     %+-3d //", (int8_t)bc[1]);
-    rtl_disasm(bc + 2 + (int8_t)bc[1]);
+    printf("   cjmp8     %+-3d\n", (int8_t)bc[1]);
     return bc + 2;
 
   case RTL_OP_CJMP16:
@@ -362,8 +366,7 @@ uint8_t *rtl_disasm(uint8_t *bc)
     return bc + 5;
 
   case RTL_OP_JMP8:
-    printf("   jmp8      %+-3d //", (int8_t)bc[1]);
-    rtl_disasm(bc + 2 + (int8_t)bc[1]);
+    printf("   jmp8      %+-3d\n", (int8_t)bc[1]);
     return bc + 2;
 
   case RTL_OP_JMP16:
@@ -398,8 +401,11 @@ uint8_t *rtl_disasm(uint8_t *bc)
     size = (uint16_t)bc[5] << 0
          | (uint16_t)bc[6] << 8;
 
-    printf("   static-call %d %d\n",
-	   (int)rtl_addrValue(literal),
+    func = rtl_reifyFunction(codeBase, literal);
+
+    printf("   static-call %s:%s %d\n",
+	   rtl_symbolPackageName(func->name),
+	   rtl_symbolName(func->name),
 	   (int)size);
     return bc + 7;
 
@@ -447,8 +453,8 @@ uint8_t *rtl_disasm(uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   closure   %d\n",
-	   (int)rtl_addrValue(literal));
+    printf("   closure   fn[%d]\n",
+	   (int)rtl_functionID(literal));
     return bc + 5;
 
   case RTL_OP_TUPLE:
@@ -548,36 +554,38 @@ uint8_t *rtl_disasm(uint8_t *bc)
   }
 }
 
-void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word addr)
+void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word fn)
 {
   uint8_t  *start,
            *code,
            *end;
 
-  uint32_t pageID;
+  rtl_Function *func;
 
-  rtl_Page *page;
+  func = rtl_reifyFunction(cb, fn);
 
-  pageID = rtl_addrValue(addr);
+  if (func->isBuiltin) {
+    printf("\n ---- Builtin Function %s:%s ----\n---------\n\n",
+	   rtl_symbolPackageName(func->name),
+	   rtl_symbolName(func->name));
+    return;
+  }
 
-  assert(pageID < cb->pagesLen);
-
-  page = cb->pages[pageID];
-
-  code  = page->code;
-  end   = code + page->len;
+  code  = func->as.lisp.code;
+  end   = code + func->as.lisp.len;
   start = code;
 
   printf("\n ---- Disassembly of Function %s:%s ----\n\n",
-	 rtl_symbolPackageName(page->name),
-	 rtl_symbolName(page->name));
+	 rtl_symbolPackageName(func->name),
+	 rtl_symbolName(func->name));
 
   while (code < end) {
-    printf("%d#%-4X: ",
-	   (int)pageID,
+    printf("%s:%s#%-4X: ",
+	   rtl_symbolPackageName(func->name),
+	   rtl_symbolName(func->name),
 	   (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 
-    code = rtl_disasm(code);
+    code = rtl_disasm(cb, code);
   }
 
   printf("\n ----------------------------------\n\n");

@@ -71,7 +71,7 @@ rtl_CompilerError __rtl_errNoSuchPackage(char const  *name)
 
 typedef struct rtl_CallSite {
   uint32_t version;
-  uint16_t pageID;
+  uint16_t fnID;
   uint16_t offs;
 } rtl_CallSite;
 
@@ -100,10 +100,10 @@ typedef struct rtl_Compiler {
 } rtl_Compiler;
 
 // Let the compiler know about a location where a particular function is called,
-// so it can be updated when the page changes.
+// so it can be updated when the function changes.
 void rtl_registerCallSite(rtl_Compiler *C,
 			  rtl_Word     name,
-			  rtl_Word     addr,
+			  rtl_Word     fn,
 			  uint32_t     offs);
 
 // Tell the compiler the address (or other indicator)of a function, so it can
@@ -134,12 +134,12 @@ rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
 			     uint32_t            unresID);
 
 // Compile the (already macro-expanded) S-Expr and emit the resulting to the
-// pageID'th code page of C->M.
-void rtl_compileExpr(rtl_Compiler *C, uint16_t pageID, rtl_Word sxp);
+// fnID'th function of C->M->codeBase.
+void rtl_compileExpr(rtl_Compiler *C, uint32_t fnID, rtl_Word sxp);
 
 void rtl_compile(rtl_Compiler *C,
 		 rtl_NameSpace const *ns,
-		 uint16_t pageID,
+		 uint32_t fnID,
 		 rtl_Word in);
 
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M);
@@ -151,7 +151,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp);
 rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x);
 
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
-			   uint16_t pageID,
+			   uint32_t fnID,
 			   rtl_Intrinsic const *x);
 
 // Export a symbol within its package.

@@ -33,7 +33,7 @@ void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mas
 
 // Print the next instruction in bytecode, and return a pointer to the beginning
 // of the next instruction.
-uint8_t *rtl_disasm(uint8_t *bytecode);
+uint8_t *rtl_disasm(rtl_CodeBase *cb, uint8_t *bytecode);
 
 // Return the number of words in generation genNbr. This will always return a
 // power of 2.

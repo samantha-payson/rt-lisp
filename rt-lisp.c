@@ -52,13 +52,9 @@ rtl_Generation *mkGeneration(int genNbr)
 
 void rtl_initCodeBase(rtl_CodeBase *codeBase)
 {
-  codeBase->pages    = NULL;
-  codeBase->pagesLen = 0;
-  codeBase->pagesCap = 0;
-
-  codeBase->builtins    = NULL;
-  codeBase->builtinsLen = 0;
-  codeBase->builtinsCap = 0;
+  codeBase->fns    = NULL;
+  codeBase->fnsLen = 0;
+  codeBase->fnsCap = 0;
 
   memset(codeBase->fnsByName, 0, sizeof(codeBase->fnsByName));
 }
@@ -66,32 +62,14 @@ void rtl_initCodeBase(rtl_CodeBase *codeBase)
 static
 rtl_Word addBuiltin(rtl_CodeBase *cb, rtl_Word name, rtl_BuiltinFn cFn)
 {
-  size_t builtinIdx;
+  size_t fnID;
 
-  if (cb->builtinsLen == cb->builtinsCap) {
-    cb->builtinsCap = !cb->builtinsCap ? 32 : 2*cb->builtinsCap;
-    cb->builtins = realloc(cb->builtins, sizeof(rtl_Builtin)*cb->builtinsCap);
-  }
+  fnID = rtl_newFuncID(cb, name);
 
-  builtinIdx               = cb->builtinsLen++;
-  cb->builtins[builtinIdx] = (rtl_Builtin) {
-    .name = name,
-    .fn   = cFn,
-  };
+  cb->fns[fnID]->isBuiltin      = true;
+  cb->fns[fnID]->as.builtin.cFn = cFn;
 
-  return rtl_builtin(builtinIdx);
-}
-
-rtl_Word rtl_callBuiltin(rtl_Machine    *M,
-			 rtl_Word       builtin,
-			 rtl_Word const *args,
-			 size_t         argsLen)
-{
-  uint32_t idx = rtl_builtinIndex(builtin);
-
-  assert(idx < M->codeBase->builtinsLen);
-
-  return M->codeBase->builtins[idx].fn(M, args, argsLen);
+  return rtl_function(fnID);
 }
 
 void rtl_registerBuiltin(rtl_Compiler  *C,
@@ -99,9 +77,10 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
 			 rtl_BuiltinFn cFn)
 {
   rtl_FnDef    *def;
-  size_t       idx,
-               builtinIdx;
+  size_t       idx;
+  uint32_t     fnID;
   rtl_CodeBase *codeBase;
+  rtl_Function *func;
 
   codeBase = C->M->codeBase;
 
@@ -109,12 +88,14 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
 
   for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
-      if (rtl_isBuiltin(def->fn)) {
-	builtinIdx = rtl_builtinIndex(def->fn);
-	codeBase->builtins[builtinIdx].fn = cFn;
-      } else {
-	def->fn = addBuiltin(codeBase, name, cFn);
-      }
+      fnID = rtl_functionID(def->fn);
+
+
+      rtl_newFuncVersion(codeBase, fnID);
+      func = codeBase->fns[fnID];
+
+      func->as.builtin.cFn = cFn;
+      func->isBuiltin      = true;
 
       def->isMacro = false;
 
@@ -1016,8 +997,8 @@ char const *rtl_typeName(rtl_WordType type)
   case RTL_HEADER:
     return "[Header (impl detail)]";
 
-  case RTL_ADDR:
-    return "[Addr (impl detail)]";
+  case RTL_FUNCTION:
+    return "[Function (impl detail)]";
 
   default:
     return "[Unknown RTL type]";
@@ -1146,7 +1127,7 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       bI32 = (int32_t)b >> 4;
       return aI32 - bI32;
 
-    case RTL_ADDR:
+    case RTL_FUNCTION:
       aI32 = (int32_t)(a >> 4);
       bI32 = (int32_t)(b >> 4);
       return aI32 - bI32;
@@ -1184,13 +1165,15 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
   }
 }
 
-rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
+rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 {
   uint8_t opcode, u8;
 
   uint16_t frame, idx, size, u16;
   size_t   len;
   ssize_t  i;
+
+  rtl_Function *func;
 
   uint32_t u32;
 
@@ -1211,7 +1194,11 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
   // Ensure these words are involved in any garbage collection that may happen.
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
-  M->pc = rtl_resolveAddr(M, addr);
+  func = rtl_reifyFunction(M->codeBase, fn); 
+
+  assert(!func->isBuiltin);
+
+  M->pc = func->as.lisp.code;
 
   while (M->error == RTL_OK) {
     /* printf("VSTACK:"); */
@@ -1509,28 +1496,29 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       f = VPOP();
 
       switch (rtl_typeOf(f)) {
-      case RTL_BUILTIN:
-	b = rtl_callBuiltin(M, f, wptr, size);
-	VPUSH(b);
-	break;
+      case RTL_FUNCTION:
+	func = rtl_reifyFunction(M->codeBase, f);
+	if (func->isBuiltin) {
+	  b = func->as.builtin.cFn(M, wptr, size);
+	  VPUSH(b);
+	} else {
+	  
+	  wptr = rtl_allocTuple(M, &b, 1);
+	  wptr[0] = a;
 
-      case RTL_ADDR:
-	wptr = rtl_allocTuple(M, &b, 1);
-	wptr[0] = a;
+	  if (unlikely(M->rStackLen == M->rStackCap)) {
+	    M->rStackCap = M->rStackCap*2;
+	    M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	  }
 
-	if (unlikely(M->rStackLen == M->rStackCap)) {
-	  M->rStackCap = M->rStackCap*2;
-	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	}
+	  M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	    .pc  = M->pc,
+	    .env = M->env,
+	  };
 
-	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	  .pc  = M->pc,
-	  .env = M->env,
-	};
-
-	M->env = b;
-	M->pc = rtl_resolveAddr(M, f);
-	break;
+	  M->env = b;
+	  M->pc = func->as.lisp.code;
+	} break;
 
       case RTL_CLOSURE:
 	rptr = __rtl_reifyPtr(M, f);
@@ -1558,8 +1546,12 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	  .env = M->env,
 	};
 
+	func = rtl_reifyFunction(M->codeBase, f);
+
+	assert(!func->isBuiltin);
+
 	M->env = b;
-	M->pc  = rtl_resolveAddr(M, f);
+	M->pc  = func->as.lisp.code;
 
 	break;
 
@@ -1581,8 +1573,10 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
       VPOPK(size);
 
-      if (rtl_isBuiltin(f)) {
-	b = rtl_callBuiltin(M, f, wptr, size);
+      func = rtl_reifyFunction(M->codeBase, f);
+
+      if (func->isBuiltin) {
+	b = func->as.builtin.cFn(M, wptr, size);
 	VPUSH(b);
       } else {
 	wptr = rtl_allocTuple(M, &b, 1);
@@ -1599,7 +1593,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	};
 
 	M->env = b;
-	M->pc = rtl_resolveAddr(M, f);
+	M->pc  = func->as.lisp.code;
       } break;
 
     case RTL_OP_APPLY_LIST:
@@ -1617,24 +1611,30 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
       f = VPOP();
 
       switch (rtl_typeOf(f)) {
-      case RTL_ADDR:
-	wptr = rtl_allocTuple(M, &b, 1);
-	wptr[0] = a;
+      case RTL_FUNCTION:
+	func = rtl_reifyFunction(M->codeBase, f);
+	if (func->isBuiltin) {
+	  rptr = rtl_reifyTuple(M, a, &len);
 
-	if (unlikely(M->rStackLen == M->rStackCap)) {
-	  M->rStackCap = M->rStackCap*2;
-	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	}
+	  b = func->as.builtin.cFn(M, rptr, len);
+	  VPUSH(b);
+	} else {
+	  wptr = rtl_allocTuple(M, &b, 1);
+	  wptr[0] = a;
 
-	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	  .pc  = M->pc,
-	  .env = M->env,
-	};
+	  if (unlikely(M->rStackLen == M->rStackCap)) {
+	    M->rStackCap = M->rStackCap*2;
+	    M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
+	  }
 
-	M->env = b;
-	M->pc = rtl_resolveAddr(M, f);
+	  M->rStack[M->rStackLen++] = (rtl_RetAddr) {
+	    .pc  = M->pc,
+	    .env = M->env,
+	  };
 
-	break;
+	  M->env = b;
+	  M->pc  = func->as.lisp.code;
+	} break;
 
       case RTL_CLOSURE:
 	rptr = __rtl_reifyPtr(M, f);
@@ -1657,9 +1657,12 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word addr)
 	  .env = M->env,
 	};
 
-	M->env = b;
-	M->pc  = rtl_resolveAddr(M, f);
+	func = rtl_reifyFunction(M->codeBase, f);
 
+	assert(!func->isBuiltin);
+
+	M->env = b;
+	M->pc  = func->as.lisp.code;
 	break;
 
       default:
@@ -1821,126 +1824,93 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
   return rtl_run(M, fn);
 }
 
-rtl_Error rtl_runSnippet(rtl_Machine *M, uint8_t *code, uint16_t len)
+uint32_t rtl_newFuncID(rtl_CodeBase *cb, rtl_Word name)
 {
-  uint32_t pageID = rtl_newPageID(M->codeBase, rtl_intern("repl", "snippet"));
+  rtl_Function *func;
 
-  for (uint32_t i = 0; i < len; i++) {
-    rtl_emitByteToPage(M->codeBase, pageID, code[i]);
+  if (cb->fnsCap == cb->fnsLen) {
+    cb->fnsCap = cb->fnsCap == 0 ? 32 : 2*cb->fnsCap;
+    cb->fns    = realloc(cb->fns, sizeof(rtl_Function *)*cb->fnsCap);
   }
 
-  return rtl_run(M, rtl_addr(pageID));
+  // Use calloc to get zeroed memory
+  func = calloc(1, sizeof(rtl_Function));
+
+  func->name    = name;
+  func->version = 0;
+
+  cb->fns[cb->fnsLen] = func;
+
+  return cb->fnsLen++;
 }
 
-uint32_t rtl_newPageID(rtl_CodeBase *cb, rtl_Word name)
+void rtl_newFuncVersion(rtl_CodeBase *cb, uint32_t fnID)
 {
-  rtl_Page *page;
+  rtl_Function *oldFn, *newFn;
 
-  if (cb->pagesCap == cb->pagesLen) {
-    cb->pagesCap = cb->pagesCap == 0 ? 32 : 2*cb->pagesCap;
-    cb->pages    = realloc(cb->pages, sizeof(rtl_Page *)*cb->pagesCap);
+  oldFn = cb->fns[fnID];
+  newFn = calloc(1, sizeof(rtl_Function));
+
+  newFn->name    = oldFn->name;
+  newFn->version = oldFn->version + 1;
+
+  free(oldFn);
+
+  cb->fns[fnID] = newFn;
+}
+
+rtl_Function *rtl_getFuncByID(rtl_CodeBase *cb, uint32_t id)
+{
+  assert(id < cb->fnsLen);
+  return cb->fns[id];
+}
+
+void rtl_emitByteToFunc(rtl_CodeBase *cb, uint32_t fnID, uint8_t b)
+{
+  rtl_Function *func;
+
+  assert(fnID < cb->fnsLen);
+  func = cb->fns[fnID];
+
+  assert(!func->isBuiltin);
+
+  if (unlikely(func->as.lisp.cap == func->as.lisp.len)) {
+    func->as.lisp.cap = !func->as.lisp.cap ? 32 : 4*func->as.lisp.cap/3;
+    func              = realloc(func, sizeof(rtl_Function) + func->as.lisp.cap);
+    cb->fns[fnID]     = func;
   }
 
-  page = malloc(sizeof(rtl_Page));
-
-  page->name    = name;
-  page->len     = 0;
-  page->cap     = 0;
-  page->version = 0;
-
-  cb->pages[cb->pagesLen] = page;
-
-  return cb->pagesLen++;
+  func->as.lisp.code[func->as.lisp.len++] = b;
 }
 
-/* void rtl_installPage(rtl_CodeBase *cb, uint32_t id, rtl_Page *page) */
-/* { */
-/*   assert(id < cb->pagesLen); */
-
-/*   page->version = cb->pages[id]->version + 1; */
-
-/*   free(cb->pages[id]); */
-/*   cb->pages[id] = page; */
-/* } */
-
-void rtl_newPageVersion(rtl_CodeBase *cb, uint32_t pageID)
-{
-  rtl_Page *oldPage, *newPage;
-
-  oldPage = cb->pages[pageID];
-  newPage = malloc(sizeof(rtl_Page));
-
-  newPage->name    = oldPage->name;
-  newPage->len     = 0;
-  newPage->cap     = 0;
-  newPage->version = oldPage->version + 1;
-
-  free(oldPage);
-
-  cb->pages[pageID] = newPage;
-}
-
-/* static */
-/* uint16_t rtl_installNewPage(rtl_Machine *M, rtl_Page *page) */
-/* { */
-/*   uint16_t id; */
-
-/*   id = rtl_newPageID(M); */
-
-/*   rtl_installPage(M, id, page); */
-
-/*   return id; */
-/* } */
-
-rtl_Page *rtl_getPageByID(rtl_CodeBase *cb, uint32_t id)
-{
-  assert(id < cb->pagesLen);
-  return cb->pages[id];
-}
-
-void rtl_emitByteToPage(rtl_CodeBase *cb, uint32_t pageID, uint8_t b)
-{
-  rtl_Page *page;
-
-  assert(pageID < cb->pagesLen);
-  page = cb->pages[pageID];
-
-  if (unlikely(page->cap == page->len)) {
-    page->cap = !page->cap ? 32 : 4*page->cap/3;
-    page      = realloc(page, sizeof(rtl_Page) + page->cap);
-    cb->pages[pageID] = page;
-  }
-
-  page->code[page->len++] = b;
-}
-
-void rtl_emitShortToPage(rtl_CodeBase *cb, uint32_t pageID, uint16_t u16)
+void rtl_emitShortToFunc(rtl_CodeBase *cb, uint32_t fnID, uint16_t u16)
 {
 
-  rtl_emitByteToPage(cb, pageID, (u16 >> 0) & 0xFF);
-  rtl_emitByteToPage(cb, pageID, (u16 >> 8) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (u16 >> 0) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (u16 >> 8) & 0xFF);
 }
 
-void rtl_emitWordToPage(rtl_CodeBase *cb, uint32_t pageID, rtl_Word w)
+void rtl_emitWordToFunc(rtl_CodeBase *cb, uint32_t fnID, rtl_Word w)
 {
-  rtl_emitByteToPage(cb, pageID, (w >>  0) & 0xFF);
-  rtl_emitByteToPage(cb, pageID, (w >>  8) & 0xFF);
-  rtl_emitByteToPage(cb, pageID, (w >> 16) & 0xFF);
-  rtl_emitByteToPage(cb, pageID, (w >> 24) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (w >>  0) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (w >>  8) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (w >> 16) & 0xFF);
+  rtl_emitByteToFunc(cb, fnID, (w >> 24) & 0xFF);
 }
 
-void rtl_emitStringToPage(rtl_CodeBase *cb, uint32_t pageID, char const *cstr)
+void rtl_emitStringToFunc(rtl_CodeBase *cb, uint32_t fnID, char const *cstr)
 {
   for (; *cstr != '\0'; cstr++) {
-    rtl_emitByteToPage(cb, pageID, *cstr);
+    rtl_emitByteToFunc(cb, fnID, *cstr);
   }
-  rtl_emitByteToPage(cb, pageID, '\0');
+  rtl_emitByteToFunc(cb, fnID, '\0');
 }
 
-uint32_t rtl_nextPageOffs(rtl_CodeBase *cb, uint32_t pageID)
+uint32_t rtl_nextFuncOffs(rtl_CodeBase *cb, uint32_t fnID)
 {
-  assert(pageID < cb->pagesLen);
-  return cb->pages[pageID]->len;
+  assert(fnID < cb->fnsLen);
+  assert(!cb->fns[fnID]->isBuiltin);
+  return cb->fns[fnID]->as.lisp.len;
 }
 
 rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
