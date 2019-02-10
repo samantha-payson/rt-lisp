@@ -400,6 +400,13 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   call      %d\n", (int)size);
     return bc + 3;
 
+  case RTL_OP_TAIL:
+    size = (uint16_t)bc[1] << 0
+         | (uint16_t)bc[2] << 8;
+
+    printf("   tail      %d\n", (int)size);
+    return bc + 3;
+
   case RTL_OP_STATIC_CALL:
     literal = (rtl_Word)bc[1] << 0
             | (rtl_Word)bc[2] << 8
@@ -417,6 +424,23 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
 	   (int)size);
     return bc + 7;
 
+  case RTL_OP_STATIC_TAIL:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    size = (uint16_t)bc[5] << 0
+         | (uint16_t)bc[6] << 8;
+
+    func = rtl_reifyFunction(codeBase, literal);
+
+    printf("   static-tail %s:%s %d\n",
+	   rtl_symbolPackageName(func->name),
+	   rtl_symbolName(func->name),
+	   (int)size);
+    return bc + 7;
+
   case RTL_OP_APPLY_LIST:
     printf("  apply-list\n");
     return bc + 1;
@@ -425,8 +449,12 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("  apply-tuple\n");
     return bc + 1;
 
-  case RTL_OP_UNDEFINED_FUNCTION:
-    printf("   undefined-fn\n");
+  case RTL_OP_UNDEFINED_CALL:
+    printf("   undef-call\n");
+    return bc + 7;
+
+  case RTL_OP_UNDEFINED_TAIL:
+    printf("   undef-tail\n");
     return bc + 7;
 
   case RTL_OP_UNDEFINED_VAR:

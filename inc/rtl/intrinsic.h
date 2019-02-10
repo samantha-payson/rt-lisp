@@ -31,7 +31,9 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_LOOKUP,
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
+  RTL_INTRINSIC_TAIL,
   RTL_INTRINSIC_NAMED_CALL,
+  RTL_INTRINSIC_NAMED_TAIL,
   RTL_INTRINSIC_APPLY_TUPLE,
   RTL_INTRINSIC_APPLY_LIST,
   RTL_INTRINSIC_PROGN,
@@ -115,13 +117,13 @@ struct rtl_Intrinsic {
       rtl_Intrinsic *fn;
       rtl_Intrinsic **args;
       size_t        argsLen;
-    } call;
+    } call, tail;
 
     struct {
       rtl_Word      name;
       rtl_Intrinsic **args;
       size_t        argsLen;
-    } namedCall;
+    } namedCall, namedTail;
 
     struct {
       rtl_Intrinsic *fn, *arg;

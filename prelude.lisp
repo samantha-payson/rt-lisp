@@ -176,4 +176,27 @@
   (with-gensyms (a b c)
     (list a b c)))
 
+(use-package std
+
+  (defun impl-repeat (n x out)
+    (if (gt n 0)
+	(impl-repeat (isub n 1) x (cons x out))
+      out))
+
+  (defun repeat (n x)
+    (impl-repeat n x nil))
+
+
+  (defun impl-repeat-of (n f out)
+    (if (gt n 0)
+	(impl-repeat-of (isub n 1) f (cons (f) out))
+      out))
+
+  (defun repeat-of (n f)
+    (impl-repeat-of n f nil))
+
+  (repeat-of (imul 128 1024)
+	     (lambda ()
+	       "a b c d e f g h i j k l m n o p q r s t u v w x y z")))
+
 

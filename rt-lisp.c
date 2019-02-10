@@ -1100,6 +1100,19 @@ char const *rtl_typeName(rtl_WordType type)
     })						\
   // End of multi-line macro
 
+#define RPUSH() ({							\
+      if (unlikely(M->rStackLen == M->rStackCap)) {			\
+	M->rStackCap = M->rStackCap*2;					\
+	M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr)); \
+      }									\
+									\
+      M->rStack[M->rStackLen++] = (rtl_RetAddr) {			\
+	.pc  = M->pc,							\
+	.env = M->env,							\
+      };								\
+    })									\
+  // End of multi-line macro
+
 #define VPOP() (M->vStack[--M->vStackLen])
 
 #define VPOPK(K) ({ M->vStackLen -= (K); })
@@ -1288,7 +1301,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
     /* printf("\n"); */
 
-    // rtl_disasm(M->pc);
+    // rtl_disasm(M->codeBase, M->pc);
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
@@ -1556,6 +1569,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       VPUSH(f);
       break;
 
+    case RTL_OP_TAIL:
     case RTL_OP_CALL:
       M->pc = readShort(M->pc, &size);
 
@@ -1579,15 +1593,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	  wptr = rtl_allocTuple(M, &b, 1);
 	  wptr[0] = a;
 
-	  if (unlikely(M->rStackLen == M->rStackCap)) {
-	    M->rStackCap = M->rStackCap*2;
-	    M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	  }
-
-	  M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	    .pc  = M->pc,
-	    .env = M->env,
-	  };
+	  if (opcode == RTL_OP_CALL) RPUSH();
 
 	  M->env = b;
 	  M->pc = func->as.lisp.code;
@@ -1609,15 +1615,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	wptr[len] = a;
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
-	if (unlikely(M->rStackLen == M->rStackCap)) {
-	  M->rStackCap = M->rStackCap*2;
-	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	}
-
-	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	  .pc  = M->pc,
-	  .env = M->env,
-	};
+	if (opcode == RTL_OP_CALL) RPUSH();
 
 	func = rtl_reifyFunction(M->codeBase, f);
 
@@ -1635,6 +1633,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
       } break;
 
+    case RTL_OP_STATIC_TAIL:
     case RTL_OP_STATIC_CALL:
       M->pc = readWord(M->pc, &f);
       M->pc = readShort(M->pc, &size);
@@ -1655,15 +1654,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	wptr = rtl_allocTuple(M, &b, 1);
 	wptr[0] = a;
 
-	if (unlikely(M->rStackLen == M->rStackCap)) {
-	  M->rStackCap = M->rStackCap*2;
-	  M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	}
+	if (opcode == RTL_OP_STATIC_CALL) RPUSH();
 
-	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	  .pc  = M->pc,
-	  .env = M->env,
-	};
 
 	M->env = b;
 	M->pc  = func->as.lisp.code;
@@ -1695,15 +1687,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	  wptr = rtl_allocTuple(M, &b, 1);
 	  wptr[0] = a;
 
-	  if (unlikely(M->rStackLen == M->rStackCap)) {
-	    M->rStackCap = M->rStackCap*2;
-	    M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr));
-	  }
-
-	  M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	    .pc  = M->pc,
-	    .env = M->env,
-	  };
+	  RPUSH();
 
 	  M->env = b;
 	  M->pc  = func->as.lisp.code;
@@ -1725,10 +1709,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	wptr[len] = a;
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
-	M->rStack[M->rStackLen++] = (rtl_RetAddr) {
-	  .pc  = M->pc,
-	  .env = M->env,
-	};
+	RPUSH();
 
 	func = rtl_reifyFunction(M->codeBase, f);
 
@@ -1745,7 +1726,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
       } break;
 
-    case RTL_OP_UNDEFINED_FUNCTION:
+    case RTL_OP_UNDEFINED_CALL:
+    case RTL_OP_UNDEFINED_TAIL:
       M->pc = readWord(M->pc, &literal);
 
       printf("tried to call undefined function: '%s:%s'\n",
@@ -1854,7 +1836,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
     default:
       printf("Unhandled instruction: opcode %d\n", (int)opcode);
-      break;
+      goto interp_cleanup;
     }
   }
 

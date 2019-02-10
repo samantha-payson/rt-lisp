@@ -95,9 +95,18 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
       csa->sites[w++] = csa->sites[r];
 
       switch (code[0]) {
-      case RTL_OP_UNDEFINED_FUNCTION:
+      case RTL_OP_UNDEFINED_CALL:
       case RTL_OP_STATIC_CALL:
 	code[0] = RTL_OP_STATIC_CALL;
+	code[1] = (fn >>  0) & 0xFF;
+	code[2] = (fn >>  8) & 0xFF;
+	code[3] = (fn >> 16) & 0xFF;
+	code[4] = (fn >> 24) & 0xFF;
+	break;
+
+      case RTL_OP_UNDEFINED_TAIL:
+      case RTL_OP_STATIC_TAIL:
+	code[0] = RTL_OP_STATIC_TAIL;
 	code[1] = (fn >>  0) & 0xFF;
 	code[2] = (fn >>  8) & 0xFF;
 	code[3] = (fn >> 16) & 0xFF;
@@ -559,6 +568,9 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 static
 size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x);
 
+static
+void rtl_tailCallPass(rtl_Intrinsic *x);
+
 void rtl_compile(rtl_Compiler *C,
 		 rtl_NameSpace const *ns,
 		 uint32_t fnID,
@@ -649,7 +661,10 @@ void rtl_compile(rtl_Compiler *C,
 
   ir = rtl_exprToIntrinsic(C, out);
   ir = rtl_transformIntrinsic(ir);
+
+  rtl_tailCallPass(ir);
   annotateCodeSize(C->M, ir);
+
   rtl_emitIntrinsicCode(C, fnID, ir);
 
   rtl_popWorkingSet(C->M);
@@ -1189,6 +1204,8 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->codeSize = 5;
     break;
 
+  case RTL_INTRINSIC_NAMED_TAIL:
+  case RTL_INTRINSIC_TAIL:
   case RTL_INTRINSIC_NAMED_CALL:
     abort(); // This should never happen
 
@@ -1319,6 +1336,89 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
 rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x) {
   return __impl_transformIntrinsic(NULL, x);
+}
+
+static
+void rtl_tailCallPass(rtl_Intrinsic *x)
+{
+  switch (x->type) {
+  case RTL_INTRINSIC_CONS:
+  case RTL_INTRINSIC_CAR:
+  case RTL_INTRINSIC_CDR:
+  case RTL_INTRINSIC_TUPLE:
+  case RTL_INTRINSIC_LEN:
+  case RTL_INTRINSIC_INSERT:
+  case RTL_INTRINSIC_LOOKUP:
+  case RTL_INTRINSIC_GET:
+  case RTL_INTRINSIC_VAR:
+    break;
+
+  case RTL_INTRINSIC_TAIL:
+  case RTL_INTRINSIC_NAMED_TAIL:
+    abort(); // Shouldn't be any of these yet ..
+
+  case RTL_INTRINSIC_NAMED_CALL:
+    x->type = RTL_INTRINSIC_NAMED_TAIL;
+    break;
+
+  case RTL_INTRINSIC_CALL:
+    x->type = RTL_INTRINSIC_TAIL;
+    break;
+
+  case RTL_INTRINSIC_APPLY_LIST:
+  case RTL_INTRINSIC_APPLY_TUPLE:
+    // TODO: These can be turned into tail calls too...
+    break;
+
+  case RTL_INTRINSIC_PROGN:
+    // The last position of a non-empty progn is in tail position.
+    if (x->as.progn.formsLen > 0) {
+      rtl_tailCallPass(x->as.progn.forms[x->as.progn.formsLen - 1]);
+    } break;
+
+  case RTL_INTRINSIC_LAMBDA:
+    if (x->as.lambda.bodyLen > 0) {
+      rtl_tailCallPass(x->as.lambda.body[x->as.lambda.bodyLen - 1]);
+    } break;
+
+  case RTL_INTRINSIC_DEFUN:
+    if (x->as.defun.bodyLen > 0) {
+      rtl_tailCallPass(x->as.defun.body[x->as.defun.bodyLen - 1]);
+    } break;
+
+  case RTL_INTRINSIC_DEFMACRO:
+    if (x->as.defmacro.bodyLen > 0) {
+      rtl_tailCallPass(x->as.defmacro.body[x->as.defmacro.bodyLen - 1]);
+    } break;
+
+
+  case RTL_INTRINSIC_IADD:
+  case RTL_INTRINSIC_ISUB:
+  case RTL_INTRINSIC_IMUL:
+  case RTL_INTRINSIC_IDIV:
+  case RTL_INTRINSIC_IMOD:
+  case RTL_INTRINSIC_LT:
+  case RTL_INTRINSIC_LEQ:
+  case RTL_INTRINSIC_GT:
+  case RTL_INTRINSIC_GEQ:
+  case RTL_INTRINSIC_EQ:
+  case RTL_INTRINSIC_NEQ:
+  case RTL_INTRINSIC_ISO:
+  case RTL_INTRINSIC_TYPE_PRED:
+    break;
+
+  case RTL_INTRINSIC_IF:
+    rtl_tailCallPass(x->as._if.then);
+    rtl_tailCallPass(x->as._if._else);
+    break;
+
+  case RTL_INTRINSIC_EXPORT:
+  case RTL_INTRINSIC_QUOTE:
+  case RTL_INTRINSIC_STRING:
+  case RTL_INTRINSIC_CONSTANT:
+  case RTL_INTRINSIC_GENSYM:
+    break;
+  }
 }
 
 static
@@ -1466,10 +1566,27 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     }
     return x->codeSize;
 
+  case RTL_INTRINSIC_NAMED_TAIL:
+    x->codeSize = 7;
+
+    for (i = 0; i < x->as.namedTail.argsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.namedTail.args[i]);
+    }
+    return x->codeSize;
+
   case RTL_INTRINSIC_CALL:
     x->codeSize = 3 + annotateCodeSize(M, x->as.call.fn);
+
     for (i = 0; i < x->as.call.argsLen; i++) {
       x->codeSize += annotateCodeSize(M, x->as.call.args[i]);
+    }
+    return x->codeSize;
+
+  case RTL_INTRINSIC_TAIL:
+    x->codeSize = 3 + annotateCodeSize(M, x->as.tail.fn);
+
+    for (i = 0; i < x->as.tail.argsLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.tail.args[i]);
     }
     return x->codeSize;
 
@@ -1770,16 +1887,30 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     break;
 
   case RTL_INTRINSIC_CALL:
+  case RTL_INTRINSIC_TAIL:
     rtl_emitIntrinsicCode(C, fnID, x->as.call.fn);
     for (i = 0; i < x->as.call.argsLen; i++) {
       rtl_emitIntrinsicCode(C, fnID, x->as.call.args[i]);
     }
 
-    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CALL);
+    switch (x->type) {
+    case RTL_INTRINSIC_CALL:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CALL);
+      break;
+
+    case RTL_INTRINSIC_TAIL:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_TAIL);
+      break;
+
+    default:
+      abort();
+    }
+
     rtl_emitShortToFunc(codeBase, fnID, x->as.call.argsLen);
     break;
 
   case RTL_INTRINSIC_NAMED_CALL:
+  case RTL_INTRINSIC_NAMED_TAIL:
     for (i = 0; i < x->as.namedCall.argsLen; i++) {
       rtl_emitIntrinsicCode(C, fnID, x->as.namedCall.args[i]);
     }
@@ -1787,13 +1918,37 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     fnDef = rtl_lookupFn(C, x->as.namedCall.name);
     if (fnDef != NULL && !fnDef->isMacro) {
       offs = rtl_nextFuncOffs(codeBase, fnID);
-      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_CALL);
+
+      switch (x->type) {
+      case RTL_INTRINSIC_NAMED_CALL:
+	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_CALL);
+	break;
+
+      case RTL_INTRINSIC_NAMED_TAIL:
+	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_TAIL);
+	break;
+
+      default:
+	abort();
+      }
 
       rtl_emitWordToFunc(codeBase, fnID, fnDef->fn);
       rtl_emitShortToFunc(codeBase, fnID, x->as.namedCall.argsLen);
     } else {
       offs = rtl_nextFuncOffs(codeBase, fnID);
-      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_FUNCTION);
+
+      switch (x->type) {
+      case RTL_INTRINSIC_NAMED_CALL:
+	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_CALL);
+	break;
+
+      case RTL_INTRINSIC_NAMED_TAIL:
+	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_TAIL);
+	break;
+
+      default:
+	abort();
+      }
 
       rtl_emitWordToFunc(codeBase, fnID, x->as.namedCall.name);
       rtl_emitShortToFunc(codeBase, fnID, x->as.namedCall.argsLen);
@@ -1912,6 +2067,14 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
 
     rtl_defineFn(C, x->as.defmacro.name, rtl_function(newFnID), true);
+
+    printf("  _____\n");
+    printf(" | Compiled macro '%s' to page %d |\n",
+	   rtl_symbolName(x->as.defmacro.name),
+	   (int)newFnID);
+    printf("       ------------");
+    rtl_disasmFn(codeBase, rtl_function(newFnID));
+
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
     rtl_emitWordToFunc(codeBase, fnID, x->as.defmacro.name);

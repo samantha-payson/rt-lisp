@@ -71,7 +71,9 @@ typedef enum rtl_Opcode {
   RTL_OP_CJMP16,
   RTL_OP_CJMP32,
   RTL_OP_CALL,
+  RTL_OP_TAIL,
   RTL_OP_STATIC_CALL,
+  RTL_OP_STATIC_TAIL,
   RTL_OP_APPLY_LIST,
   RTL_OP_APPLY_TUPLE,
   RTL_OP_RETURN,
@@ -80,7 +82,8 @@ typedef enum rtl_Opcode {
   // This opcode is placed wherever there is a call site (or load site) that
   // hasn't been resolved yet. It will print an error and exit the interpreter
   // if executed.
-  RTL_OP_UNDEFINED_FUNCTION,
+  RTL_OP_UNDEFINED_TAIL,
+  RTL_OP_UNDEFINED_CALL,
   RTL_OP_UNDEFINED_VAR,
 
   // Load a variable onto the stack.
