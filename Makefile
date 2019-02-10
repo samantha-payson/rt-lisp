@@ -18,24 +18,27 @@ OBJS = \
   reader.o \
   main.o
 
+
 HDRS = \
   inc/rt-lisp.h \
   inc/rtl/BitMap.h \
   inc/rtl/intrinsic.h \
   inc/rtl/compiler.h \
+  inc/rtl/function.h \
   inc/rtl/int28.h \
   inc/rtl/map.h \
   inc/rtl/top.h \
   inc/rtl/selector.h \
   inc/rtl/nil.h \
+  inc/rtl/string.h \
   inc/rtl/cons.h \
   inc/rtl/rto.h \
   inc/rtl/symbol.h \
   inc/rtl/instructions.h \
   inc/rtl/fix14.h \
   inc/rtl/tuple.h \
-  inc/rtl/debug.h \
-  inc/rtl/addr.h
+  inc/rtl/debug.h
+
 
 crtl: $(OBJS)
 	@ echo "  LD    $@"
