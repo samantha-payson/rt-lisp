@@ -220,6 +220,7 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(insert,       "insert")			\
   M(lookup,       "lookup")			\
   M(var,          "var")			\
+  M(gensym,       "gensym")			\
   M(call,         "call")			\
   M(namedCall,    "named-call")			\
   M(applyList,    "apply-list")			\
@@ -1049,6 +1050,10 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkApplyTupleIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
+    } else if (head == symCache.intrinsic.gensym) {
+      assert(len == 1);
+
+      return rtl_mkGensymIntrinsic();
     } else {
       assert(len >= 1);
 
@@ -1305,6 +1310,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   case RTL_INTRINSIC_QUOTE:
   case RTL_INTRINSIC_STRING:
   case RTL_INTRINSIC_CONSTANT:
+  case RTL_INTRINSIC_GENSYM:
     break;
   }
 
@@ -1566,6 +1572,9 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
 
   case RTL_INTRINSIC_STRING:
     return x->codeSize = 5 + strlen(x->as.string.str) + 1;
+
+  case RTL_INTRINSIC_GENSYM:
+    return x->codeSize = 1;
 
   case RTL_INTRINSIC_CONSTANT:
     switch (x->as.constant) {
@@ -2089,6 +2098,10 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STRING);
     rtl_emitWordToFunc(codeBase, fnID, x->as.string.strLen);
     rtl_emitStringToFunc(codeBase, fnID, x->as.string.str);
+    break;
+
+  case RTL_INTRINSIC_GENSYM:
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_GENSYM);
     break;
 
   case RTL_INTRINSIC_CONSTANT:

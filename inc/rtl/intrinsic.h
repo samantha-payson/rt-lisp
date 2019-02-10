@@ -56,6 +56,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_TYPE_PRED,
   RTL_INTRINSIC_STRING,
   RTL_INTRINSIC_CONSTANT,
+  RTL_INTRINSIC_GENSYM,
 } rtl_IntrinsicType;
 
 typedef struct rtl_Intrinsic rtl_Intrinsic;
@@ -621,6 +622,18 @@ rtl_Intrinsic *rtl_mkStringIntrinsic(rtl_Machine *M, rtl_Word str)
 	.strLen = len,
       },
     },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkGensymIntrinsic()
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_GENSYM,
   };
 
   return intr;

@@ -60,6 +60,9 @@ typedef enum rtl_Opcode {
   // Logical operations
   RTL_OP_NOT,
 
+  // Symbol operations
+  RTL_OP_GENSYM,
+
   // Control flow operations
   RTL_OP_JMP8,
   RTL_OP_JMP16,

@@ -32,6 +32,15 @@ uint32_t rtl_symbolID(rtl_Word w)
   return w >> 4;
 }
 
+// Gensyms have the highest bit set.
+static inline
+bool rtl_isGensym(rtl_Word w)
+{
+  return rtl_isSymbol(w) && (w & (1 << 31));
+}
+
+rtl_Word rtl_gensym();
+
 static inline
 rtl_Word rtl_symbol(uint32_t id)
 {

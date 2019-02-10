@@ -30,7 +30,11 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_SYMBOL:
-    printf("%s:%s", rtl_symbolPackageName(w), rtl_symbolName(w));
+    if (rtl_isGensym(w)) {
+      printf("#:G%04X", (unsigned int)rtl_symbolID(w) & 0x7FFFFFF);
+    } else {
+      printf("%s:%s", rtl_symbolPackageName(w), rtl_symbolName(w));
+    }
     break;
 
   case RTL_UNRESOLVED_SYMBOL:
@@ -279,6 +283,10 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
 
   case RTL_OP_CONST_TOP:
     printf("   top\n");
+    return bc + 1;
+
+  case RTL_OP_GENSYM:
+    printf("   gensym\n");
     return bc + 1;
 
   case RTL_OP_STRING:

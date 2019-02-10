@@ -1308,6 +1308,10 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       VPUSH(RTL_TOP);
       break;
 
+    case RTL_OP_GENSYM:
+      VPUSH(rtl_gensym());
+      break;
+
     case RTL_OP_STRING:
       // Here, literal is actually just a 32-bit integer
       M->pc = readWord(M->pc, &literal);

@@ -146,13 +146,22 @@
   		    `(intrinsic:export ~sym))
   		  sym*)))
 
-  (export length + let mapcar-1 when list)
+  (export length + let mapcar-1 when list with-gensyms)
+
+  (defun gensym ()
+    (intrinsic:gensym))
 
   (defmacro + arg*
     (cond
       ((intrinsic:nil? arg*) 0)
       ((intrinsic:nil? (cdr arg*)) (car arg*))
-      (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*)))))))
+      (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*))))))
+
+  (defmacro with-gensyms (g* . body)
+    `(let ~(mapcar-1 (lambda (g)
+		       `(~g (gensym)))
+		     g*)
+       @body)))
 
 (use-package std
   (let ((x 1)
@@ -164,8 +173,7 @@
   (std:+ a b c))
 
 (use-package std
-  (let ((f (io:open "hello.txt" .read)))
-    (let ((ch* (list (io:read-char f)
-		     (io:read-char f))))
-      (io:close f)
-      ch*)))
+  (with-gensyms (a b c)
+    (list a b c)))
+
+

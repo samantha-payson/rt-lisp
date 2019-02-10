@@ -199,6 +199,9 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
   sym->name = strdup(name);
   sym->pkg  = pkg;
 
+  // Make sure that we haven't overflowed into the realm of gensyms.
+  assert(sym->id < (1 << 27));
+
   // Add this new Symbol to its list in the hash table.
   sym->next = symTable[idx];
   symTable[idx] = sym;
@@ -213,6 +216,15 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
   symByID[symNextID++] = sym;
 
   return sym->id;
+}
+
+static uint32_t gensymNextID;
+
+rtl_Word rtl_gensym()
+{
+  uint32_t id = gensymNextID++ | (1 << 27);
+
+  return rtl_symbol(id);
 }
 
 static
@@ -483,6 +495,10 @@ char const *rtl_symbolName(rtl_Word w)
   uint32_t     id;
   Symbol const *sym;
 
+  if (rtl_isGensym(w)) {
+    return "G";
+  }
+
   id = rtl_symbolID(w);
   assert(id < symNextID);
 
@@ -507,6 +523,10 @@ char const *rtl_unresolvedSymbolName(rtl_Word w)
 char const *rtl_symbolPackageName(rtl_Word w) {
   uint32_t      id;
   Symbol const  *sym;
+
+  if (rtl_isGensym(w)) {
+    return "__gensym__";
+  }
 
   id = rtl_symbolID(w);
 
