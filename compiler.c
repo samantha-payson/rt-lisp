@@ -199,6 +199,15 @@ rtl_Word rtl_intern(char const *pkg, char const *name)
   return rtl_symbol(id);
 }
 
+rtl_Word rtl_internSelector(char const *pkg, char const *name)
+{
+  uint32_t pkgID, id;
+
+  pkgID = rtl_internPackageID(pkg ? pkg : "");
+  id    = rtl_internSymbolID(pkgID, name);
+
+  return rtl_selector(id);
+}
 
 #define MAP_INTRINSICS(M)			\
   M(cons,         "cons")			\

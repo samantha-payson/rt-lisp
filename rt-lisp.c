@@ -27,7 +27,6 @@
 #define likely(x)       __builtin_expect(!!(x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-// Reviewed
 static
 rtl_Generation *mkGeneration(int genNbr)
 {
@@ -117,13 +116,11 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
   rtl_resolveCallSites(C, name, def->fn);
 }
 
-// Reviewed
 void rtl_initHeap(rtl_Heap *h)
 {
   memset(h->gen, 0, sizeof(rtl_Generation *)*RTL_MAX_GENERATIONS);
 }
 
-// Reviewed
 rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
 {
   uint32_t       genNum,
@@ -144,7 +141,6 @@ rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
   return gen->words + offs;
 }
 
-// Reviewed
 rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   rtl_Word *backing;
 
@@ -171,7 +167,6 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   }
 }
 
-// Reviewed
 rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
@@ -209,7 +204,6 @@ rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons)
   return ptr[1];
 }
 
-// Reviewed
 static
 rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 {
@@ -221,8 +215,6 @@ rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
 static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w);
 
-// Reviewed
-//
 // TODO: Profiling shows that this is the slowest function in the interpreter BY
 //       FAR. It takes more than 50% of our runtime, probably more than 80% if I
 //       did the math out...
@@ -278,8 +270,6 @@ void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
   }
 }
 
-// Reviewed
-//
 // Mark the memory w points to, for generation g.
 static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
@@ -318,8 +308,16 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
 	// If any one bit is set, then all of them are.
 	break;
       }
-    }
-    break;
+    } break;
+
+  case RTL_NATIVE:
+    len = rtl_sizeOfNative(M, w);
+    for (i = 0; i < (len + 2) / 3 + 1; i++) {
+      if (rtl_bmpSetBit(gen->marks, wOffs + i, true)) {
+	// If any bit is set, then all of them are.
+	break;
+      }
+    } break;
 
   case RTL_MAP:
     markMap(M, gen, w, 1);
@@ -354,7 +352,6 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   }
 }
 
-// Reviewed
 static
 rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
 {
@@ -387,8 +384,6 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   return mkPtr(type, g + 1, newOffs);
 }
 
-// Still needs reviewing.......... too drunk right now <(^_^)>
-//
 // Returns the number of the highest generation that was collected.
 static
 int collectGen(rtl_Machine *M, int g)
@@ -536,6 +531,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   switch (t) {
   case RTL_TUPLE:
   case RTL_STRING:
+  case RTL_NATIVE:
   case RTL_MAP:
   case RTL_CONS:
   case RTL_CLOSURE:
@@ -614,7 +610,6 @@ rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t sLen)
 
   return w;
 }
-
 size_t rtl_stringLength(rtl_Machine *M, rtl_Word str)
 {
   rtl_Word const *wPtr;
@@ -640,7 +635,8 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t
 
       if (idx + 1 == cap || buf[idx] == '\0') {
 	buf[idx] = '\0';
-	*len = idx;
+	if (len) *len = idx;
+
 	return;
       }
     }
@@ -648,6 +644,76 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t
 
   abort(); // Unreachable: we should either find a '\0' or hit capacity -- no
 	   // exceptions!
+}
+
+rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
+{
+  rtl_Word w;
+  size_t   wLen, i;
+  rtl_Word *wBacking;
+
+  uint8_t const *u8;
+
+  u8   = (uint8_t const *)data;
+  wLen = (size + 2) / 3;
+
+  wBacking    = rtl_allocGC(M, RTL_NATIVE, &w, wLen + 1);
+
+  memset(wBacking, 0, sizeof(rtl_Word)*(wLen + 1));
+
+  wBacking[0] = rtl_header(size);
+
+  for (i = 0; i < wLen; i++) {
+    switch (size - i*3) {
+    case 1:
+      wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] << 8)
+	              | RTL_HEADER;
+      break;
+
+    case 2:
+      wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] << 8)
+	              | ((rtl_Word)u8[i*3 + 1] << 16)
+	              | RTL_HEADER;
+      break;
+
+    default:
+      wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0]   <<  8)
+	              | ((rtl_Word)u8[i*3 + 1] << 16)
+	              | ((rtl_Word)u8[i*3 + 2] << 24)
+	              | RTL_HEADER;
+      break;
+    }
+  }
+
+  return w;
+}
+
+uint32_t rtl_sizeOfNative(rtl_Machine *M, rtl_Word n)
+{
+  rtl_Word const *rPtr;
+
+  assert(rtl_isNative(n));
+
+  rPtr = __rtl_reifyPtr(M, n);
+
+  return rtl_headerValue(rPtr[0]);
+}
+
+void rtl_reifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t outSize)
+{
+  rtl_Word const *rPtr;
+  uint32_t i, size;
+  uint8_t  *u8;
+
+  assert(rtl_isNative(w));
+
+  rPtr = __rtl_reifyPtr(M, w);
+  size = rtl_headerValue(rPtr[0]);
+  u8   = (uint8_t *)out;
+
+  for (i = 0; i < size; i++) {
+    u8[i] = (rPtr[1 + i/3] >> (((i % 3) + 1)*8)) & 0xFF;
+  }
 }
 
 uint32_t mask32(unsigned k) {
@@ -981,6 +1047,9 @@ char const *rtl_typeName(rtl_WordType type)
 
   case RTL_STRING:
     return "String";
+
+  case RTL_NATIVE:
+    return "Native";
 
   case RTL_MAP:
     return "Map";

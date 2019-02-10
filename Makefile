@@ -15,6 +15,7 @@ OBJS = \
   debug.o \
   symbol.o \
   compiler.o \
+  io.o \
   reader.o \
   main.o
 
@@ -33,6 +34,7 @@ HDRS = \
   inc/rtl/string.h \
   inc/rtl/cons.h \
   inc/rtl/rto.h \
+  inc/rtl/native.h \
   inc/rtl/symbol.h \
   inc/rtl/instructions.h \
   inc/rtl/fix14.h \

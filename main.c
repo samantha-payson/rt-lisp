@@ -49,10 +49,7 @@ int main() {
   rtl_initMachine(&M, &codeBase);
   rtl_initCompiler(&C, &M);
 
-  rtl_internPackage(&C, "std");
-
-  rtl_registerBuiltin(&C, rtl_intern("std", "hello"), builtinHello);
-  rtl_export(&C, rtl_intern("std", "hello"));
+  rtl_io_installBuiltins(&C);
 
   RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
 

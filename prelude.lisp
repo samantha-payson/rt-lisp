@@ -146,7 +146,7 @@
   		    `(intrinsic:export ~sym))
   		  sym*)))
 
-  (export length + let mapcar-1 when)
+  (export length + let mapcar-1 when list)
 
   (defmacro + arg*
     (cond
@@ -164,18 +164,8 @@
   (std:+ a b c))
 
 (use-package std
-
-  (defun repeat (n x)
-    (when (gt n 0)
-      (cons x
-	    (repeat (isub n 1) x))))
-
-  (defun repeat-of (n f)
-    (when (gt n 0)
-      (cons (f)
-	    (repeat-of (isub n 1) f))))
-
-  (idiv (length
-	 (repeat (imul 128 1024)
-		 "a b c d e f g h i j k l m n o p q r s t u v w x y z"))
-	1024))
+  (let ((f (io:open "hello.txt" .read)))
+    (let ((ch* (list (io:read-char f)
+		     (io:read-char f))))
+      (io:close f)
+      ch*)))

@@ -123,6 +123,9 @@ rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *pkg);
 // Intern a symbol, with a given package and name. 
 rtl_Word rtl_intern(char const *pkg, char const *name);
 
+// Package may be NULL or "" for selectors w/ no package.
+rtl_Word rtl_internSelector(char const *pkg, char const *name);
+
 // Resolve a symbol in the given namespace.
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   rtl_NameSpace const *ns,

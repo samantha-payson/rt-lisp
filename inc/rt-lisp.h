@@ -58,6 +58,8 @@ typedef enum rtl_WordType {
   //                characters in the string, excluding null terminator byte (in
   //                other words, the result of calling strlen).
   //
+  //    RTL_NATIVE: an unsigned 28-bit integer encoding the number of bytes.
+  //
   //    RTL_MAP: a 28-bit bitmap, indicating the number of key/value pairs in
   //            this level of the HAMT.
   RTL_HEADER = 9,
@@ -65,9 +67,8 @@ typedef enum rtl_WordType {
   RTL_FUNCTION = 10,
   RTL_CLOSURE  = 11,
 
-  // Used to represent arbitrary binary data, mostly useful for encoding native
-  // types.
-  RTL_BYTES = 12,
+  // Used to represent arbitrary binary data, useful for encoding native types.
+  RTL_NATIVE = 12,
 
   RTL_UNRESOLVED_SYMBOL   = 13,
   RTL_UNRESOLVED_SELECTOR = 14,
@@ -368,6 +369,7 @@ int rtl_isPtr(rtl_Word w) {
 #include "rtl/string.h"
 #include "rtl/map.h"
 #include "rtl/cons.h"
+#include "rtl/native.h"
 #include "rtl/function.h"
 #include "rtl/top.h"
 
@@ -396,5 +398,7 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   uint32_t            unresID);
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f);
+
+void rtl_io_installBuiltins(rtl_Compiler *C);
 
 #endif // rt-lisp.h
