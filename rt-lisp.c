@@ -36,8 +36,7 @@ rtl_Generation *mkGeneration(int genNbr)
   // We have 27 address bits available to us.
   capacity = __rtl_genCapacity(genNbr);
 
-  gen = malloc(sizeof(rtl_Generation)
-	       + capacity*sizeof(rtl_Word));
+  gen = malloc(sizeof(rtl_Generation) + capacity*sizeof(rtl_Word));
 
   gen->nbr      = genNbr;
   gen->fillPtr  = 0;
@@ -1254,6 +1253,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
   uint16_t frame, idx, size, u16;
   size_t   len;
   ssize_t  i;
+  uint32_t gen, offs;
 
   rtl_Function *func;
 
@@ -1270,7 +1270,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
   rtl_Word f = RTL_NIL,
            g = RTL_NIL;
 
-  rtl_Word const *rptr;
+  rtl_Word const *rptr, *sptr;
   rtl_Word *wptr;
 
   // Ensure these words are involved in any garbage collection that may happen.
@@ -1301,7 +1301,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
     /* printf("\n"); */
 
-    // rtl_disasm(M->codeBase, M->pc);
+    rtl_disasm(M->codeBase, M->pc);
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
@@ -1569,6 +1569,74 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       VPUSH(f);
       break;
 
+    case RTL_OP_LABELS:
+      M->pc = readShort(M->pc, &size);
+
+      VSTACK_ASSERT_LEN(size);
+
+      // IMPORTANT: In order to allow circular references between these closures
+      //            and the labels' env frame, we need to allocate ALL memory in
+      //            one big block to ensure there are no pointers to lower GC
+      //            gens from higher gens.
+      //
+      // TODO: This means the biggest labels statement allowed is whatever fits
+      //       gen0, which I think means like 300 functions max per labels
+      //       statement.
+
+      sptr = M->vStack + M->vStackLen - size;
+
+      wptr = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+size + 2*size);
+
+      if (rtl_isTuple(M->env)) {
+	rptr = rtl_reifyTuple(M, M->env, &len);
+      } else {
+	rptr = NULL;
+	len = 0;
+      }
+      wptr[0] = rtl_header(len + 1);
+
+      // Here we build all of the closures.
+      for (i = 0; i < size; i++) {
+	wptr[1+len+1 + 1+size + i*2 + 0] = sptr[i];
+	wptr[1+len+1 + 1+size + i*2 + 1] = a;
+      }
+
+      // Then build the env tuple
+      for (i = 0; i < len; i++) { // First copy the existing frames.
+	wptr[1 + i] = rptr[i];
+      }
+
+      gen  = __rtl_ptrGen(a);
+      offs = __rtl_ptrOffs(a);
+
+      // Then add a pointer to the new frame
+      wptr[1 + len] = mkPtr(RTL_TUPLE,
+			    gen,
+			    offs + 1+len+1);
+
+      wptr[1+len+1] = rtl_header(size);
+
+      // Finally, populate the new frame
+      for (i = 0; i < size; i++) {
+	wptr[1+len+1 + 1 + i] = mkPtr(RTL_CLOSURE,
+				      gen,
+				      offs + 1+len+1 + 1+size + i*2);
+      }
+
+      M->env = a;
+      break;
+
+    case RTL_OP_END_LABELS:
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      wptr = rtl_allocTuple(M, &a, len - 1);
+      rptr = rtl_reifyTuple(M, M->env, &len); // Reify again in-case rptr was
+					      // invalidated by a collection.
+
+      memcpy(wptr, rptr, sizeof(rtl_Word)*(len - 1));
+
+      M->env = a;
+      break;
+
     case RTL_OP_TAIL:
     case RTL_OP_CALL:
       M->pc = readShort(M->pc, &size);
@@ -1604,6 +1672,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
 	f = rptr[0];
 
+	// TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
 	if (rptr[1] != RTL_NIL) {
 	  rptr = rtl_reifyTuple(M, rptr[1], &len);
 	} else {
@@ -1762,6 +1831,8 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       M->pc = readShort(M->pc, &idx);
 
       rptr = rtl_reifyTuple(M, M->env, &len);
+
+      // TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
       rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
       assert(0 <= idx && idx <= len);
 

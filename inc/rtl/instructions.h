@@ -91,6 +91,8 @@ typedef enum rtl_Opcode {
 
   // Create a closure in the current environment
   RTL_OP_CLOSURE,
+  RTL_OP_LABELS,
+  RTL_OP_END_LABELS,
 
   // Int28 Arithmetic
   RTL_OP_IADD,

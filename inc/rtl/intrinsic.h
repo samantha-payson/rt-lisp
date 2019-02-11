@@ -38,6 +38,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_APPLY_LIST,
   RTL_INTRINSIC_PROGN,
   RTL_INTRINSIC_LAMBDA,
+  RTL_INTRINSIC_LABELS,
   RTL_INTRINSIC_DEFUN,
   RTL_INTRINSIC_DEFMACRO,
   RTL_INTRINSIC_EXPORT,
@@ -143,6 +144,15 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **body;
       size_t        bodyLen;
     } lambda;
+
+    struct {
+      rtl_Word      *labelsNames;
+      rtl_Intrinsic **labelsFns;
+      uint16_t      labelsLen;
+
+      rtl_Intrinsic **body;
+      size_t        bodyLen;
+    } labels;
 
     struct {
       rtl_Intrinsic **forms;
@@ -470,6 +480,31 @@ rtl_Intrinsic *rtl_mkLambdaIntrinsic(rtl_Word      *argNames,
       .lambda = {
 	.argNames    = argNames,
 	.argNamesLen = argNamesLen,
+	.body        = body,
+	.bodyLen     = bodyLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkLabelsIntrinsic(rtl_Word      *labelsNames,
+				     rtl_Intrinsic **labelsFns,
+				     uint16_t      labelsLen,
+				     rtl_Intrinsic **body,
+				     size_t        bodyLen)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_LABELS,
+    .as = {
+      .labels = {
+	.labelsNames = labelsNames,
+	.labelsFns   = labelsFns,
+	.labelsLen   = labelsLen,
 	.body        = body,
 	.bodyLen     = bodyLen,
       },

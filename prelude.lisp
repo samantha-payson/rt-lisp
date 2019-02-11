@@ -146,7 +146,8 @@
   		    `(intrinsic:export ~sym))
   		  sym*)))
 
-  (export length + let mapcar-1 when list with-gensyms)
+  (export length + let mapcar-1 when list with-gensyms
+	  rlambda rlet)
 
   (defun gensym ()
     (intrinsic:gensym))
@@ -161,7 +162,16 @@
     `(let ~(mapcar-1 (lambda (g)
 		       `(~g (gensym)))
 		     g*)
-       @body)))
+       @body))
+
+  (defmacro rlambda (name arg* . body)
+    `(intrinsic:labels ((~name ~arg* @body))
+       ~name))
+
+  (defmacro rlet (name letarg* . body)
+    `(intrinsic:labels ((~name ~(mapcar-1 car letarg*)
+			  @body))
+       (~name @(mapcar-1 cadr letarg*)))))
 
 (use-package std
   (let ((x 1)
@@ -174,29 +184,10 @@
 
 (use-package std
   (with-gensyms (a b c)
-    (list a b c)))
+    (list a b c))
 
-(use-package std
-
-  (defun impl-repeat (n x out)
+  (rlet rec ((n 50))
     (if (gt n 0)
-	(impl-repeat (isub n 1) x (cons x out))
-      out))
-
-  (defun repeat (n x)
-    (impl-repeat n x nil))
-
-
-  (defun impl-repeat-of (n f out)
-    (if (gt n 0)
-	(impl-repeat-of (isub n 1) f (cons (f) out))
-      out))
-
-  (defun repeat-of (n f)
-    (impl-repeat-of n f nil))
-
-  (repeat-of (imul 128 1024)
-	     (lambda ()
-	       "a b c d e f g h i j k l m n o p q r s t u v w x y z")))
-
+	(rec (isub n 1))
+      n)))
 

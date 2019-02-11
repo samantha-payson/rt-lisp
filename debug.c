@@ -493,6 +493,17 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
 	   (int)rtl_functionID(literal));
     return bc + 5;
 
+  case RTL_OP_LABELS:
+    size = (uint16_t)bc[1] << 0
+         | (uint16_t)bc[2] << 8;
+
+    printf("   labels    %d\n", (int)size);
+    return bc + 3;
+
+  case RTL_OP_END_LABELS:
+    printf("   end-labels\n");
+    return bc + 1;
+
   case RTL_OP_TUPLE:
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;

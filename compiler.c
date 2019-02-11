@@ -236,6 +236,7 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(applyTuple,   "apply-tuple")		\
   M(progn,        "progn")			\
   M(lambda,       "lambda")			\
+  M(labels,       "labels")			\
   M(defun,        "defun")			\
   M(defmacro,     "defmacro")			\
   M(load,         "load")			\
@@ -701,12 +702,17 @@ rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
-  rtl_Word head, tail, name;
+  rtl_Word head, clause, tail, name;
   rtl_Word const *rptr;
   size_t len, i;
   rtl_Intrinsic **buf;
   size_t        bufLen;
   size_t        bufCap;
+
+  rtl_Intrinsic **labels;
+  rtl_Word      *labelsNames;
+  size_t        labelsLen;
+  size_t        labelsCap;
 
   rtl_Word *argNames;
   size_t   argNamesLen;
@@ -718,6 +724,10 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
   buf    = NULL;
   bufCap = bufLen = 0;
+
+  labels      = NULL;
+  labelsNames = NULL;
+  labelsCap   = labelsLen = 0;
 
   argNames    = NULL;
   argNamesCap = argNamesLen = 0;
@@ -817,6 +827,41 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       for (tail = rtl_cadr(C->M, sxp);
 	   tail != RTL_NIL;
 	   tail = rtl_cdr(C->M, tail))
+      {
+	assert(rtl_isSymbol(rtl_car(C->M, tail)));
+
+	if (argNamesCap == argNamesLen) {
+	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+	}
+
+	argNames[argNamesLen++] = rtl_car(C->M, tail);
+      }
+
+      for (tail = rtl_cddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	if (bufCap == bufLen) {
+	  bufCap = !bufCap ? 4 : 2*bufCap;
+	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	}
+
+	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
+
+    } else if (head == symCache.intrinsic.labels) {
+      assert(len >= 2);
+
+      for (clause = rtl_cadr(C->M, sxp);
+	   clause != RTL_NIL;
+	   clause = rtl_cdr(C->M, clause))
+      {
+	for (tail = rtl_cadar(C->M, clause);
+	     tail != RTL_NIL;
+	     tail = rtl_cdr(C->M, tail))
 	{
 	  assert(rtl_isSymbol(rtl_car(C->M, tail)));
 
@@ -828,9 +873,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 	  argNames[argNamesLen++] = rtl_car(C->M, tail);
 	}
 
-      for (tail = rtl_cddr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+	for (tail = rtl_cddar(C->M, clause);
+	     tail != RTL_NIL;
+	     tail = rtl_cdr(C->M, tail))
 	{
 	  if (bufCap == bufLen) {
 	    bufCap = !bufCap ? 4 : 2*bufCap;
@@ -840,7 +885,36 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 	  buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
 	}
 
-      return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
+	if (labelsCap == labelsLen) {
+	  labelsCap   = !labelsCap ? 4 : 2*labelsCap;
+	  labels      = realloc(labels, sizeof(rtl_Intrinsic *)*labelsCap);
+	  labelsNames = realloc(labelsNames, sizeof(rtl_Word)*labelsCap);
+	}
+
+	labelsNames[labelsLen] = rtl_caar(C->M, clause);
+	labels[labelsLen++]    = rtl_mkLambdaIntrinsic(argNames, argNamesLen,
+						       buf,      bufLen);
+
+	argNames    = NULL;
+	argNamesCap = argNamesLen = 0;
+
+	buf    = NULL;
+	bufCap = bufLen = 0;
+      }
+
+      for (tail = rtl_cddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	  if (bufCap == bufLen) {
+	    bufCap = !bufCap ? 4 : 2*bufCap;
+	    buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	  }
+
+	  buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkLabelsIntrinsic(labelsNames, labels, labelsLen, buf, bufLen);
 
     } else if (head == symCache.intrinsic.defun ||
 	       head == symCache.intrinsic.defmacro) {
@@ -1273,6 +1347,23 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     }
     break;
 
+  case RTL_INTRINSIC_LABELS:
+    newEnv.super = env;
+    newEnv.frame = env ? env->frame + 1 : 0;
+    newEnv.len   = x->as.labels.labelsLen;
+    newEnv.names = x->as.labels.labelsNames;
+
+    for (i = 0; i < x->as.labels.labelsLen; i++) {
+      x->as.labels.labelsFns[i] = __impl_transformIntrinsic(&newEnv,
+							    x->as.labels.labelsFns[i]);
+    }
+
+    for (i = 0; i < x->as.labels.bodyLen; i++) {
+      x->as.labels.body[i] = __impl_transformIntrinsic(&newEnv,
+						       x->as.labels.body[i]);
+    }
+    break;
+
   case RTL_INTRINSIC_DEFUN:
     newEnv.super = env;
     newEnv.frame = env ? env->frame + 1 : 0;
@@ -1339,24 +1430,9 @@ rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x) {
 }
 
 static
-void rtl_tailCallPass(rtl_Intrinsic *x)
+void rtl_markTailCalls(rtl_Intrinsic *x)
 {
   switch (x->type) {
-  case RTL_INTRINSIC_CONS:
-  case RTL_INTRINSIC_CAR:
-  case RTL_INTRINSIC_CDR:
-  case RTL_INTRINSIC_TUPLE:
-  case RTL_INTRINSIC_LEN:
-  case RTL_INTRINSIC_INSERT:
-  case RTL_INTRINSIC_LOOKUP:
-  case RTL_INTRINSIC_GET:
-  case RTL_INTRINSIC_VAR:
-    break;
-
-  case RTL_INTRINSIC_TAIL:
-  case RTL_INTRINSIC_NAMED_TAIL:
-    abort(); // Shouldn't be any of these yet ..
-
   case RTL_INTRINSIC_NAMED_CALL:
     x->type = RTL_INTRINSIC_NAMED_TAIL;
     break;
@@ -1373,24 +1449,140 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
   case RTL_INTRINSIC_PROGN:
     // The last position of a non-empty progn is in tail position.
     if (x->as.progn.formsLen > 0) {
-      rtl_tailCallPass(x->as.progn.forms[x->as.progn.formsLen - 1]);
+      rtl_markTailCalls(x->as.progn.forms[x->as.progn.formsLen - 1]);
+    } break;
+  case RTL_INTRINSIC_IF:
+    rtl_markTailCalls(x->as._if.then);
+    rtl_markTailCalls(x->as._if._else);
+    break;
+
+  default:
+    break;
+  }
+}
+
+static
+void rtl_tailCallPass(rtl_Intrinsic *x)
+{
+  size_t i;
+
+  switch (x->type) {
+  case RTL_INTRINSIC_CONS:
+    rtl_tailCallPass(x->as.cons.car);
+    rtl_tailCallPass(x->as.cons.cdr);
+    break;
+
+  case RTL_INTRINSIC_CAR:
+    rtl_tailCallPass(x->as.car.arg);
+    break;
+
+  case RTL_INTRINSIC_CDR:
+    rtl_tailCallPass(x->as.cdr.arg);
+    break;
+
+  case RTL_INTRINSIC_TUPLE:
+    for (i = 0; i < x->as.tuple.elemsLen; i++) {
+      rtl_tailCallPass(x->as.tuple.elems[i]);
+    } break;
+
+  case RTL_INTRINSIC_LEN:
+    rtl_tailCallPass(x->as.len.tuple);
+    break;
+
+  case RTL_INTRINSIC_INSERT:
+    rtl_tailCallPass(x->as.insert.map);
+    rtl_tailCallPass(x->as.insert.key);
+    rtl_tailCallPass(x->as.insert.val);
+    break;
+
+  case RTL_INTRINSIC_LOOKUP:
+    rtl_tailCallPass(x->as.lookup.map);
+    rtl_tailCallPass(x->as.lookup.key);
+    break;
+
+  case RTL_INTRINSIC_GET:
+    rtl_tailCallPass(x->as.get.tuple);
+    rtl_tailCallPass(x->as.get.index);
+    break;
+
+  case RTL_INTRINSIC_VAR:
+    break;
+
+  case RTL_INTRINSIC_NAMED_CALL:
+    for (i = 0; i < x->as.namedCall.argsLen; i++) {
+      rtl_tailCallPass(x->as.namedCall.args[i]);
+    } break;
+
+  case RTL_INTRINSIC_NAMED_TAIL:
+    for (i = 0; i < x->as.namedTail.argsLen; i++) {
+      rtl_tailCallPass(x->as.namedTail.args[i]);
+    } break;
+
+
+  case RTL_INTRINSIC_TAIL:
+    rtl_tailCallPass(x->as.tail.fn);
+
+    for (i = 0; i < x->as.tail.argsLen; i++) {
+      rtl_tailCallPass(x->as.tail.args[i]);
+    } break;
+
+  case RTL_INTRINSIC_CALL:
+    rtl_tailCallPass(x->as.call.fn);
+
+    for (i = 0; i < x->as.call.argsLen; i++) {
+      rtl_tailCallPass(x->as.call.args[i]);
+    } break;
+
+  case RTL_INTRINSIC_APPLY_LIST:
+    rtl_tailCallPass(x->as.applyList.fn);
+    rtl_tailCallPass(x->as.applyList.arg);
+    break;
+
+  case RTL_INTRINSIC_APPLY_TUPLE:
+    rtl_tailCallPass(x->as.applyTuple.fn);
+    rtl_tailCallPass(x->as.applyTuple.arg);
+    break;
+
+  case RTL_INTRINSIC_PROGN:
+    for (i = 0; i < x->as.progn.formsLen; i++) {
+      rtl_tailCallPass(x->as.progn.forms[i]);
     } break;
 
   case RTL_INTRINSIC_LAMBDA:
+    for (i = 0; i < x->as.lambda.bodyLen; i++) {
+      rtl_tailCallPass(x->as.lambda.body[i]);
+    }
+
     if (x->as.lambda.bodyLen > 0) {
-      rtl_tailCallPass(x->as.lambda.body[x->as.lambda.bodyLen - 1]);
+      rtl_markTailCalls(x->as.lambda.body[x->as.lambda.bodyLen - 1]);
+    } break;
+
+  case RTL_INTRINSIC_LABELS:
+    for (i = 0; i < x->as.labels.labelsLen; i++) {
+      rtl_tailCallPass(x->as.labels.labelsFns[i]);
+    }
+
+    for (i = 0; i < x->as.labels.bodyLen; i++) {
+     rtl_tailCallPass(x->as.labels.body[i]);
     } break;
 
   case RTL_INTRINSIC_DEFUN:
+    for (i = 0; i < x->as.defun.bodyLen; i++) {
+      rtl_tailCallPass(x->as.defun.body[i]);
+    }
+
     if (x->as.defun.bodyLen > 0) {
-      rtl_tailCallPass(x->as.defun.body[x->as.defun.bodyLen - 1]);
+      rtl_markTailCalls(x->as.defun.body[x->as.defun.bodyLen - 1]);
     } break;
 
   case RTL_INTRINSIC_DEFMACRO:
-    if (x->as.defmacro.bodyLen > 0) {
-      rtl_tailCallPass(x->as.defmacro.body[x->as.defmacro.bodyLen - 1]);
-    } break;
+    for (i = 0; i < x->as.defmacro.bodyLen; i++) {
+      rtl_tailCallPass(x->as.defmacro.body[i]);
+    }
 
+    if (x->as.defmacro.bodyLen > 0) {
+      rtl_markTailCalls(x->as.defmacro.body[x->as.defmacro.bodyLen - 1]);
+    } break;
 
   case RTL_INTRINSIC_IADD:
   case RTL_INTRINSIC_ISUB:
@@ -1404,10 +1596,16 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
   case RTL_INTRINSIC_EQ:
   case RTL_INTRINSIC_NEQ:
   case RTL_INTRINSIC_ISO:
+    rtl_tailCallPass(x->as.binop.leftArg);
+    rtl_tailCallPass(x->as.binop.rightArg);
+    break;
+
   case RTL_INTRINSIC_TYPE_PRED:
+    rtl_tailCallPass(x->as.typePred.arg);
     break;
 
   case RTL_INTRINSIC_IF:
+    rtl_tailCallPass(x->as._if.test);
     rtl_tailCallPass(x->as._if.then);
     rtl_tailCallPass(x->as._if._else);
     break;
@@ -1622,6 +1820,13 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
 
     return x->codeSize = 5;
 
+  case RTL_INTRINSIC_LABELS:
+    for (i = 0; i < x->as.labels.labelsLen; i++) {
+      annotateCodeSize(M, x->as.labels.labelsFns[i]);
+    }
+
+    return x->codeSize = 3 + 5*x->as.labels.labelsLen;
+
   case RTL_INTRINSIC_DEFUN:
     for (i = 0; i < x->as.defun.bodyLen; i++) {
       annotateCodeSize(M, x->as.defun.body[i]);
@@ -1797,10 +2002,12 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 			   uint32_t fnID,
 			   rtl_Intrinsic const *x)
 {
-  size_t    i;
+  size_t    i, j;
   uint16_t  newFnID;
   uint32_t  offs;
   rtl_FnDef *fnDef;
+
+  rtl_Intrinsic const *y;
 
   size_t thenJmpBytes,
          elseJmpBytes;
@@ -2007,6 +2214,52 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 	   (int)newFnID);
     printf("       ------------");
     rtl_disasmFn(codeBase, rtl_function(newFnID));
+
+    break;
+
+  case RTL_INTRINSIC_LABELS:
+    for (i = 0; i < x->as.labels.labelsLen; i++) {
+      newFnID = rtl_newFuncID(codeBase, x->as.labels.labelsNames[i]);
+
+      y = x->as.labels.labelsFns[i];
+
+      assert(y->type == RTL_INTRINSIC_LAMBDA);
+
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
+      rtl_emitWordToFunc(codeBase, fnID, rtl_function(newFnID));
+
+      for (j = 0; j < y->as.lambda.bodyLen; j++) {
+	rtl_emitIntrinsicCode(C, newFnID, y->as.lambda.body[j]);
+
+	// Ignore the result of all but the last expression.
+	if (j + 1 < y->as.lambda.bodyLen)
+	  rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
+      }
+
+      rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
+
+      printf("  _____\n");
+      printf(" | Compiled labels '%s' |\n",
+	     rtl_symbolName(x->as.labels.labelsNames[i]));
+      printf("       ------------");
+      rtl_disasmFn(codeBase, rtl_function(newFnID));
+    }
+
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_LABELS);
+    rtl_emitShortToFunc(codeBase, fnID, x->as.labels.labelsLen);
+
+    if (x->as.labels.bodyLen > 0) {
+      for (i = 0; i < x->as.labels.bodyLen; i++) {
+	rtl_emitIntrinsicCode(C, fnID, x->as.labels.body[i]);
+
+	// Ignore the result of all but the last expression.
+	if (i + 1 < x->as.labels.bodyLen)
+	  rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+      }
+    } else {
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST_NIL);
+    }
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_END_LABELS);
 
     break;
 
