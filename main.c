@@ -73,7 +73,7 @@ int main() {
 
     printf("\n Running code on VM:\n");
 
-    w = rtl_run(&M, rtl_function(replFnID));
+    w = rtl_call(&M, rtl_function(replFnID));
 
     if (rtl_peekError(&M) != RTL_OK) {
       printf("Error running snippet: '%s'\n",

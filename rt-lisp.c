@@ -1246,7 +1246,7 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
   }
 }
 
-rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
+rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 {
   uint8_t opcode, u8;
 
@@ -1279,6 +1279,9 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
   func = rtl_reifyFunction(M->codeBase, fn); 
 
   assert(!func->isBuiltin);
+
+  M->pc = NULL;
+  RPUSH();
 
   M->pc = func->as.lisp.code;
 
@@ -1821,17 +1824,14 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       abort();
 
     case RTL_OP_RETURN:
-      if (M->rStackLen == 0) {
-	M->env = RTL_NIL;
-
-	// If the return stack is empty, return means exit the interpreter.
-	goto interp_cleanup;
-      }
+      assert(M->rStackLen > 0);
 
       M->rStackLen--;
 
       M->pc  = M->rStack[M->rStackLen].pc;
       M->env = M->rStack[M->rStackLen].env;
+
+      if (M->pc == NULL) goto interp_cleanup;
 
       break;
 
@@ -1964,7 +1964,7 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 
   rtl_popWorkingSet(M);
 
-  return rtl_run(M, fn);
+  return rtl_call(M, fn);
 }
 
 uint32_t rtl_newFuncID(rtl_CodeBase *cb, rtl_Word name)

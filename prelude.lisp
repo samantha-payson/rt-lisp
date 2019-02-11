@@ -173,7 +173,9 @@
 	       (n  0))
       (if ls
 	  (rec (cdr ls) (+ n 1))
-	n))))
+	n)))
+
+  (defun ))
 
 (use-package std
   (let ((x 1)
