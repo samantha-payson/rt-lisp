@@ -297,6 +297,8 @@ static bool symCacheWasInit;
 static inline
 void ensureSymCache(rtl_Compiler *C) {
   if (unlikely(!symCacheWasInit)) {
+    symCacheWasInit = true;
+
     symCache = (struct symCache_t) {
       .intrinsic = {
 	MAP_INTRINSICS(CACHE_INTRINSIC_SYM)
@@ -337,10 +339,10 @@ rtl_Word rtl_resolveMap(rtl_Compiler *C,
 
   RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
 
-  rptr = __rtl_reifyPtr(C->M, map);
   len  = __builtin_popcount(mask);
 
   wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
+  rptr = __rtl_reifyPtr(C->M, map);
 
   memcpy(wptr, rptr, sizeof(rtl_Word)*2*len);
 
@@ -391,6 +393,7 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
   case RTL_TUPLE:
     rptr = rtl_reifyTuple(C->M, in, &len);
     wptr = rtl_allocTuple(C->M, &out, len);
+    rptr = rtl_reifyTuple(C->M, in, &len);
     for (i = 0; i < len; i++) {
       wptr[i] = rtl_resolveAll(C, ns, rptr[i]);
     } break;
@@ -425,10 +428,10 @@ rtl_Word macroExpandMap(rtl_Compiler        *C,
 
   RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
 
-  rptr = __rtl_reifyPtr(C->M, map);
   len  = __builtin_popcount(mask);
 
   wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
+  rptr = __rtl_reifyPtr(C->M, map);
 
   memset(wptr, 0, sizeof(rtl_Word)*2*len);
 
@@ -468,7 +471,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
   ensureSymCache(C);
 
-  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &tail, &out);
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &alias, &tail, &out);
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
@@ -482,6 +485,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
   case RTL_TUPLE:
     rptr = rtl_reifyTuple(C->M, in, &len);
     wptr = rtl_allocTuple(C->M, &out, len);
+    rptr = rtl_reifyTuple(C->M, in, &len);
     for (i = 0; i < len; i++) {
       wptr[i] = rtl_macroExpand(C, ns, rptr[i]);
     } break;
@@ -546,10 +550,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 	out = rtl_cons(C->M, head, RTL_NIL);
 
 	for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
-	  {
-	    arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-	    out = rtl_cons(C->M, arg, out);
-	  }
+	{
+	  arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+	  out = rtl_cons(C->M, arg, out);
+	}
 
 	out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
       }
@@ -1451,6 +1455,7 @@ void rtl_markTailCalls(rtl_Intrinsic *x)
     if (x->as.progn.formsLen > 0) {
       rtl_markTailCalls(x->as.progn.forms[x->as.progn.formsLen - 1]);
     } break;
+
   case RTL_INTRINSIC_IF:
     rtl_markTailCalls(x->as._if.then);
     rtl_markTailCalls(x->as._if._else);

@@ -110,11 +110,6 @@
   (defun cddr (x)
     (cdr (cdr x)))
 
-  (defun length (ls)
-    (if ls
-	(intrinsic:iadd 1 (length (cdr ls)))
-      0))
-
   (defmacro lambda (arg* . body)
     `(intrinsic:lambda ~arg*
        @body))
@@ -171,7 +166,14 @@
   (defmacro rlet (name letarg* . body)
     `(intrinsic:labels ((~name ~(mapcar-1 car letarg*)
 			  @body))
-       (~name @(mapcar-1 cadr letarg*)))))
+       (~name @(mapcar-1 cadr letarg*))))
+
+  (defun length (ls)
+    (rlet rec ((ls ls)
+	       (n  0))
+      (if ls
+	  (rec (cdr ls) (+ n 1))
+	n))))
 
 (use-package std
   (let ((x 1)
@@ -186,8 +188,35 @@
   (with-gensyms (a b c)
     (list a b c))
 
-  (rlet rec ((n 50))
+  (defun impl-repeat-of (n f acc)
     (if (gt n 0)
-	(rec (isub n 1))
-      n)))
+	(impl-repeat-of (isub n 1)
+			f
+			(cons (f) acc))
+	acc))
+
+  (defun repeat-of (n f)
+    (rlet rec ((n     n)
+  	       (soFar nil))
+      (if (gt n 0)
+  	  (rec (isub n 1)
+  	       (cons (f) soFar))
+	  soFar)))
+
+  (defun repeat (n x)
+    (rlet rec ((n n)
+	       (acc nil))
+      (if (gt n 0)
+	  (rec (isub n 1)
+	       (cons x acc))
+	acc)))
+
+  ;; (defun repeat-of (n f)
+  ;;   (impl-repeat-of n f nil))
+
+  (idiv (length
+	 (repeat (imul 1024 1024)
+		 (lambda ()
+		   1)))
+	1024))
 

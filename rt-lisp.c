@@ -1301,7 +1301,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
     /* printf("\n"); */
 
-    rtl_disasm(M->codeBase, M->pc);
+    // rtl_disasm(M->codeBase, M->pc);
 
     switch (opcode = *M->pc++) {
     case RTL_OP_NOP:
@@ -1585,15 +1585,19 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
       sptr = M->vStack + M->vStackLen - size;
 
-      wptr = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+size + 2*size);
-
       if (rtl_isTuple(M->env)) {
 	rptr = rtl_reifyTuple(M, M->env, &len);
       } else {
 	rptr = NULL;
 	len = 0;
       }
+      wptr = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+size + 2*size);
       wptr[0] = rtl_header(len + 1);
+
+      if (rtl_isTuple(M->env)) {
+	// Reify again, incase rptr was invalidated by a collection.
+	rptr = rtl_reifyTuple(M, M->env, &len);
+      }
 
       // Here we build all of the closures.
       for (i = 0; i < size; i++) {
@@ -1671,17 +1675,20 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	rptr = __rtl_reifyPtr(M, f);
 
 	f = rptr[0];
+	b = rptr[1];
 
-	// TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
-	if (rptr[1] != RTL_NIL) {
-	  rptr = rtl_reifyTuple(M, rptr[1], &len);
+	if (b != RTL_NIL) {
+	  rptr = rtl_reifyTuple(M, b, &len);
 	} else {
 	  len  = 0;
 	  rptr = NULL;
 	}
 
-	wptr      = rtl_allocTuple(M, &b, len + 1);
+	wptr      = rtl_allocTuple(M, &c, len + 1);
 	wptr[len] = a;
+
+	// Need to re-load ptr after alloc, in case it was invalidated by GC.
+	if (b != RTL_NIL) rptr = rtl_reifyTuple(M, b, &len);
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
 	if (opcode == RTL_OP_CALL) RPUSH();
@@ -1690,7 +1697,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
 	assert(!func->isBuiltin);
 
-	M->env = b;
+	M->env = c;
 	M->pc  = func->as.lisp.code;
 
 	break;
@@ -1724,7 +1731,6 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	wptr[0] = a;
 
 	if (opcode == RTL_OP_STATIC_CALL) RPUSH();
-
 
 	M->env = b;
 	M->pc  = func->as.lisp.code;
@@ -1766,9 +1772,10 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 	rptr = __rtl_reifyPtr(M, f);
 
 	f = rptr[0];
+	c = rptr[1];
 
-	if (rptr[1] != RTL_NIL) {
-	  rptr = rtl_reifyTuple(M, rptr[1], &len);
+	if (c != RTL_NIL) {
+	  rptr = rtl_reifyTuple(M, c, &len);
 	} else {
 	  len  = 0;
 	  rptr = NULL;
@@ -1776,6 +1783,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
 	wptr      = rtl_allocTuple(M, &b, len + 1);
 	wptr[len] = a;
+	if (c != RTL_NIL) rptr = rtl_reifyTuple(M, c, &len);
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
 	RPUSH();
@@ -1831,6 +1839,7 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
       M->pc = readShort(M->pc, &idx);
 
       rptr = rtl_reifyTuple(M, M->env, &len);
+      d    = rptr[len - 1];
 
       // TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
       rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
@@ -1838,20 +1847,22 @@ rtl_Word rtl_run(rtl_Machine *M, rtl_Word fn)
 
       a = RTL_NIL;
       for (i = (ssize_t)len - 1; i >= idx; i--) {
-	a = rtl_cons(M, rptr[i], a);
+	rptr = rtl_reifyTuple(M, d, &len);     // Reload
+	a    = rtl_cons(M, rptr[i], a);
       }
 
       wptr = rtl_allocTuple(M, &b, idx + 1);
+      rptr = rtl_reifyTuple(M, d, &len);       // Reload
       memcpy(wptr, rptr, sizeof(rtl_Word)*idx);
       wptr[idx] = a;
 
       rptr = rtl_reifyTuple(M, M->env, &len);
       wptr = rtl_allocTuple(M, &c, len);
+      rptr = rtl_reifyTuple(M, M->env, &len);  // Reload
       memcpy(wptr, rptr, sizeof(rtl_Word)*len);
       wptr[len - 1] = b;
 
       M->env = c;
-
       break;
 
 
@@ -1939,7 +1950,10 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
 rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 {
   rtl_Word *ptr;
-  rtl_Word args, env;
+  rtl_Word args = RTL_NIL,
+           env  = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &args, &env);
 
   args = rtl_listToTuple(M, argList);
 
@@ -1947,6 +1961,9 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
   ptr[0] = args;
 
   M->env = env;
+
+  rtl_popWorkingSet(M);
+
   return rtl_run(M, fn);
 }
 
@@ -2070,7 +2087,7 @@ void __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName)
 
 #ifdef RTL_TRACE_WORKING_SETS
   size_t i;
-  for (i = 0; i < M->wsStackLen; i++) printf("  ");
+  for (i = 0; i < M->wsStackLen; i++) printf(" ");
   printf("> PUSH '%s'\n", fName);
 #endif
 
@@ -2087,7 +2104,7 @@ void __rtl_popWorkingSet(rtl_Machine *M, char const *fName)
 
 #ifdef RTL_TRACE_WORKING_SETS
   size_t i;
-  for (i = 1; i < M->wsStackLen; i++) printf("  ");
+  for (i = 1; i < M->wsStackLen; i++) printf(" ");
   printf("< POP  '%s'\n", fName);
 #endif
 
