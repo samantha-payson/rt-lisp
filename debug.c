@@ -271,7 +271,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   const     ");
+    printf("   const       ");
     rtl_formatExprShallow(literal);
     printf("\n");
 
@@ -295,7 +295,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   string %d ", (int)literal);
+    printf("   string      %d ", (int)literal);
     formatString((char const *)bc + 5);
     printf("\n");
     return bc + 5 + strlen((char const *)bc + 5) + 1;
@@ -354,14 +354,14 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     return bc + 1;
 
   case RTL_OP_CJMP8:
-    printf("   cjmp8     %+-3d\n", (int8_t)bc[1]);
+    printf("   cjmp8       %+-3d\n", (int8_t)bc[1]);
     return bc + 2;
 
   case RTL_OP_CJMP16:
     literal = (uint32_t)bc[1] << 0
             | (uint32_t)bc[2] << 8 ;
 
-    printf("   cjmp16    %+-3d\n", (int16_t)literal);
+    printf("   cjmp16      %+-3d\n", (int16_t)literal);
     return bc + 3;
 
   case RTL_OP_CJMP32:
@@ -370,18 +370,18 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (uint32_t)bc[3] << 16
             | (uint32_t)bc[4] << 24 ;
 
-    printf("   cjmp32    %+-3d\n", (int32_t)literal);
+    printf("   cjmp32      %+-3d\n", (int32_t)literal);
     return bc + 5;
 
   case RTL_OP_JMP8:
-    printf("   jmp8      %+-3d\n", (int8_t)bc[1]);
+    printf("   jmp8        %+-3d\n", (int8_t)bc[1]);
     return bc + 2;
 
   case RTL_OP_JMP16:
     literal = (uint32_t)bc[1] << 0
             | (uint32_t)bc[2] << 8 ;
 
-    printf("   jmp16     %+-3d\n", (int16_t)literal);
+    printf("   jmp16       %+-3d\n", (int16_t)literal);
     return bc + 3;
 
   case RTL_OP_JMP32:
@@ -390,21 +390,21 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (uint32_t)bc[3] << 16
             | (uint32_t)bc[4] << 24 ;
 
-    printf("   jmp32     %+-3d\n", (int32_t)literal);
+    printf("   jmp32       %+-3d\n", (int32_t)literal);
     return bc + 5;
 
   case RTL_OP_CALL:
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;
 
-    printf("   call      %d\n", (int)size);
+    printf("   call        %d\n", (int)size);
     return bc + 3;
 
   case RTL_OP_TAIL:
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;
 
-    printf("   tail      %d\n", (int)size);
+    printf("   tail        %d\n", (int)size);
     return bc + 3;
 
   case RTL_OP_STATIC_CALL:
@@ -450,15 +450,36 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     return bc + 1;
 
   case RTL_OP_UNDEFINED_CALL:
-    printf("   undef-call\n");
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   undef-call  %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
     return bc + 7;
 
   case RTL_OP_UNDEFINED_TAIL:
-    printf("   undef-tail\n");
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   undef-tail  %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
     return bc + 7;
 
   case RTL_OP_UNDEFINED_VAR:
-    printf("   undefined-var\n");
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   undef-var   %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_RETURN:
@@ -469,7 +490,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;
 
-    printf("   rest %d\n", (int)size);
+    printf("   rest        %d\n", (int)size);
 
     return bc + 3;
 
@@ -480,7 +501,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     idx = (uint16_t)bc[3] << 0
         | (uint16_t)bc[4] << 8;
 
-    printf("   var       %d %d\n", (int)frame, (int)idx);
+    printf("   var         %d %d\n", (int)frame, (int)idx);
     return bc + 5;
 
   case RTL_OP_CLOSURE:
@@ -489,7 +510,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   closure   fn[%d]\n",
+    printf("   closure     fn[%d]\n",
 	   (int)rtl_functionID(literal));
     return bc + 5;
 
@@ -497,7 +518,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;
 
-    printf("   labels    %d\n", (int)size);
+    printf("   labels      %d\n", (int)size);
     return bc + 3;
 
   case RTL_OP_END_LABELS:
@@ -508,7 +529,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     size = (uint16_t)bc[1] << 0
          | (uint16_t)bc[2] << 8;
 
-    printf("   tuple %d\n", (int)size);
+    printf("   tuple       %d\n", (int)size);
     return bc + 3;
 
   case RTL_OP_GET:
