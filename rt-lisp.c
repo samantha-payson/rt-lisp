@@ -1281,6 +1281,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   rtl_Word const *rptr, *sptr;
   rtl_Word *wptr;
 
+  uint8_t *savePC;
+
   // Ensure these words are involved in any garbage collection that may happen.
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
@@ -1709,8 +1711,12 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       case RTL_FUNCTION:
 	func = rtl_reifyFunction(M->codeBase, f);
 	if (func->isBuiltin) {
+	  savePC = M->pc;
+
 	  b = func->as.builtin.cFn(M, wptr, size);
 	  VPUSH(b);
+
+	  M->pc = savePC;
 	} else {
 	  
 	  wptr = rtl_allocTuple(M, &b, 1);
@@ -1775,8 +1781,12 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       func = rtl_reifyFunction(M->codeBase, f);
 
       if (func->isBuiltin) {
+	savePC = M->pc;
+
 	b = func->as.builtin.cFn(M, wptr, size);
 	VPUSH(b);
+
+	M->pc = savePC;
       } else {
 	wptr = rtl_allocTuple(M, &b, 1);
 	wptr[0] = a;
@@ -1805,10 +1815,14 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       case RTL_FUNCTION:
 	func = rtl_reifyFunction(M->codeBase, f);
 	if (func->isBuiltin) {
+	  savePC = M->pc;
+
 	  rptr = rtl_reifyTuple(M, a, &len);
 
 	  b = func->as.builtin.cFn(M, rptr, len);
 	  VPUSH(b);
+
+	  M->pc = savePC;
 	} else {
 	  wptr = rtl_allocTuple(M, &b, 1);
 	  wptr[0] = a;
@@ -1972,6 +1986,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
  interp_cleanup:
   rtl_popWorkingSet(M);
+
+  M->env = RTL_NIL;
 
   return M->vStackLen ? VPOP() : RTL_NIL;
 }

@@ -409,4 +409,6 @@ rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key);
 
 void rtl_io_installBuiltins(rtl_Compiler *C);
 
+void rtl_repl(rtl_Compiler *C);
+
 #endif // rt-lisp.h

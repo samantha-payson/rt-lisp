@@ -85,6 +85,31 @@
     `(if ~test
 	 (progn @body)))
 
+  (defun car (x)
+    (intrinsic:car x))
+
+  (defun cdr (x)
+    (intrinsic:cdr x))
+
+  (defun mapcar-1 (fn ls)
+    (when ls
+      (intrinsic:cons (fn (car ls))
+		      (mapcar-1 fn (cdr ls)))))
+
+  (defmacro lambda (arg* . body)
+    `(intrinsic:lambda ~arg*
+       @body))
+
+  (defmacro export sym*
+    `(progn
+       @(mapcar-1 (lambda (sym)
+  		    `(intrinsic:export ~sym))
+  		  sym*)))
+
+  (export list and semiquote defmacro defun if progn when car cdr mapcar-1 lambda export)
+
+  (export not unless)
+
   (defun not (x)
     (intrinsic:nil? x))
 
@@ -92,12 +117,8 @@
     `(when (not ~test)
        @body))
 
-  (defun car (x)
-    (intrinsic:car x))
-
-  (defun cdr (x)
-    (intrinsic:cdr x))
-
+  (export caar cadr cdar cddr)
+  
   (defun caar (x)
     (car (car x)))
 
@@ -110,19 +131,17 @@
   (defun cddr (x)
     (cdr (cdr x)))
 
-  (defmacro lambda (arg* . body)
-    `(intrinsic:lambda ~arg*
-       @body))
 
-  (defun mapcar-1 (fn ls)
-    (when ls
-      (intrinsic:cons (fn (car ls))
-		      (mapcar-1 fn (cdr ls)))))
 
-  (defun fold-1 (fn init ls)
+  (export fold-1)
+
+  (defun  fold-1 (fn init ls)
     (if ls
 	(fold-1 (fn init (car ls)) (cdr ls))
       init))
+
+
+  (export let cond gensym)
 
   (defmacro let (letarg* . body)
     `((lambda ~(mapcar-1 car letarg*)
@@ -135,23 +154,20 @@
 	   (progn @(cdar arm*))
 	   (cond @(cdr arm*)))))
 
-  (defmacro export sym*
-    `(progn
-       @(mapcar-1 (lambda (sym)
-  		    `(intrinsic:export ~sym))
-  		  sym*)))
-
-  (export length + let mapcar-1 when list with-gensyms
-	  rlambda rlet)
-
   (defun gensym ()
     (intrinsic:gensym))
+
+
+  (export +)
 
   (defmacro + arg*
     (cond
       ((intrinsic:nil? arg*) 0)
       ((intrinsic:nil? (cdr arg*)) (car arg*))
       (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*))))))
+
+
+  (export with-gensyms rlambda rlet length)
 
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
@@ -175,50 +191,18 @@
 	  (rec (cdr ls) (+ n 1))
 	n)))
 
-  (defun ))
 
-(use-package std
-  (let ((x 1)
-	(y 2)
-	(z 3))
-    (+ x y z)))
+  (export in-package use-package alias-package)
 
-(std:let ((a 1) (b 2) (c 3))
-  (std:+ a b c))
+  (defmacro in-package (name . body)
+    `(intrinsic:in-package ~name
+       @body))
 
-(use-package std
-  (with-gensyms (a b c)
-    (list a b c))
+  (defmacro use-package (name . body)
+    `(intrinsic:in-package ~name
+       @body))
 
-  (defun impl-repeat-of (n f acc)
-    (if (gt n 0)
-	(impl-repeat-of (isub n 1)
-			f
-			(cons (f) acc))
-	acc))
-
-  (defun repeat-of (n f)
-    (rlet rec ((n     n)
-  	       (soFar nil))
-      (if (gt n 0)
-  	  (rec (isub n 1)
-  	       (cons (f) soFar))
-	  soFar)))
-
-  (defun repeat (n x)
-    (rlet rec ((n n)
-	       (acc nil))
-      (if (gt n 0)
-	  (rec (isub n 1)
-	       (cons x acc))
-	acc)))
-
-  ;; (defun repeat-of (n f)
-  ;;   (impl-repeat-of n f nil))
-
-  (idiv (length
-	 (repeat (imul 1024 1024)
-		 (lambda ()
-		   1)))
-	1024))
+  (defmacro alias-package (clause . body)
+    `(intrinsic:alias-package ~clause
+       @body)))
 

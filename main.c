@@ -37,13 +37,10 @@ rtl_Word builtinHello(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
 
 int main() {
   rtl_CodeBase  codeBase;
+
   rtl_Machine   M;
+
   rtl_Compiler  C;
-  rtl_Word      w = RTL_NIL,
-                a = RTL_NIL,
-                b = RTL_NIL;
-  uint32_t      replFnID;
-  rtl_NameSpace ns;
 
   rtl_initCodeBase(&codeBase);
   rtl_initMachine(&M, &codeBase);
@@ -51,41 +48,7 @@ int main() {
 
   rtl_io_installBuiltins(&C);
 
-  RTL_PUSH_WORKING_SET(&M, &w, &a, &b);
-
-  ns = rtl_nsInPackage(NULL, rtl_internPackage(&C, "intrinsic"));
-
-  replFnID = rtl_newFuncID(M.codeBase, rtl_intern("repl", "code-page"));
-
-  while (!feof(stdin)) {
-    w = rtl_read(&C, stdin);
-
-    rtl_compile(&C, &ns, replFnID, w);
-
-    if (C.error.type) {
-      printf("Error compiling expression!\n");
-      return 1;
-    }
-
-    rtl_emitByteToFunc(M.codeBase, replFnID, RTL_OP_RETURN);
-
-    rtl_disasmFn(M.codeBase, rtl_function(replFnID));
-
-    printf("\n Running code on VM:\n");
-
-    w = rtl_call(&M, rtl_function(replFnID));
-
-    if (rtl_peekError(&M) != RTL_OK) {
-      printf("Error running snippet: '%s'\n",
-	     rtl_errString(rtl_getError(&M)));
-    }
-
-    printf("\n Result was a '%s': ", rtl_typeNameOf(w));
-    rtl_formatExpr(&M, w);
-    printf("\n");
-
-    rtl_newFuncVersion(M.codeBase, replFnID);
-  }
+  rtl_repl(&C);
 
   rtl_popWorkingSet(&M);
 

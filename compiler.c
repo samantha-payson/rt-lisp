@@ -287,6 +287,8 @@ static struct symCache_t {
   } intrinsic;
 } symCache;
 
+#undef DECLARE_INTRINSIC_WORD
+
 static bool symCacheWasInit;
 
 #define CACHE_INTRINSIC_SYM(CNAME, LISPNAME)	\
@@ -302,6 +304,8 @@ void ensureSymCache(rtl_Compiler *C) {
   if (unlikely(!symCacheWasInit)) {
     symCacheWasInit = true;
 
+    rtl_internPackage(C, "intrinsic");
+
     symCache = (struct symCache_t) {
       .intrinsic = {
 	MAP_INTRINSICS(CACHE_INTRINSIC_SYM)
@@ -311,6 +315,10 @@ void ensureSymCache(rtl_Compiler *C) {
 
   MAP_INTRINSICS(EXPORT_INTRINSIC)
 }
+
+#undef CACHE_INTRINSIC_SYM
+
+#undef EXPORT_INTRINSIC
 
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   C->error = (rtl_CompilerError) {

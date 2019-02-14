@@ -17,6 +17,7 @@ OBJS = \
   compiler.o \
   io.o \
   reader.o \
+  repl.o \
   main.o
 
 
