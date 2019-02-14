@@ -228,6 +228,9 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(map,          "map")			\
   M(insert,       "insert")			\
   M(lookup,       "lookup")			\
+  M(dynGet,       "dyn-get")			\
+  M(dynSet,       "dyn-set")			\
+  M(bind,         "bind")			\
   M(var,          "var")			\
   M(gensym,       "gensym")			\
   M(call,         "call")			\
@@ -596,6 +599,36 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 		      tail);
       out = rtl_cons(C->M, head, tail);
 
+    } else if (head == symCache.intrinsic.dynGet) {
+      out = rtl_resolveAll(C, ns, in);
+
+    } else if (head == symCache.intrinsic.dynSet) {
+      tail = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_caddr(C->M, in)),
+		      RTL_NIL);
+      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
+		      tail);
+      out = rtl_cons(C->M, head,
+		     tail);
+
+    } else if (head == symCache.intrinsic.bind) {
+      clause = rtl_cadr(C->M, in);
+      clause = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_cadr(C->M, clause)),
+			RTL_NIL);
+      clause = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caadr(C->M, in))),
+			clause);
+
+      out = RTL_NIL;
+
+      for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
+	out = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_car(C->M, tail)),
+		       out);
+      }
+
+      out = rtl_reverseList(C->M, out);
+      out = rtl_cons(C->M, head,
+		     rtl_cons(C->M, clause,
+			      out));
+
     } else {
       fnDef = rtl_lookupFn(C, head);
 
@@ -868,6 +901,31 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else if (head == symCache.intrinsic.lookup) {
       return rtl_mkLookupIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.dynGet) {
+      return rtl_mkDynGetIntrinsic(rtl_cadr(C->M, sxp));
+
+    } else if (head == symCache.intrinsic.dynSet) {
+      return rtl_mkDynSetIntrinsic(rtl_cadr(C->M, sxp),
+				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.bind) {
+      for (tail = rtl_cddr(C->M, sxp);
+	   tail != RTL_NIL;
+	   tail = rtl_cdr(C->M, tail))
+      {
+	if (bufCap == bufLen) {
+	  bufCap = !bufCap ? 4 : 2*bufCap;
+	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+	}
+
+	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+      }
+
+      return rtl_mkBindIntrinsic(rtl_car(C->M, rtl_cadr(C->M, sxp)),
+				 rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdadr(C->M, sxp))),
+				 buf,
+				 bufLen);
 
     } else if (head == symCache.intrinsic.progn) {
       for (tail = rtl_cdr(C->M, sxp);
@@ -1316,6 +1374,11 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as.len.tuple = __impl_transformIntrinsic(env, x->as.len.tuple);
     break;
 
+  case RTL_INTRINSIC_GET:
+    x->as.get.tuple = __impl_transformIntrinsic(env, x->as.get.tuple);
+    x->as.get.index = __impl_transformIntrinsic(env, x->as.get.index);
+    break;
+
   case RTL_INTRINSIC_INSERT:
     x->as.insert.map = __impl_transformIntrinsic(env, x->as.insert.map);
     x->as.insert.key = __impl_transformIntrinsic(env, x->as.insert.key);
@@ -1327,10 +1390,19 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as.lookup.key = __impl_transformIntrinsic(env, x->as.lookup.key);
     break;
 
-  case RTL_INTRINSIC_GET:
-    x->as.get.tuple = __impl_transformIntrinsic(env, x->as.get.tuple);
-    x->as.get.index = __impl_transformIntrinsic(env, x->as.get.index);
+  case RTL_INTRINSIC_DYN_GET:
     break;
+
+  case RTL_INTRINSIC_DYN_SET:
+    x->as.dynSet.value = __impl_transformIntrinsic(env, x->as.dynSet.value);
+    break;
+
+  case RTL_INTRINSIC_BIND:
+    x->as.bind.value = __impl_transformIntrinsic(env, x->as.bind.value);
+
+    for (i = 0; i < x->as.bind.bodyLen; i++) {
+      x->as.bind.body[i] = __impl_transformIntrinsic(env, x->as.bind.body[i]);
+    } break;
 
   case RTL_INTRINSIC_VAR:
     if ((!env ||
@@ -1570,7 +1642,18 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
     break;
 
   case RTL_INTRINSIC_VAR:
+  case RTL_INTRINSIC_DYN_GET:
     break;
+
+  case RTL_INTRINSIC_DYN_SET:
+    rtl_tailCallPass(x->as.dynSet.value);
+    break;
+
+  case RTL_INTRINSIC_BIND:
+    rtl_tailCallPass(x->as.bind.value);
+    for (i = 0; i < x->as.bind.bodyLen; i++) {
+      rtl_tailCallPass(x->as.bind.body[i]);
+    } break;
 
   case RTL_INTRINSIC_NAMED_CALL:
     for (i = 0; i < x->as.namedCall.argsLen; i++) {
@@ -1794,6 +1877,30 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     return x->codeSize = annotateCodeSize(M, x->as.len.tuple)
                        + 1;
 
+  case RTL_INTRINSIC_GET:
+    return x->codeSize = annotateCodeSize(M, x->as.get.tuple)
+                       + annotateCodeSize(M, x->as.get.index)
+                       + 1;
+
+  case RTL_INTRINSIC_DYN_GET:
+    return x->codeSize = 5;
+
+  case RTL_INTRINSIC_DYN_SET:
+    return x->codeSize = annotateCodeSize(M, x->as.dynSet.value)
+                       + 5;
+
+  case RTL_INTRINSIC_BIND:
+    x->codeSize = 10 + annotateCodeSize(M, x->as.bind.value);
+
+    for (i = 0; i < x->as.bind.bodyLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.bind.body[i]);
+      if (i + 1 < x->as.bind.bodyLen) {
+	x->codeSize++;
+      }
+    }
+
+    return x->codeSize;
+
   case RTL_INTRINSIC_INSERT:
     return x->codeSize = annotateCodeSize(M, x->as.insert.map)
                        + annotateCodeSize(M, x->as.insert.key)
@@ -1803,11 +1910,6 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
   case RTL_INTRINSIC_LOOKUP:
     return x->codeSize = annotateCodeSize(M, x->as.lookup.map)
                        + annotateCodeSize(M, x->as.lookup.key)
-                       + 1;
-
-  case RTL_INTRINSIC_GET:
-    return x->codeSize = annotateCodeSize(M, x->as.get.tuple)
-                       + annotateCodeSize(M, x->as.get.index)
                        + 1;
 
   case RTL_INTRINSIC_VAR:
@@ -2117,6 +2219,34 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_emitIntrinsicCode(C, fnID, x->as.get.tuple);
     rtl_emitIntrinsicCode(C, fnID, x->as.get.index);
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_GET);
+    break;
+
+  case RTL_INTRINSIC_DYN_GET:
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_DYN_GET);
+    rtl_emitWordToFunc(codeBase, fnID, x->as.dynGet.name);
+    break;
+
+  case RTL_INTRINSIC_DYN_SET:
+    rtl_emitIntrinsicCode(C, fnID, x->as.dynSet.value);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_DYN_SET);
+    rtl_emitWordToFunc(codeBase, fnID, x->as.dynSet.name);
+    break;
+
+  case RTL_INTRINSIC_BIND:
+    rtl_emitIntrinsicCode(C, fnID, x->as.bind.value);
+
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_DYN_SAVE);
+    rtl_emitWordToFunc(codeBase, fnID, x->as.bind.name);
+
+    for (i = 0; i < x->as.bind.bodyLen; i++) {
+      rtl_emitIntrinsicCode(C, fnID, x->as.bind.body[i]);
+      if (i + 1 < x->as.bind.bodyLen) {
+	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+      }
+    }
+
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_DYN_RESTORE);
+    rtl_emitWordToFunc(codeBase, fnID, x->as.bind.name);
     break;
 
   case RTL_INTRINSIC_INSERT:

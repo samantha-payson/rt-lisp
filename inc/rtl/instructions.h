@@ -42,6 +42,12 @@ typedef enum rtl_Opcode {
   RTL_OP_INSERT,
   RTL_OP_LOOKUP,
 
+  // Dynamic variable operations
+  RTL_OP_DYN_GET,
+  RTL_OP_DYN_SET,
+  RTL_OP_DYN_SAVE,
+  RTL_OP_DYN_RESTORE,
+
   // Stack Operations
   RTL_OP_POP,
   RTL_OP_SWAP,

@@ -910,8 +910,10 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
 			     key,
 			     rtl_headerValue(entry[0]),
 			     depth + 1);
-    } else {
+    } else if (entry[0] == key) {
       return entry[1];
+    } else {
+      return RTL_NIL;
     }
   } else {
     return RTL_NIL;
@@ -929,6 +931,14 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   M->env = RTL_NIL;
 
+  M->dynamic = RTL_MAP;
+
+  M->pc = NULL;
+
+  M->dStack    = malloc(16*sizeof(rtl_Word));
+  M->dStackLen = 0;
+  M->dStackCap = 16;
+
   M->vStack    = malloc(64*sizeof(rtl_Word));
   M->vStackLen = 0;
   M->vStackCap = 64;
@@ -936,8 +946,6 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
   M->rStack    = malloc(64*sizeof(rtl_RetAddr));
   M->rStackLen = 0;
   M->rStackCap = 64;
-
-  M->pc = NULL;
 
   M->wsStack    = NULL;
   M->wsStackLen = 0;
@@ -1430,6 +1438,46 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       a = VPOP(); // Map
 
       VPUSH(rtl_mapLookup(M, a, b));
+      break;
+
+    case RTL_OP_DYN_GET:
+      M->pc = readWord(M->pc, &literal);
+
+      VPUSH(rtl_mapLookup(M, M->dynamic, literal));
+      break;
+
+    case RTL_OP_DYN_SET:
+      VSTACK_ASSERT_LEN(1);
+      M->pc = readWord(M->pc, &literal);
+
+      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, VPOP());
+      break;
+
+    case RTL_OP_DYN_SAVE:
+      VSTACK_ASSERT_LEN(1);
+      M->pc = readWord(M->pc, &literal);
+
+      if (unlikely(M->dStackLen == M->dStackCap)) {
+	M->dStackCap = M->dStackCap == M->dStackCap * 2;
+	M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
+      }
+
+      // Save the old value
+      M->dStack[M->dStackLen++] = rtl_mapLookup(M, M->dynamic, literal);
+
+      // Set the new
+      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, VPOP());
+      break;
+
+    case RTL_OP_DYN_RESTORE:
+      M->pc = readWord(M->pc, &literal);
+
+      if (unlikely(M->dStackLen == 0)) {
+	M->error = RTL_ERR_STACK_UNDERFLOW;
+	goto interp_cleanup;
+      }
+
+      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, M->dStack[--M->dStackLen]);
       break;
 
     case RTL_OP_POP:

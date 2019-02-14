@@ -29,6 +29,9 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_GET,
   RTL_INTRINSIC_INSERT,
   RTL_INTRINSIC_LOOKUP,
+  RTL_INTRINSIC_DYN_GET,
+  RTL_INTRINSIC_DYN_SET,
+  RTL_INTRINSIC_BIND,
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_TAIL,
@@ -88,6 +91,22 @@ struct rtl_Intrinsic {
     struct {
       rtl_Intrinsic *tuple;
     } len;
+
+    struct {
+      rtl_Word name;
+    } dynGet;
+
+    struct {
+      rtl_Word      name;
+      rtl_Intrinsic *value;
+    } dynSet;
+
+    struct {
+      rtl_Word      name;
+      rtl_Intrinsic *value;
+      rtl_Intrinsic **body;
+      size_t        bodyLen;
+    } bind;
 
     struct {
       rtl_Intrinsic *tuple;
@@ -309,6 +328,62 @@ rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
       .lookup = {
 	.map = map,
 	.key = key,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkDynGetIntrinsic(rtl_Word name)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_DYN_GET,
+    .as = {
+      .dynGet = { .name = name },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkDynSetIntrinsic(rtl_Word name, rtl_Intrinsic *value)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_DYN_SET,
+    .as = {
+      .dynSet = {
+	.name  = name,
+	.value = value,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkBindIntrinsic(rtl_Word      name,
+				   rtl_Intrinsic *value,
+				   rtl_Intrinsic **body,
+				   size_t        bodyLen)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_BIND,
+    .as = {
+      .bind = {
+	.name    = name,
+	.value   = value,
+	.body    = body,
+	.bodyLen = bodyLen,
       },
     },
   };

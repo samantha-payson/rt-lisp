@@ -212,11 +212,17 @@ struct rtl_Machine {
 
   rtl_Word env;
 
+  rtl_Word dynamic;
+
+  uint8_t *pc;
+
+  rtl_Word *dStack;
+  size_t   dStackLen;
+  size_t   dStackCap;
+
   rtl_Word *vStack;
   size_t   vStackLen;
   size_t   vStackCap;
-
-  uint8_t *pc;
 
   rtl_RetAddr *rStack;
   size_t      rStackLen;

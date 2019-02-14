@@ -519,6 +519,50 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   len\n");
     return bc + 1;
 
+  case RTL_OP_DYN_GET:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   dyn-get     %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
+    return bc + 5;
+
+  case RTL_OP_DYN_SET:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   dyn-set     %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
+    return bc + 5;
+
+  case RTL_OP_DYN_SAVE:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   dyn-save    %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
+    return bc + 5;
+
+  case RTL_OP_DYN_RESTORE:
+    literal = (rtl_Word)bc[1] << 0
+            | (rtl_Word)bc[2] << 8
+            | (rtl_Word)bc[3] << 16
+            | (rtl_Word)bc[4] << 24 ;
+
+    printf("   dyn-restore %s:%s\n",
+	   rtl_symbolPackageName(literal),
+	   rtl_symbolName(literal));
+    return bc + 5;
+
   case RTL_OP_MAP:
     printf("   map\n");
     return bc + 1;
