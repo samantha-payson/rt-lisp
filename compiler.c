@@ -451,14 +451,41 @@ rtl_Word macroExpandMap(rtl_Compiler        *C,
   return newMap;
 }
 
+// Expects everything after the 'lambda' symbol of a lambda expression.
+//
+// e.g. ((arg0 arg1 arg2) body)
+rtl_Word rtl_macroExpandLambda(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
+{
+  rtl_Word arg, out, tail;
+
+  arg = out = tail = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(C->M, &in, &arg, &out, &tail);
+
+  arg = rtl_resolveAll(C, ns, rtl_car(C->M, in));
+  out = rtl_cons(C->M, arg, RTL_NIL);
+
+  for (tail = rtl_cdr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
+    arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+    out = rtl_cons(C->M, arg, out);
+  }
+
+  out = rtl_reverseList(C->M, out);
+
+  rtl_popWorkingSet(C->M);
+
+  return out;
+}
+
 rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
-  rtl_Word head  = RTL_NIL,
-           arg   = RTL_NIL,
-           name  = RTL_NIL,
-           alias = RTL_NIL,
-           tail  = RTL_NIL,
-           out   = RTL_NIL;
+  rtl_Word head   = RTL_NIL,
+           arg    = RTL_NIL,
+           clause = RTL_NIL,
+           name   = RTL_NIL,
+           alias  = RTL_NIL,
+           tail   = RTL_NIL,
+           out    = RTL_NIL;
 
   rtl_Word const *rptr;
   rtl_Word       *wptr;
@@ -471,7 +498,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
   ensureSymCache(C);
 
-  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &name, &alias, &tail, &out);
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &clause, &name, &alias, &tail, &out);
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
@@ -532,15 +559,47 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     } else if (head == symCache.intrinsic.quote) {
       out = rtl_resolveAll(C, ns, in);
 
+    } else if (head == symCache.intrinsic.lambda) {
+      out = rtl_cons(C->M, head,
+		     rtl_macroExpandLambda(C, ns, rtl_cdr(C->M, in)));
+
+    } else if (head == symCache.intrinsic.labels) {
+      arg = RTL_NIL;
+
+      for (clause = rtl_cadr(C->M, in); clause != RTL_NIL; clause = rtl_cdr(C->M, clause)) {
+	name = rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caar(C->M, clause)));
+	arg  = rtl_cons(C->M, rtl_cons(C->M, name,
+				       rtl_macroExpandLambda(C, ns, rtl_cdar(C->M, clause))),
+			arg);
+      }
+
+      out = rtl_cons(C->M, arg,
+		     rtl_cons(C->M, head,
+			      RTL_NIL));
+
+      for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
+	arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+	out = rtl_cons(C->M, arg, out);
+      }
+
+      out = rtl_reverseList(C->M, out);
+
+    } else if (head == symCache.intrinsic.defun) {
+      tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
+      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
+		      tail);
+      out = rtl_cons(C->M, head, tail);
+
+    } else if (head == symCache.intrinsic.defmacro) {
+      tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
+      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
+		      tail);
+      out = rtl_cons(C->M, head, tail);
+
     } else {
       fnDef = rtl_lookupFn(C, head);
 
       if (fnDef != NULL && fnDef->isMacro) {
-	printf("'%s:%s' is a '%s' which names a macro!\n",
-	       rtl_symbolPackageName(head),
-	       rtl_symbolName(head),
-	       rtl_typeNameOf(head));
-
 	out = rtl_macroExpand(C, ns,
 			      rtl_applyList(C->M,
 					    fnDef->fn,
