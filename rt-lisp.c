@@ -2160,3 +2160,13 @@ void __rtl_popWorkingSet(rtl_Machine *M, char const *fName)
 
   M->wsStackLen--;
 }
+
+void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word val)
+{
+  M->dynamic = rtl_mapInsert(M, M->dynamic, key, val);
+}
+
+rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
+{
+  return rtl_mapLookup(M, M->dynamic, key);
+}

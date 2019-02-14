@@ -403,6 +403,10 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f);
 
+void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word value);
+
+rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key);
+
 void rtl_io_installBuiltins(rtl_Compiler *C);
 
 #endif // rt-lisp.h
