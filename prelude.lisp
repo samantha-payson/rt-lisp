@@ -108,9 +108,12 @@
 
   (export list and semiquote defmacro defun if progn when car cdr mapcar-1 lambda export)
 
-  (export not unless)
+  (export nil? not unless)
 
   (defun not (x)
+    (nil? x))
+
+  (defun nil? (x)
     (intrinsic:nil? x))
 
   (defmacro unless (test . body)
@@ -150,9 +153,11 @@
 
   (defmacro cond arm*
     (when arm*
-      `(if ~(caar arm*)
-	   (progn @(cdar arm*))
-	   (cond @(cdr arm*)))))
+      (if (intrinsic:eq (caar arm*) T)
+	  `(progn @(cdar arm*))
+	  `(if ~(caar arm*)
+	       (progn @(cdar arm*))
+	       (cond @(cdr arm*))))))
 
   (defun gensym ()
     (intrinsic:gensym))
@@ -162,18 +167,56 @@
 
   (defmacro + arg*
     (cond
-      ((intrinsic:nil? arg*) 0)
-      ((intrinsic:nil? (cdr arg*)) (car arg*))
+      ((nil? arg*) 0)
+      ((nil? (cdr arg*)) (car arg*))
       (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*))))))
 
-
-  (export with-gensyms rlambda rlet length)
 
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
 		       `(~g (gensym)))
 		     g*)
        @body))
+
+  (export < > eq)
+
+  (defmacro < (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:lt ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+	 `(let ((~tmp ~(car rest*)))
+	    (if (< ~first ~tmp)
+		(< ~tmp @(cdr rest*))))))))
+
+  (defmacro > (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:gt ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+	 `(let ((~tmp ~(car rest*)))
+	    (if (> ~first ~tmp)
+		(> ~tmp @(cdr rest*))))))))
+
+  (defmacro eq (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:eq ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+	 `(let ((~tmp ~(car rest*)))
+	    (if (eq ~first ~tmp)
+		(eq ~tmp @(cdr rest*))))))))
+
+  (export with-gensyms rlambda rlet length)
 
   (defmacro rlambda (name arg* . body)
     `(intrinsic:labels ((~name ~arg* @body))
