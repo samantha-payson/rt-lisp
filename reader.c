@@ -38,6 +38,8 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
   char *ptr;
   int ch, next;
 
+  static const char nonAtomChars[] = ")}],;'";
+
   int   i28;
   float f14;
 
@@ -46,7 +48,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
 
   ch = fgetc(f);
 
-  while (isgraph(ch) && ch != ')' && ch != '}' && ch != ']' && ch != ',') {
+  while (isgraph(ch) && !strchr(nonAtomChars, ch)) {
     if (next == 511) {
       // This atom is too long, complain and abort ...
       buf[next] = '\0';
@@ -62,6 +64,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
 
   // Make sure the string is null terminated
   buf[next] = '\0';
+
 
   // Last char we read wasn't part of the atom.
   ungetc(ch, f);
@@ -181,6 +184,70 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
 }
 
 static
+rtl_Word readChar(FILE *f)
+{
+  int ch;
+  rtl_Word w;
+
+  ch = fgetc(f);
+  if (ch == EOF) {
+    printf("  error: EOF during char constant.\n");
+    abort();
+  }
+
+  if (ch == '\\') {
+    switch ((ch = fgetc(f))) {
+    case EOF:
+      printf("  error: EOF during char constant.\n");
+      abort();
+
+    case '\\':
+      w = rtl_int28('\\');
+      break;
+
+    case '0':
+      w = rtl_int28('\0');
+      break;
+
+    case 'n':
+      w = rtl_int28('\n');
+      break;
+
+    case 'r':
+      w = rtl_int28('\r');
+      break;
+
+    case 't':
+      w = rtl_int28('\t');
+      break;
+
+    case '"':
+      w = rtl_int28('"');
+      break;
+
+    default:
+      printf(" error: bad escape '%c' (%02X) in char constant.\n", ch, (unsigned)ch);
+      abort();
+    }
+  } else {
+    w = rtl_int28(ch);
+  }
+
+  if ((ch = fgetc(f)) != '\'') {
+    if (ch == EOF) {
+      printf("  error: EOF during char constant.\n");
+    } else {
+      printf("Malformed character constant %02X followed by %c (expected '\\'')\n",
+	     (unsigned)rtl_int28Value(w), ch);
+    }
+
+    abort();
+  }
+
+  return w;
+}
+
+static
 rtl_Word readString(rtl_Compiler *C, FILE *f)
 {
   int ch;
@@ -196,6 +263,10 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
       switch ((ch = fgetc(f))) {
       case '\\':
 	ch = '\\';
+	break;
+
+      case '0':
+	ch = '\0';
 	break;
 
       case 'n':
@@ -251,7 +322,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
   ch = fgetc(f);
   switch (ch) {
   case EOF:
-    w = rtl_cons(C->M, rtl_internSelector("std", "EOF"), RTL_NIL);
+    w = rtl_cons(C->M, rtl_internSelector("io", "EOF"), RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"), w);
     break;
 
@@ -294,19 +365,17 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     C->M->vStackLen -= n;
     break;
 
-  case '"':
-    w = readString(C, f);
+  case '\'':
+    w = readChar(f);
     break;
 
-  case '\'':
-    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
-    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"), w);
+  case '"':
+    w = readString(C, f);
     break;
 
   case '`':
     w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("std", "semiquote"), w);
-
     break;
 
   case '~':

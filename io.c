@@ -99,6 +99,29 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
 }
 
 static
+rtl_Word rtl_io_writeChar(rtl_Machine    *M,
+			  rtl_Word const *args,
+			  size_t         argsLen)
+{
+  rtl_io_File rif;
+  int ch;
+
+  assert(argsLen == 2);
+  assert(rtl_isNative(args[0]) && rtl_isInt28(args[1]));
+
+  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
+
+  ch = fputc(rtl_int28Value(args[1]), rif.f);
+
+  if (ch == EOF) {
+    return rtl_internSelector("io", "EOF");
+  }
+
+  return rtl_int28(ch);
+}
+
+static
 rtl_Word rtl_io_close(rtl_Machine    *M,
 		      rtl_Word const *args,
 		      size_t         argsLen)
@@ -127,6 +150,9 @@ void rtl_io_installBuiltins(rtl_Compiler *C)
 
   rtl_registerBuiltin(C, rtl_intern("io", "read-char"), rtl_io_readChar);
   rtl_export(C, rtl_intern("io", "read-char"));
+
+  rtl_registerBuiltin(C, rtl_intern("io", "write-char"), rtl_io_writeChar);
+  rtl_export(C, rtl_intern("io", "write-char"));
 
   rtl_registerBuiltin(C, rtl_intern("io", "close"), rtl_io_close);
   rtl_export(C, rtl_intern("io", "close"));

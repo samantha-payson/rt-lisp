@@ -18,7 +18,7 @@
   (intrinsic:use-package intrinsic
     (defun build-list (args)
       (if args
-	  (cons 'cons
+	  (cons (quote cons)
 		(cons (car args)
 		      (cons (build-list (cdr args))
 			    nil)))))
@@ -35,32 +35,32 @@
     (defmacro and arg*
       (if (cons? arg*)
 	  (if (cdr arg*)
-	      (list 'if
+	      (list (quote if)
 		    (car arg*)
-		    (cons 'and (cdr arg*)))
+		    (cons (quote and) (cdr arg*)))
 	    (car arg*))
 	  T))
 
     (defun build-semiquote-tail (x)
       (if (cons? x)
 	  (if (and (cons? (car x))
-		   (eq (car (car x)) 'std:splice))
-	      (list 'append2
+		   (eq (car (car x)) (quote std:splice)))
+	      (list (quote append2)
 		    (car (cdr (car x)))
 		    (build-semiquote-tail (cdr x)))
-	    (list 'cons
+	    (list (quote cons)
 		  (build-semiquote (car x))
 		  (build-semiquote-tail (cdr x))))
-	(list 'quote x)))
+	(list (quote quote) x)))
 
     (defun build-semiquote (x)
       (if (cons? x)
-	  (if (eq (car x) 'std:escape)
+	  (if (eq (car x) (quote std:escape))
 	      (car (cdr x))
-	    (list 'cons
+	    (list (quote cons)
 		  (build-semiquote (car x))
 		  (build-semiquote-tail (cdr x))))
-	(list 'quote x))))
+	(list (quote quote) x))))
 
   (intrinsic:defmacro semiquote (x)
     (build-semiquote x))
