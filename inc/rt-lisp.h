@@ -417,4 +417,6 @@ void rtl_io_installBuiltins(rtl_Compiler *C);
 
 void rtl_repl(rtl_Compiler *C);
 
+void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path);
+
 #endif // rt-lisp.h
