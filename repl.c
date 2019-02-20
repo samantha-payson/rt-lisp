@@ -9,40 +9,6 @@ typedef struct rtl_repl_Compiler {
   rtl_NameSpace const *ns;
 } rtl_repl_Compiler;
 
-static
-rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
-{
-  rtl_Word          handle = RTL_NIL;
-  rtl_repl_Compiler wrapper;
-  rtl_Compiler      *C;
-  char              *path;
-  size_t            pathLen;
-
-  if (argsLen != 1) {
-    printf("\n  usage: (load <path>)\n\n");
-    return RTL_NIL;
-  }
-
-  RTL_PUSH_WORKING_SET(M, &handle);
-
-  handle = rtl_getVar(M, rtl_intern("std", "*compiler*"));
-  rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
-  assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
-
-  C = wrapper.C;
-
-  pathLen = rtl_stringLength(M, args[0]);
-  path    = malloc(pathLen + 1);
-
-  rtl_reifyString(M, args[0], path, pathLen + 1, &pathLen);
-
-  rtl_load(C, wrapper.ns, path);
-
-  rtl_popWorkingSet(M);
-
-  return rtl_internSelector(NULL, "OK");
-}
-
 void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 {
   rtl_Word w = RTL_NIL;
@@ -86,6 +52,77 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
   rtl_popWorkingSet(C->M);
 }
 
+static
+rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+{
+  rtl_Word          handle = RTL_NIL;
+  rtl_repl_Compiler wrapper;
+  rtl_Compiler      *C;
+  char              *path;
+  size_t            pathLen;
+
+  if (argsLen != 1) {
+    printf("\n  usage: (load <path>)\n\n");
+    return RTL_NIL;
+  }
+
+  RTL_PUSH_WORKING_SET(M, &handle);
+
+  handle = rtl_getVar(M, rtl_intern("std", "*compiler*"));
+  rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+  assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
+
+  C = wrapper.C;
+
+  pathLen = rtl_stringLength(M, args[0]);
+  path    = malloc(pathLen + 1);
+
+  rtl_reifyString(M, args[0], path, pathLen + 1, &pathLen);
+
+  rtl_load(C, wrapper.ns, path);
+
+  rtl_popWorkingSet(M);
+
+  return rtl_internSelector(NULL, "OK");
+}
+
+static
+rtl_Word rtl_repl_macroExpand(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+{
+  rtl_Word          handle = RTL_NIL, result = RTL_NIL;
+  rtl_repl_Compiler wrapper;
+
+  if (argsLen != 1) {
+    printf("\n  usage: (macroexpand <expr>)\n\n");
+    return RTL_NIL;
+  }
+
+  RTL_PUSH_WORKING_SET(M, &handle, &result);
+
+  handle = rtl_getVar(M, rtl_intern("std", "*compiler*"));
+  rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+  assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
+
+  result = rtl_macroExpand(wrapper.C, wrapper.ns, args[0]);
+
+  rtl_popWorkingSet(M);
+
+  return result;
+}
+
+static
+rtl_Word rtl_repl_disassemble(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+{
+  if (argsLen != 1) {
+    printf("\n  usage: (disassemble <fn>)\n\n");
+    return RTL_NIL;
+  }
+
+  rtl_disasmFn(M, args[0]);
+
+  return rtl_internSelector(NULL, "OK");
+}
+
 void rtl_repl(rtl_Compiler *C)
 {
   rtl_repl_Compiler wrapper;
@@ -115,7 +152,15 @@ void rtl_repl(rtl_Compiler *C)
   rtl_registerBuiltin(C, rtl_intern("std", "load"), rtl_repl_load);
   rtl_export(C, rtl_intern("std", "load"));
 
+  rtl_registerBuiltin(C, rtl_intern("std", "disassemble"), rtl_repl_disassemble);
+  rtl_export(C, rtl_intern("std", "disassemble"));
+
+  rtl_registerBuiltin(C, rtl_intern("std", "macroexpand"), rtl_repl_macroExpand);
+  rtl_export(C, rtl_intern("std", "macroexpand"));
+
   while (!feof(stdin)) {
+    printf("\n[crtl] ");
+    fflush(stdout);
     w = rtl_read(C, stdin);
 
     rtl_compile(C, &useNS, replFnID, w);
@@ -127,8 +172,6 @@ void rtl_repl(rtl_Compiler *C)
 
     rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RETURN);
 
-    rtl_disasmFn(C->M->codeBase, rtl_function(replFnID));
-
     w = rtl_call(C->M, rtl_function(replFnID));
 
     if (rtl_peekError(C->M) != RTL_OK) {
@@ -136,7 +179,7 @@ void rtl_repl(rtl_Compiler *C)
 	     rtl_errString(rtl_getError(C->M)));
     }
 
-    printf("\n Result was a '%s': ", rtl_typeNameOf(w));
+    printf("\n=> ");
     rtl_formatExpr(C->M, w);
     printf("\n");
 

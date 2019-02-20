@@ -564,7 +564,6 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   if (unlikely(!gen0)) gen0 = heap->gen[0] = mkGeneration(0);
 
   if (unlikely(gen0->fillPtr + nbr >= gen0->capacity)) {
-    printf("\n------------------- Collecting! -------------------\n\n");
     collectGen(M, 0);
 #ifndef NDEBUG
     if (rtl_debugCheckForCycles(M)) {
@@ -1326,7 +1325,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
     /*   printf(" "); */
     /*   rtl_formatExpr(M, M->vStack[i]); */
     /* } */
-    /* printf("\n"); */
+    /* printf("\n\n"); */
 
     /* printf("env: "); */
     /* rtl_formatExpr(M, M->env); */
@@ -1704,6 +1703,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 				      gen,
 				      offs + 1+len+1 + 1+size + i*2);
       }
+
+      VPOPK(size);
 
       M->env = a;
       break;

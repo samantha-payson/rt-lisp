@@ -273,6 +273,13 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
 
     printf("   const       ");
     rtl_formatExprShallow(literal);
+
+    if (rtl_isFunction(literal)) {
+      func = rtl_reifyFunction(codeBase, literal);
+      printf("         ;; %s:%s",
+	     rtl_symbolPackageName(func->name),
+	     rtl_symbolName(func->name));
+    }
     printf("\n");
 
     return bc + 5;
@@ -510,8 +517,14 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[3] << 16
             | (rtl_Word)bc[4] << 24 ;
 
-    printf("   closure     fn[%d]\n",
+    printf("   closure     Function#%d",
 	   (int)rtl_functionID(literal));
+
+    func = rtl_reifyFunction(codeBase, literal);
+    printf("         ;; %s:%s",
+	   rtl_symbolPackageName(func->name),
+	   rtl_symbolName(func->name));
+    printf("\n");
     return bc + 5;
 
   case RTL_OP_LABELS:
@@ -666,15 +679,42 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
   }
 }
 
-void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word fn)
+void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
 {
   uint8_t  *start,
            *code,
            *end;
 
+  rtl_Word const *rptr;
+
+  rtl_FnDef *fnDef;
   rtl_Function *func;
 
-  func = rtl_reifyFunction(cb, fn);
+  switch (rtl_typeOf(fn)) {
+  case RTL_SYMBOL:
+    fnDef = rtl_lookupFn(M->codeBase, fn);
+    if (!fnDef) {
+      printf("  no such function: %s:%s\n",
+	     rtl_symbolPackageName(fn),
+	     rtl_symbolName(fn));
+    } else {
+      rtl_disasmFn(M, fnDef->fn);
+    } return;
+
+  case RTL_CLOSURE:
+    rptr = __rtl_reifyPtr(M, fn);
+    rtl_disasmFn(M, rptr[0]);
+    return;
+
+  case RTL_FUNCTION:
+    break;
+
+  default:
+    printf("  can't disassemble type: %s\n", rtl_typeNameOf(fn));
+    return;
+  }
+
+  func = rtl_reifyFunction(M->codeBase, fn);
 
   if (func->isBuiltin) {
     printf("\n ---- Builtin Function %s:%s ----\n---------\n\n",
@@ -697,7 +737,7 @@ void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word fn)
 	   rtl_symbolName(func->name),
 	   (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 
-    code = rtl_disasm(cb, code);
+    code = rtl_disasm(M->codeBase, code);
   }
 
   printf("\n ----------------------------------\n\n");

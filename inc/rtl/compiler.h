@@ -114,7 +114,7 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn);
 
 void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word addr, bool isMacro);
 
-rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name);
+rtl_FnDef *rtl_lookupFn(rtl_CodeBase *cb, rtl_Word name);
 
 // Declare a package as existing. If the package already exists, this function
 // does nothing.

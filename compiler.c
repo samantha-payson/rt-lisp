@@ -175,7 +175,7 @@ void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word fn, bool isMacro)
   codeBase->fnsByName[idx] = def;
 }
 
-rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
+rtl_FnDef *rtl_lookupFn(rtl_CodeBase *codeBase, rtl_Word name)
 {
   rtl_FnDef *def;
   size_t    idx;
@@ -186,7 +186,7 @@ rtl_FnDef *rtl_lookupFn(rtl_Compiler *C, rtl_Word name)
 
   idx = rtl_symbolID(name) % RTL_CODE_BASE_FN_HASH_SIZE;
 
-  for (def = C->M->codeBase->fnsByName[idx]; def != NULL; def = def->next)
+  for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next)
   {
     if (def->name == name) {
       return def;
@@ -641,7 +641,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 			      out));
 
     } else {
-      fnDef = rtl_lookupFn(C, head);
+      fnDef = rtl_lookupFn(C->M->codeBase, head);
 
       if (fnDef != NULL && fnDef->isMacro) {
 	out = rtl_macroExpand(C, ns,
@@ -762,10 +762,6 @@ void rtl_compile(rtl_Compiler *C,
     out = rtl_macroExpand(C, ns, in);
     break;
   }
-
-  printf("Generating intrinsics for: ");
-  rtl_formatExpr(C->M, out);
-  printf("\n");
 
   ir = rtl_exprToIntrinsic(C, out);
   ir = rtl_transformIntrinsic(ir);
@@ -2275,7 +2271,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
   case RTL_INTRINSIC_VAR:
     if (x->as.var.global) {
-      fnDef = rtl_lookupFn(C, x->as.var.name);
+      fnDef = rtl_lookupFn(codeBase, x->as.var.name);
 
       if (fnDef != NULL && !fnDef->isMacro) {
 	offs = rtl_nextFuncOffs(codeBase, fnID);
@@ -2327,7 +2323,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitIntrinsicCode(C, fnID, x->as.namedCall.args[i]);
     }
 
-    fnDef = rtl_lookupFn(C, x->as.namedCall.name);
+    fnDef = rtl_lookupFn(codeBase, x->as.namedCall.name);
     if (fnDef != NULL && !fnDef->isMacro) {
       offs = rtl_nextFuncOffs(codeBase, fnID);
 
@@ -2413,13 +2409,6 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
 
-    printf("  _____\n");
-    printf(" | Compiled %d-ary lambda to function %d |\n",
-	   (int)x->as.lambda.argNamesLen,
-	   (int)newFnID);
-    printf("       ------------");
-    rtl_disasmFn(codeBase, rtl_function(newFnID));
-
     break;
 
   case RTL_INTRINSIC_LABELS:
@@ -2442,12 +2431,6 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       }
 
       rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
-
-      printf("  _____\n");
-      printf(" | Compiled labels '%s' |\n",
-	     rtl_symbolName(x->as.labels.labelsNames[i]));
-      printf("       ------------");
-      rtl_disasmFn(codeBase, rtl_function(newFnID));
     }
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_LABELS);
@@ -2491,12 +2474,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     rtl_defineFn(C, x->as.defun.name, rtl_function(newFnID), false);
 
-    printf("  _____\n");
-    printf(" | Compiled function '%s' to page %d |\n",
-	   rtl_symbolName(x->as.defun.name),
-	   (int)newFnID);
-    printf("       ------------");
-    rtl_disasmFn(codeBase, rtl_function(newFnID));
+    printf("Compiled function '%s:%s'\n",
+	   rtl_symbolPackageName(x->as.defun.name),
+	   rtl_symbolName(x->as.defun.name));
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
     rtl_emitWordToFunc(codeBase, fnID, x->as.defun.name);
@@ -2526,12 +2506,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     rtl_defineFn(C, x->as.defmacro.name, rtl_function(newFnID), true);
 
-    printf("  _____\n");
-    printf(" | Compiled macro '%s' to page %d |\n",
-	   rtl_symbolName(x->as.defmacro.name),
-	   (int)newFnID);
-    printf("       ------------");
-    rtl_disasmFn(codeBase, rtl_function(newFnID));
+    printf("Compiled macro    '%s:%s'\n",
+	   rtl_symbolPackageName(x->as.defmacro.name),
+	   rtl_symbolName(x->as.defmacro.name));
 
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);

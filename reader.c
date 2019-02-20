@@ -251,7 +251,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
   ch = fgetc(f);
   switch (ch) {
   case EOF:
-    w = rtl_cons(C->M, rtl_intern("std", "EOF"), RTL_NIL);
+    w = rtl_cons(C->M, rtl_internSelector("std", "EOF"), RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"), w);
     break;
 
