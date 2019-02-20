@@ -133,9 +133,9 @@ static
 rtl_Word readList(rtl_Compiler *C, FILE *f)
 {
   int ch;
-  rtl_Word w = RTL_NIL;
+  rtl_Word w = RTL_NIL, car = RTL_NIL, cdr = RTL_NIL;
 
-  RTL_PUSH_WORKING_SET(C->M, &w);
+  RTL_PUSH_WORKING_SET(C->M, &w, &car, &cdr);
 
   eatWhitespace(f);
   ch = fgetc(f);
@@ -156,8 +156,9 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
 
     } else {
       ungetc(ch, f);
-      w = rtl_readAtom(C, f, '.');
-      w = rtl_cons(C->M, w, readList(C, f));
+      car = rtl_readAtom(C, f, '.');
+      cdr = readList(C, f);
+      w = rtl_cons(C->M, car, cdr);
 
     } break;
 
@@ -168,10 +169,9 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
     }
 
     ungetc(ch, f);
-    w = rtl_read(C, f);
-    w = rtl_cons(C->M,
-		 w,
-		 readList(C, f));
+    car = rtl_read(C, f);
+    cdr = readList(C, f);
+    w = rtl_cons(C->M, car, cdr);
     break;
   }
 
@@ -241,17 +241,18 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
            n,
            i;
 
-  rtl_Word w,
+  rtl_Word w = RTL_NIL,
            *ptr;
+
+  RTL_PUSH_WORKING_SET(C->M, &w);
 
   eatWhitespace(f);
 
   ch = fgetc(f);
   switch (ch) {
   case EOF:
-    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
-		 rtl_cons(C->M, rtl_intern("std", "EOF"),
-			  RTL_NIL));
+    w = rtl_cons(C->M, rtl_intern("std", "EOF"), RTL_NIL);
+    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"), w);
     break;
 
   case ')':
@@ -298,23 +299,24 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     break;
 
   case '\'':
-    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"),
-		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_cons(C->M, rtl_intern("intrinsic", "quote"), w);
     break;
 
   case '`':
-    w = rtl_cons(C->M, rtl_intern("std", "semiquote"),
-		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_cons(C->M, rtl_intern("std", "semiquote"), w);
+
     break;
 
   case '~':
-    w = rtl_cons(C->M, rtl_intern("std", "escape"),
-		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_cons(C->M, rtl_intern("std", "escape"), w);
     break;
 
   case '@':
-    w = rtl_cons(C->M, rtl_intern("std", "splice"),
-		 rtl_cons(C->M, rtl_read(C, f), RTL_NIL));
+    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_cons(C->M, rtl_intern("std", "splice"), w);
     break;
 
   default:
@@ -325,6 +327,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
       abort();
     }
   }
+
+  rtl_popWorkingSet(C->M);
 
   return w;
 }

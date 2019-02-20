@@ -357,6 +357,7 @@ int rtl_isPtr(rtl_Word w) {
   case RTL_TUPLE:
   case RTL_STRING:
   case RTL_MAP:
+  case RTL_NATIVE:
   case RTL_CONS:
   case RTL_CLOSURE:
     return 1;
@@ -364,6 +365,11 @@ int rtl_isPtr(rtl_Word w) {
   default:
     return 0;
   }
+}
+
+static inline
+bool rtl_isClosure(rtl_Word w) {
+  return rtl_typeOf(w) == w;
 }
 
 #include "rtl/nil.h"

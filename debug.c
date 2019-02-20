@@ -734,3 +734,100 @@ char const *rtl_errString(rtl_Error err)
     return "[Uknown Error]";
   }
 }
+
+bool rtl_debugCheckForCycles(rtl_Machine *M)
+{
+  size_t i, j;
+  rtl_Generation *gen;
+  rtl_Word w;
+  uint32_t offs;
+  int      genNbr;
+
+  for (i = 0; i < RTL_MAX_GENERATIONS; i++) {
+    gen = M->heap.gen[i];
+    if (!gen) break;
+
+    for (j = 0; j < gen->fillPtr; j++) {
+      w = gen->words[j];
+
+      if (rtl_isPtr(w) && !rtl_isClosure(w)) {
+	offs   = __rtl_ptrOffs(w);
+	genNbr = __rtl_ptrGen(w);
+
+	if (genNbr < gen->nbr ||
+	    (genNbr == gen->nbr && offs >= j))
+	{
+	  printf("\n    CYCLE: %04Xg%d: ", (unsigned int)j, (int)i);
+	  rtl_formatExprShallow(w);
+	  printf("\n\n");
+	  return true;
+	}
+      }
+    }
+  }
+
+  return false;
+}
+
+void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w) {
+  rtl_Word const *rptr;
+  size_t i, len;
+
+  uint32_t offs, gen;
+  uint32_t elemOffs, elemGen;
+
+  offs = __rtl_ptrOffs(w);
+  gen  = __rtl_ptrGen(w);
+
+  switch (rtl_typeOf(w)) {
+  case RTL_TUPLE:
+    rptr = rtl_reifyTuple(M, w, &len);
+
+    for (i = 0; i < len; i++) {
+      elemOffs = __rtl_ptrOffs(rptr[i]);
+      elemGen  = __rtl_ptrGen(rptr[i]);
+
+      if (elemGen < gen || (elemGen == gen && elemOffs >= offs)) {
+	printf("   @ Index %d!\n", (int)i);
+	asm("int3");
+      }
+    } break;
+
+  case RTL_CONS:
+    rptr = __rtl_reifyPtr(M, w);
+    for (i = 0; i < 2; i++) {
+      elemOffs = __rtl_ptrOffs(rptr[i]);
+      elemGen  = __rtl_ptrGen(rptr[i]);
+
+      if (elemGen < gen || (elemGen == gen && elemOffs >= offs)) {
+	printf("   @ Index %d!\n", (int)i);
+	asm("int3");
+      }
+    } break;
+
+  default:
+    break;
+  }
+}
+
+void rtl_dumpHeap(rtl_Machine *M)
+{
+  size_t i, j;
+  rtl_Generation *gen;
+
+  for (i = 0; i < RTL_MAX_GENERATIONS; i++) {
+    gen = M->heap.gen[i];
+    if (!gen) break;
+
+    printf("\n"
+	   "  -------- Gen %2d --------\n", gen->nbr);
+
+    for (j = 0; j < gen->fillPtr; j++) {
+      printf("   %04Xg%d: ", (unsigned int)j, gen->nbr);
+      rtl_formatExprShallow(gen->words[j]);
+      printf("\n");
+    }
+
+    printf("  ------------------------\n");
+  }
+}

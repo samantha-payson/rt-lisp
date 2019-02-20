@@ -58,3 +58,17 @@ uint32_t __rtl_ptrOffs(rtl_Word ptr) {
 rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr);
 
 void rtl_disasmFn(rtl_CodeBase *cb, rtl_Word fn);
+
+void rtl_dumpHeap(rtl_Machine *M);
+
+bool rtl_debugCheckForCycles(rtl_Machine *M);
+
+
+void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w);
+
+#ifndef NDEBUG
+# define rtl_debugCheckAlloc(M, W) __rtl_debugCheckAlloc(M, W)
+#else
+# define rtl_debugCheckAlloc(M, W) ((void)0)
+#endif
+

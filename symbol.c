@@ -232,7 +232,7 @@ uint32_t resolvePkgID(rtl_NameSpace const *ns, UnresolvedSymbol const *usym)
 {
   if (usym->pkg) {
     // Search the NS hierarchy for any alias that matches usym->pkg
-    for (ns = ns; NULL != ns; ns = ns->super) {
+    for (; NULL != ns; ns = ns->super) {
       switch (ns->type) {
       case RTL_NS_ALIAS_PACKAGE:
 	if (!strcmp(usym->pkg, ns->as.aliasPackage.aliasName)) {
@@ -295,7 +295,10 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 
   // First check to see if this is an unqualified alias
   if (NULL == usym->pkg) {
-    for (seek = ns; NULL != seek; seek = seek->super) {
+    for (seek = ns;
+	 NULL != seek && seek->type != RTL_NS_IN_PACKAGE;
+	 seek = seek->super)
+    {
       switch (seek->type) {
       case RTL_NS_USE_PACKAGE:
 	pkg = seek->as.usePackage.pkg;

@@ -377,13 +377,13 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
 			rtl_NameSpace const *ns,
 			rtl_Word in)
 {
-  rtl_Word out = RTL_NIL;
+  rtl_Word a = RTL_NIL, b = RTL_NIL, out = RTL_NIL;
 
   rtl_Word const *rptr;
   rtl_Word *wptr;
   size_t i, len;
 
-  RTL_PUSH_WORKING_SET(C->M, &in, &out);
+  RTL_PUSH_WORKING_SET(C->M, &in, &a, &b, &out);
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
@@ -402,7 +402,7 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
     } break;
 
   case RTL_TUPLE:
-    rptr = rtl_reifyTuple(C->M, in, &len);
+    rtl_reifyTuple(C->M, in, &len);
     wptr = rtl_allocTuple(C->M, &out, len);
     rptr = rtl_reifyTuple(C->M, in, &len);
     for (i = 0; i < len; i++) {
@@ -410,8 +410,9 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
     } break;
     
   case RTL_CONS:
-    out = rtl_cons(C->M, rtl_resolveAll(C, ns, rtl_car(C->M, in)),
-		   rtl_resolveAll(C, ns, rtl_cdr(C->M, in)));
+    a = rtl_resolveAll(C, ns, rtl_car(C->M, in));
+    b = rtl_resolveAll(C, ns, rtl_cdr(C->M, in));
+    out = rtl_cons(C->M, a, b);
     break;
 
   default:
@@ -458,6 +459,8 @@ rtl_Word macroExpandMap(rtl_Compiler        *C,
       newEntry[1] = rtl_macroExpand(C, ns, entry[1]);
     }
   }
+
+  rtl_popWorkingSet(C->M);
 
   return newMap;
 }

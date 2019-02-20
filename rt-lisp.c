@@ -359,7 +359,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   uint32_t oldOffs, newOffs;
   rtl_Generation *gen, *nextGen;
 
-  if (!rtl_isPtr(w)) {
+  if (!rtl_isPtr(w) || w == RTL_MAP) {
     return w;
   }
 
@@ -420,9 +420,17 @@ int collectGen(rtl_Machine *M, int g)
   // .. the current environment frame ..
   markWord(M, gen, M->env);
 
+  // .. the dynamic environment ..
+  markWord(M, gen, M->dynamic);
+
   // .. any words on the value stack ..
   for (i = 0; i < M->vStackLen; i++) {
     markWord(M, gen, M->vStack[i]);
+  }
+
+  // .. any words on the dynamic var stack ..
+  for (i = 0; i < M->dStackLen; i++) {
+    markWord(M, gen, M->dStack[i]);
   }
 
   // .. any environment frames on the return stack ..
@@ -498,9 +506,17 @@ int collectGen(rtl_Machine *M, int g)
     // .. the current environment frame ..
     M->env = moveWord(M, highest, M->env);
 
+    // .. the dynamic environment ..
+    M->dynamic = moveWord(M, highest, M->dynamic);
+
     // .. any words on the value stack ..
     for (i = 0; i < M->vStackLen; i++) {
       M->vStack[i] = moveWord(M, highest, M->vStack[i]);
+    }
+
+    // .. any words on the value stack ..
+    for (i = 0; i < M->dStackLen; i++) {
+      M->dStack[i] = moveWord(M, highest, M->dStack[i]);
     }
 
     // .. any environment frames on the return stack ..
@@ -548,7 +564,14 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   if (unlikely(!gen0)) gen0 = heap->gen[0] = mkGeneration(0);
 
   if (unlikely(gen0->fillPtr + nbr >= gen0->capacity)) {
+    printf("\n------------------- Collecting! -------------------\n\n");
     collectGen(M, 0);
+#ifndef NDEBUG
+    if (rtl_debugCheckForCycles(M)) {
+      // rtl_dumpHeap(M);
+      asm("int3");
+    }
+#endif
   }
 
   offs = gen0->fillPtr;
@@ -676,7 +699,7 @@ rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
       break;
 
     default:
-      wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0]   <<  8)
+      wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] <<  8)
 	              | ((rtl_Word)u8[i*3 + 1] << 16)
 	              | ((rtl_Word)u8[i*3 + 2] << 24)
 	              | RTL_HEADER;
@@ -968,6 +991,8 @@ rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
   ptr[1] = cdr;
 
   rtl_popWorkingSet(M);
+
+  rtl_debugCheckAlloc(M, w);
 
   return w;
 }

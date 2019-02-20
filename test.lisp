@@ -13,11 +13,12 @@
 ;;;; You should have received a copy of the GNU Lesser General Public License
 ;;;; along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
 
-(defun map-to-neg (n)
-  (if (lt 0 n)
-      (insert (map-to-neg (isub n 1))
-	      n
-	      (isub 0 n))
-      {}))
+(intrinsic:in-package intrinsic
+  (defun map-to-neg (n)
+    (if (lt 0 n)
+	(insert (map-to-neg (isub n 1))
+		n
+		(isub 0 n))
+	{}))
 
-(map-to-neg 4096)
+  (map-to-neg 4096))

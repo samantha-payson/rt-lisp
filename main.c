@@ -50,7 +50,5 @@ int main() {
 
   rtl_repl(&C);
 
-  rtl_popWorkingSet(&M);
-
   return 0;
 }
