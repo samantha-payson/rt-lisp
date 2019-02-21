@@ -83,7 +83,7 @@ rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
 
   rtl_popWorkingSet(M);
 
-  return rtl_internSelector(NULL, "OK");
+  return rtl_internSelector(NULL, "ok");
 }
 
 static
@@ -120,7 +120,7 @@ rtl_Word rtl_repl_disassemble(rtl_Machine *M, rtl_Word const *args, size_t argsL
 
   rtl_disasmFn(M, args[0]);
 
-  return rtl_internSelector(NULL, "OK");
+  return rtl_internSelector(NULL, "ok");
 }
 
 void rtl_repl(rtl_Compiler *C)

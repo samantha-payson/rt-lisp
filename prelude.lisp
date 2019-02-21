@@ -125,14 +125,81 @@
   (definline cdddar (x) `(cdr (cddar ~x)))
   (definline cddddr (x) `(cdr (cdddr ~x)))
 
+  (definline cons (car cdr)
+    `(intrinsic:cons ~car ~cdr))
+
+  (defmacro labels arg*
+    `(intrinsic:labels @arg*))
+
+  (defun reverse (ls)
+    (labels ((rec (fwd rev)
+	       (if fwd
+		   (rec (cdr fwd) (cons (car fwd) rev))
+		 rev)))
+      (rec ls nil)))
+
   (defun mapcar-1 (fn ls)
+    (labels ((rec (fwd rev)
+	       (if fwd
+		   (rec (cdr fwd)
+			(cons (fn (car fwd))
+			      rev))
+		 (reverse rev))))
+      (rec ls nil)))
+
+  (defmacro rlet (name letarg* . body)
+    `(intrinsic:labels ((~name ~(mapcar-1 car letarg*)
+			  @body))
+       (~name @(mapcar-1 cadr letarg*))))
+
+
+  (defun mapcar-2 (fn ls0 ls1)
+    (rlet rec ((fwd0 ls0)
+	       (fwd1 ls1)
+	       (rev nil))
+      (if (and fwd0 fwd1)
+	  (rec (cdr fwd0)
+	       (cdr fwd1)
+	       (cons (fn (car fwd0) (car fwd1))
+		     rev))
+	(reverse rev))))
+
+  (defun mapcar-3 (fn ls0 ls1 ls2)
+    (rlet rec ((fwd0 ls0)
+	       (fwd1 ls1)
+	       (fwd2 ls2)
+	       (rev nil))
+      (if (and fwd0 fwd1 fwd2)
+	  (rec (cdr fwd0)
+	       (cdr fwd1)
+	       (cdr fwd2)
+	       (cons (fn (car fwd0) (car fwd1) (car fwd2))
+		     rev))
+	(reverse rev))))
+
+  (defun any (fn ls)
     (when ls
-      (intrinsic:cons (fn (car ls))
-		      (mapcar-1 fn (cdr ls)))))
+      (if (fn (car ls))
+	  T
+	  (any fn (cdr ls)))))
+
+  (defun mapcar-n (fn . ls*)
+    (rlet rec ((fwd* ls*)
+	       (rev  nil))
+      (if (any nil? fwd*)
+	  (reverse rev)
+	(rec (mapcar-1 cdr fwd*)
+	     (cons (intrinsic:apply-list fn (mapcar-1 car fwd*))
+		   rev)))))
 
   (defmacro lambda (arg* . body)
     `(intrinsic:lambda ~arg*
        @body))
+
+  (defun fold-1 (fn init ls)
+    (if ls
+	(fold-1 (fn init (car ls)) (cdr ls))
+      init))
 
   (defmacro export sym*
     `(progn
@@ -140,7 +207,10 @@
   		    `(intrinsic:export ~sym))
   		  sym*)))
 
-  (export list and semiquote defmacro defun definline if progn when mapcar-1 lambda export
+  (export list and semiquote defmacro defun definline if progn when lambda export
+
+	  mapcar-1 mapcar-2 mapcar-3 mapcar-n
+
 	  car cdr
 
 	  caar cadr cdar cddr
@@ -151,26 +221,29 @@
 	  caaaar caaadr caadar caaddr
 	  cadaar cadadr caddar cadddr
 	  cdaaar cdaadr cdadar cdaddr
-	  cddaar cddadr cdddar cddddr)
+	  cddaar cddadr cdddar cddddr
 
-  (export nil? not unless)
+	  nil? not unless)
 
-  (defun not (x)
-    (nil? x))
+  (export nil? symbol? selector? int28? fix14? tuple? string? map? cons?
+	  top?
+	  not unless)
 
-  (defun nil? (x)
-    (intrinsic:nil? x))
+  (definline nil?      (x) `(intrinsic:nil?      ~x))
+  (definline symbol?   (x) `(intrinsic:symbol?   ~x))
+  (definline int28?    (x) `(intrinsic:int28?    ~x))
+  (definline fix14?    (x) `(intrinsic:fix14?    ~x))
+  (definline tuple?    (x) `(intrinsic:tuple?    ~x))
+  (definline cons?     (x) `(intrinsic:cons?     ~x))
+
+  (definline not (x)
+    `(nil? ~x))
 
   (defmacro unless (test . body)
     `(when (not ~test)
        @body))
 
   (export fold-1)
-
-  (defun  fold-1 (fn init ls)
-    (if ls
-	(fold-1 (fn init (car ls)) (cdr ls))
-      init))
 
 
   (export let cond gensym)
@@ -245,16 +318,11 @@
 	    (if (eq ~first ~tmp)
 		(eq ~tmp @(cdr rest*))))))))
 
-  (export with-gensyms rlambda rlet length)
+  (export with-gensyms rlambda rlet length mapcar)
 
   (defmacro rlambda (name arg* . body)
     `(intrinsic:labels ((~name ~arg* @body))
        ~name))
-
-  (defmacro rlet (name letarg* . body)
-    `(intrinsic:labels ((~name ~(mapcar-1 car letarg*)
-			  @body))
-       (~name @(mapcar-1 cadr letarg*))))
 
   (defun length (ls)
     (rlet rec ((ls ls)
@@ -263,6 +331,20 @@
 	  (rec (cdr ls) (+ n 1))
 	n)))
 
+
+  (defun mapcar (fn . ls*)
+    (intrinsic:apply-list mapcar-n (cons fn ls*)))
+
+  (defmacro mapcar (fn . ls*)
+    (cond
+      ((eq (length ls*) 1)
+       `(mapcar-1 ~fn @ls*))
+      ((eq (length ls*) 2)
+       `(mapcar-2 ~fn @ls*))
+      ((eq (length ls*) 3)
+       `(mapcar-3 ~fn @ls*))
+      (T
+       `(mapcar-n ~fn @ls*))))
 
   (export in-package use-package alias-package)
 

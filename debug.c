@@ -449,11 +449,11 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     return bc + 7;
 
   case RTL_OP_APPLY_LIST:
-    printf("  apply-list\n");
+    printf("   apply-list\n");
     return bc + 1;
 
   case RTL_OP_APPLY_TUPLE:
-    printf("  apply-tuple\n");
+    printf("   apply-tuple\n");
     return bc + 1;
 
   case RTL_OP_UNDEFINED_CALL:
