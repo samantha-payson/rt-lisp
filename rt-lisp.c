@@ -1930,7 +1930,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       d    = rptr[len - 1];
 
       // TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
-      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
+      rtl_reifyTuple(M, d, &len);
       assert(0 <= idx && idx <= len);
 
       a = RTL_NIL;
@@ -1944,7 +1944,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       memcpy(wptr, rptr, sizeof(rtl_Word)*idx);
       wptr[idx] = a;
 
-      rptr = rtl_reifyTuple(M, M->env, &len);
+      rtl_reifyTuple(M, M->env, &len);
       wptr = rtl_allocTuple(M, &c, len);
       rptr = rtl_reifyTuple(M, M->env, &len);  // Reload
       memcpy(wptr, rptr, sizeof(rtl_Word)*len);
@@ -2025,6 +2025,8 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
   rtl_Word tuple;
   size_t   i;
 
+  RTL_PUSH_WORKING_SET(M, &list);
+
   assert(rtl_isCons(list) || rtl_isNil(list));
 
   len = rtl_listLength(M, list);
@@ -2033,6 +2035,8 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
   for (i = 0; list != RTL_NIL; list = rtl_cdr(M, list), i++) {
     ptr[i] = rtl_car(M, list);
   }
+
+  rtl_popWorkingSet(M);
 
   return tuple;
 }
@@ -2043,7 +2047,7 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
   rtl_Word args = RTL_NIL,
            env  = RTL_NIL;
 
-  RTL_PUSH_WORKING_SET(M, &args, &env);
+  RTL_PUSH_WORKING_SET(M, &args, &env, &argList);
 
   args = rtl_listToTuple(M, argList);
 
