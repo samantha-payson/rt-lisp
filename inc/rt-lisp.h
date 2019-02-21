@@ -189,8 +189,7 @@ typedef struct rtl_Function {
 // TODO: Make this able to represent 
 typedef struct rtl_FnDef {
   rtl_Word name;
-  rtl_Word fn;
-  bool isMacro;
+  rtl_Word fn, macro;
 
   struct rtl_FnDef *next;
 } rtl_FnDef;

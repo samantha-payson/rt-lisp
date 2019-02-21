@@ -86,16 +86,18 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
 
   for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
-      fnID = rtl_functionID(def->fn);
+      if (def->fn != RTL_NIL) {
+	fnID = rtl_functionID(def->fn);
 
+	rtl_newFuncVersion(codeBase, fnID);
+      } else {
+	fnID = rtl_newFuncID(codeBase, name);
+      }
 
-      rtl_newFuncVersion(codeBase, fnID);
       func = codeBase->fns[fnID];
 
       func->as.builtin.cFn = cFn;
       func->isBuiltin      = true;
-
-      def->isMacro = false;
 
       rtl_resolveCallSites(C, name, def->fn);
 
@@ -107,7 +109,7 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
 
   def->name    = name;
   def->fn      = addBuiltin(codeBase, name, cFn);
-  def->isMacro = false;
+  def->macro   = RTL_NIL;
 
   def->next                = codeBase->fnsByName[idx];
   codeBase->fnsByName[idx] = def;

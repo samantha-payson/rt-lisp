@@ -78,6 +78,12 @@
 		   ~then
 		   @else))
 
+  (defmacro definline (name arg* . body)
+    `(progn
+       (defmacro ~name ~arg* @body)
+       (defun ~name ~arg*
+	 (~name @arg*))))
+
   (defmacro progn body
     `(intrinsic:progn @body))
 
@@ -85,11 +91,39 @@
     `(if ~test
 	 (progn @body)))
 
-  (defun car (x)
-    (intrinsic:car x))
+  (definline car (x) `(intrinsic:car ~x))
+  (definline cdr (x) `(intrinsic:cdr ~x))
 
-  (defun cdr (x)
-    (intrinsic:cdr x))
+  (definline caar (x) `(car (car ~x)))
+  (definline cadr (x) `(car (cdr ~x)))
+  (definline cdar (x) `(cdr (car ~x)))
+  (definline cddr (x) `(cdr (cdr ~x)))
+
+  (definline caaar (x) `(car (caar ~x)))
+  (definline caadr (x) `(car (cadr ~x)))
+  (definline cadar (x) `(car (cdar ~x)))
+  (definline caddr (x) `(car (cddr ~x)))
+  (definline cdaar (x) `(cdr (caar ~x)))
+  (definline cdadr (x) `(cdr (cadr ~x)))
+  (definline cddar (x) `(cdr (cdar ~x)))
+  (definline cdddr (x) `(cdr (cddr ~x)))
+
+  (definline caaaar (x) `(car (caaar ~x)))
+  (definline caaadr (x) `(car (caadr ~x)))
+  (definline caadar (x) `(car (cadar ~x)))
+  (definline caaddr (x) `(car (caddr ~x)))
+  (definline cadaar (x) `(car (cdaar ~x)))
+  (definline cadadr (x) `(car (cdadr ~x)))
+  (definline caddar (x) `(car (cddar ~x)))
+  (definline cadddr (x) `(car (cdddr ~x)))
+  (definline cdaaar (x) `(cdr (caaar ~x)))
+  (definline cdaadr (x) `(cdr (caadr ~x)))
+  (definline cdadar (x) `(cdr (cadar ~x)))
+  (definline cdaddr (x) `(cdr (caddr ~x)))
+  (definline cddaar (x) `(cdr (cdaar ~x)))
+  (definline cddadr (x) `(cdr (cdadr ~x)))
+  (definline cdddar (x) `(cdr (cddar ~x)))
+  (definline cddddr (x) `(cdr (cdddr ~x)))
 
   (defun mapcar-1 (fn ls)
     (when ls
@@ -106,7 +140,18 @@
   		    `(intrinsic:export ~sym))
   		  sym*)))
 
-  (export list and semiquote defmacro defun if progn when car cdr mapcar-1 lambda export)
+  (export list and semiquote defmacro defun definline if progn when mapcar-1 lambda export
+	  car cdr
+
+	  caar cadr cdar cddr
+
+	  caaar caadr cadar caddr
+	  cdaar cdadr cddar cdddr
+
+	  caaaar caaadr caadar caaddr
+	  cadaar cadadr caddar cadddr
+	  cdaaar cdaadr cdadar cdaddr
+	  cddaar cddadr cdddar cddddr)
 
   (export nil? not unless)
 
@@ -119,22 +164,6 @@
   (defmacro unless (test . body)
     `(when (not ~test)
        @body))
-
-  (export caar cadr cdar cddr)
-  
-  (defun caar (x)
-    (car (car x)))
-
-  (defun cadr (x)
-    (car (cdr x)))
-
-  (defun cdar (x)
-    (cdr (car x)))
-
-  (defun cddr (x)
-    (cdr (cdr x)))
-
-
 
   (export fold-1)
 

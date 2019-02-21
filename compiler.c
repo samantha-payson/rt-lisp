@@ -146,19 +146,11 @@ void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word fn, bool isMacro)
 
   for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
-      def->fn = fn;
-
-      if (isMacro && !def->isMacro) {
-	printf("warning: redefining '%s:%s' as a macro (was a function)\n",
-	       rtl_symbolPackageName(name),
-	       rtl_symbolName(name));
-      } else if (!isMacro && def->isMacro) {
-	printf("warning: redefining '%s:%s' as a function (was a macro)\n",
-	       rtl_symbolPackageName(name),
-	       rtl_symbolName(name));
+      if (isMacro) {
+	def->macro = fn;
+      } else {
+	def->fn = fn;
       }
-      def->isMacro = isMacro;
-
       return;
     }
   }
@@ -168,8 +160,13 @@ void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word fn, bool isMacro)
   def = malloc(sizeof(rtl_FnDef));
 
   def->name    = name;
-  def->fn      = fn;
-  def->isMacro = isMacro;
+  if (isMacro) {
+    def->macro = fn;
+    def->fn    = RTL_NIL;
+  } else {
+    def->fn    = fn;
+    def->macro = RTL_NIL;
+  }
 
   def->next                = codeBase->fnsByName[idx];
   codeBase->fnsByName[idx] = def;
@@ -643,10 +640,10 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     } else {
       fnDef = rtl_lookupFn(C->M->codeBase, head);
 
-      if (fnDef != NULL && fnDef->isMacro) {
+      if (fnDef != NULL && fnDef->macro != RTL_NIL) {
 	out = rtl_macroExpand(C, ns,
 			      rtl_applyList(C->M,
-					    fnDef->fn,
+					    fnDef->macro,
 					    rtl_cdr(C->M, in)));
 
      } else {
@@ -692,6 +689,8 @@ void rtl_compile(rtl_Compiler *C,
            out   = RTL_NIL;
 
   rtl_NameSpace newNS;
+
+  rtl_FnDef *fnDef;
 
   rtl_Intrinsic *ir;
 
@@ -757,6 +756,19 @@ void rtl_compile(rtl_Compiler *C,
       return;
 
     }
+
+    fnDef = rtl_lookupFn(C->M->codeBase, head);
+
+    if (fnDef != NULL && fnDef->macro != RTL_NIL) {
+      rtl_compile(C, ns, fnID,
+		  rtl_applyList(C->M,
+				fnDef->macro,
+				rtl_cdr(C->M, in)));
+      rtl_popWorkingSet(C->M);
+      return;
+    }
+
+    // Fallthrough ...
 
   default:
     out = rtl_macroExpand(C, ns, in);
@@ -2273,7 +2285,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     if (x->as.var.global) {
       fnDef = rtl_lookupFn(codeBase, x->as.var.name);
 
-      if (fnDef != NULL && !fnDef->isMacro) {
+      if (fnDef != NULL && fnDef->fn != RTL_NIL) {
 	offs = rtl_nextFuncOffs(codeBase, fnID);
 	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
 
@@ -2324,7 +2336,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     fnDef = rtl_lookupFn(codeBase, x->as.namedCall.name);
-    if (fnDef != NULL && !fnDef->isMacro) {
+    if (fnDef != NULL && fnDef->fn != RTL_NIL) {
       offs = rtl_nextFuncOffs(codeBase, fnID);
 
       switch (x->type) {
