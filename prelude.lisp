@@ -231,10 +231,17 @@
 
   (definline nil?      (x) `(intrinsic:nil?      ~x))
   (definline symbol?   (x) `(intrinsic:symbol?   ~x))
+  (definline selector? (x) `(intrinsic:selector? ~x))
   (definline int28?    (x) `(intrinsic:int28?    ~x))
   (definline fix14?    (x) `(intrinsic:fix14?    ~x))
   (definline tuple?    (x) `(intrinsic:tuple?    ~x))
+  (definline string?   (x) `(intrinsic:string?   ~x))
+  (definline map?      (x) `(intrinsic:map?      ~x))
   (definline cons?     (x) `(intrinsic:cons?     ~x))
+  ;; (definline function? (x) `(intrinsic:function? ~x))
+  ;; (definline closure?  (x) `(intrinsic:closure?  ~x))
+  ;; (definline native?   (x) `(intrinsic:native?   ~x))
+  (definline top?      (x) `(intrinsic:top?      ~x))
 
   (definline not (x)
     `(nil? ~x))

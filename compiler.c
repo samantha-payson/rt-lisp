@@ -2633,6 +2633,14 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_CONS);
       break;
 
+    case RTL_MAP:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_MAP);
+      break;
+
+    case RTL_STRING:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_STRING);
+      break;
+
     case RTL_TUPLE:
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_TUPLE);
       break;

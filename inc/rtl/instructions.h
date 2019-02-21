@@ -60,6 +60,8 @@ typedef enum rtl_Opcode {
   RTL_OP_IS_SELECTOR,
   RTL_OP_IS_NIL,
   RTL_OP_IS_CONS,
+  RTL_OP_IS_MAP,
+  RTL_OP_IS_STRING,
   RTL_OP_IS_TUPLE,
   RTL_OP_IS_TOP,
 

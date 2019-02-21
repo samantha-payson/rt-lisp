@@ -343,9 +343,26 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   symbol?\n");
     return bc + 1;
 
+  case RTL_OP_IS_SELECTOR:
+    printf("   selector?\n");
+    return bc + 1;
+
+  case RTL_OP_IS_MAP:
+    printf("   selector?\n");
+    return bc + 1;
+
+  case RTL_OP_IS_STRING:
+    printf("   selector?\n");
+    return bc + 1;
+
     // `nil?' and `not' are actually the same function.
   case RTL_OP_IS_NIL:
     printf("   nil?\n");
+    return bc + 1;
+
+    // `nil?' and `not' are actually the same function.
+  case RTL_OP_IS_TOP:
+    printf("   top?\n");
     return bc + 1;
 
   case RTL_OP_NOT:

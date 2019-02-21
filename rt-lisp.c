@@ -1553,6 +1553,13 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
       break;
 
+    case RTL_OP_IS_SELECTOR:
+      VSTACK_ASSERT_LEN(1);
+
+      a = VPOP();
+      VPUSH(rtl_isSelector(a) ? RTL_TOP : RTL_NIL);
+      break;
+
     // `nil?' and `not' are actually the same function.
     case RTL_OP_IS_NIL:
     case RTL_OP_NOT:
@@ -1569,11 +1576,32 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(rtl_isCons(a) ? RTL_TOP : RTL_NIL);
       break;
 
+    case RTL_OP_IS_MAP:
+      VSTACK_ASSERT_LEN(1);
+
+      a = VPOP();
+      VPUSH(rtl_isMap(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_STRING:
+      VSTACK_ASSERT_LEN(1);
+
+      a = VPOP();
+      VPUSH(rtl_isString(a) ? RTL_TOP : RTL_NIL);
+      break;
+
     case RTL_OP_IS_TUPLE:
       VSTACK_ASSERT_LEN(1);
 
       a = VPOP();
       VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_IS_TOP:
+      VSTACK_ASSERT_LEN(1);
+
+      a = VPOP();
+      VPUSH(rtl_isTop(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_CJMP8:
