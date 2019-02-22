@@ -41,6 +41,10 @@ void formatChar(utf8_int32_t ch)
     printf("\\'");
     break;
 
+  case '\"':
+    printf("\\\"");
+    break;
+
   default:
     printf("%lc", ch);
     break;
@@ -194,13 +198,20 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
     ptr = rtl_reifyTuple(M, w, &len);
-
-    printf("[ ");
-    for (i = 0; i < len; i++) {
-      rtl_formatExprIndented(M, ptr[i], indent + 1);
-      printf(" ");
+    if (rtl_isString(M, w)) {
+      printf("\"");
+      for (i = 0; i < len; i++) {
+	formatChar(rtl_charValue(ptr[i]));
+      }
+      printf("\"");
+    } else {
+      printf("[ ");
+      for (i = 0; i < len; i++) {
+	rtl_formatExprIndented(M, ptr[i], indent + 1);
+	printf(" ");
+      }
+      printf("]");
     }
-    printf("]");
     break;
 
   case RTL_CONS:

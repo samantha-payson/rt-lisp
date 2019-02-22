@@ -588,18 +588,6 @@ rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
   return ptr + 1;
 }
 
-rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
-{
-  // TODO: Construct strings
-  abort();
-}
-
-void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *len)
-{
-  // TODO: Reify strings
-  abort();
-}
-
 rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
 {
   rtl_Word w;
@@ -2169,4 +2157,86 @@ void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word val)
 rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
 {
   return rtl_mapLookup(M, M->dynamic, key);
+}
+
+bool rtl_isString(rtl_Machine *M, rtl_Word w)
+{
+  rtl_Word const *rptr;
+  size_t len, i;
+
+  if (rtl_isTuple(w)) {
+    rptr = rtl_reifyTuple(M, w, &len);
+
+    for (i = 0; i < len; i++) {
+      if (!rtl_isChar(rptr[i])) return false;
+    }
+
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
+void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
+{
+  char *end, *prev, *next;
+  rtl_Word const *rptr;
+  size_t len, i;
+
+  end  = buf + cap - 1;
+  next = buf;
+
+  assert(rtl_isString(str));
+
+  rptr = rtl_reifyTuple(M, str, &len);
+  for (i = 0; i < len && next < end; i++) {
+    prev = next;
+    next = utf8catcodepoint(next, rtl_charValue(rptr[i]), end - next);
+
+    if (!next) {
+      *prev = '\0';
+      return;
+    }
+  }
+
+  *end = 0;
+}
+
+uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str)
+{
+  rtl_Word const *rptr;
+  size_t len, i;
+
+  uint32_t size;
+
+  size = 0;
+
+  rptr = rtl_reifyTuple(M, str, &len);
+
+  for (i = 0; i < len; i++) {
+    size += utf8codepointsize(rtl_charValue(rptr[i]));
+  }
+
+  return size;
+}
+
+rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
+{
+  size_t len, i;
+
+  rtl_Word str;
+  rtl_Word *wptr;
+
+  utf8_int32_t ch;
+
+  len  = utf8len(cstr);
+  wptr = rtl_allocTuple(M, &str, len);
+
+  for (i = 0; i < len; i++) {
+    cstr = (char const *)utf8codepoint((void const *)cstr, &ch);
+    wptr[i] = rtl_char(ch);
+  }
+
+  return str;
 }

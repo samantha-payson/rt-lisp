@@ -414,7 +414,9 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path);
 
 bool rtl_isString(rtl_Machine *M, rtl_Word w);
 
-void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *size);
+void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap);
+
+uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str);
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
 

@@ -34,46 +34,45 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
 		     rtl_Word const *args,
 		     size_t         argsLen)
 {
-  /* rtl_io_File rif; */
-  /* rif.tag = MULTICHAR('F', 'I', 'L', 'E'); */
+  rtl_io_File rif;
+  rif.tag = MULTICHAR('F', 'I', 'L', 'E');
 
-  /* const rtl_Word dotRead  = rtl_internSelector(NULL, "read"); */
-  /* const rtl_Word dotWrite = rtl_internSelector(NULL, "write"); */
+  const rtl_Word dotRead  = rtl_internSelector(NULL, "read");
+  const rtl_Word dotWrite = rtl_internSelector(NULL, "write");
 
-  /* size_t pathLen; */
-  /* char   *path; */
+  size_t pathLen;
+  char   *path;
 
-  /* assert(argsLen == 2); */
-  /* assert(rtl_isString(args[0])); */
-  /* assert(rtl_isSelector(args[1])); */
+  assert(argsLen == 2);
+  assert(rtl_isString(args[0]));
+  assert(rtl_isSelector(args[1]));
 
-  /* pathLen = rtl_stringLength(M, args[0]); */
-  /* path    = malloc(pathLen + 1); */
+  pathLen = rtl_stringSize(M, args[0]);
+  path    = malloc(pathLen + 1);
 
-  /* rtl_reifyString(M, args[0], path, pathLen + 1, NULL); */
+  rtl_reifyString(M, args[0], path, pathLen + 1);
 
-  /* if (args[1] == dotRead) { */
-  /*   rif.f = fopen(path, "r"); */
-  /*   if (!rif.f) { */
-  /*     fprintf(stderr, "  error: can't open \"%s\"\n", path); */
-  /*     abort(); */
-  /*   } */
+  if (args[1] == dotRead) {
+    rif.f = fopen(path, "r");
+    if (!rif.f) {
+      fprintf(stderr, "  error: can't open \"%s\"\n", path);
+      abort();
+    }
 
-  /*   return rtl_native(M, &rif, sizeof(rtl_io_File)); */
-  /* } else if (args[1] == dotWrite) { */
-  /*   rif.f = fopen(path, "w"); */
-  /*   if (!rif.f) { */
-  /*     fprintf(stderr, "  error: can't open \"%s\"\n", path); */
-  /*     abort(); */
-  /*   } */
+    return rtl_native(M, &rif, sizeof(rtl_io_File));
+  } else if (args[1] == dotWrite) {
+    rif.f = fopen(path, "w");
+    if (!rif.f) {
+      fprintf(stderr, "  error: can't open \"%s\"\n", path);
+      abort();
+    }
 
-  /*   return rtl_native(M, &rif, sizeof(rtl_io_File)); */
-  /* } else { */
-  /*   fprintf(stderr, "\n   usage: (io:open <path> .read)\n" */
-  /* 	              "          (io:open <path> .write)\n\n"); */
-  /*   abort(); */
-  /* } */
-  abort();
+    return rtl_native(M, &rif, sizeof(rtl_io_File));
+  } else {
+    fprintf(stderr, "\n   usage: (io:open <path> .read)\n"
+  	              "          (io:open <path> .write)\n\n");
+    abort();
+  }
 }
 
 static
@@ -105,21 +104,27 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
 			  size_t         argsLen)
 {
   rtl_io_File rif;
-  int ch;
+  char utf[8];
+  int32_t count;
+  utf8_int32_t ch;
 
   assert(argsLen == 2);
-  assert(rtl_isNative(args[0]) && rtl_isInt28(args[1]));
+  assert(rtl_isNative(args[0]) && rtl_isChar(args[1]));
+
+  ch = rtl_charValue(args[1]);
 
   rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
-  ch = fputc(rtl_int28Value(args[1]), rif.f);
+  utf8catcodepoint(utf, ch, 8);
 
-  if (ch == EOF) {
+  count = fwrite(utf, 1, utf8codepointsize(ch), rif.f);
+  
+  if (count < utf8codepointsize(ch)) {
     return rtl_internSelector("io", "EOF");
   }
 
-  return rtl_int28(ch);
+  return rtl_int28(count);
 }
 
 static
