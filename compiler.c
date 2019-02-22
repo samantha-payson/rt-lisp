@@ -2699,12 +2699,12 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     case 2:
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_JMP16);
-      rtl_emitByteToFunc(codeBase, fnID, x->as._if._else->codeSize);
+      rtl_emitShortToFunc(codeBase, fnID, x->as._if._else->codeSize);
       break;
 
     case 4:
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_JMP32);
-      rtl_emitByteToFunc(codeBase, fnID, x->as._if._else->codeSize);
+      rtl_emitWordToFunc(codeBase, fnID, x->as._if._else->codeSize);
       break;
     }
 
