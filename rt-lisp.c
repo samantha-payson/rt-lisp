@@ -302,15 +302,6 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     }
     break;
 
-  case RTL_STRING:
-    len = rtl_stringLength(M, w);
-    for (i = 0; i < len / 3 + 2; i++) {
-      if (rtl_bmpSetBit(gen->marks, wOffs + i, true)) {
-	// If any one bit is set, then all of them are.
-	break;
-      }
-    } break;
-
   case RTL_NATIVE:
     len = rtl_sizeOfNative(M, w);
     for (i = 0; i < (len + 2) / 3 + 1; i++) {
@@ -547,7 +538,6 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   // Validate t, ensure it's one of the accepted types.
   switch (t) {
   case RTL_TUPLE:
-  case RTL_STRING:
   case RTL_NATIVE:
   case RTL_MAP:
   case RTL_CONS:
@@ -569,7 +559,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
     collectGen(M, 0);
 #ifndef NDEBUG
     if (rtl_debugCheckForCycles(M)) {
-      // rtl_dumpHeap(M);
+      rtl_dumpHeap(M);
       asm("int3");
     }
 #endif
@@ -600,73 +590,14 @@ rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
 {
-  return rtl_stringWithLen(M, cstr, strlen(cstr));
-}
-
-rtl_Word rtl_stringWithLen(rtl_Machine *M, char const *cstr, size_t sLen)
-{
-  rtl_Word w;
-
-  size_t   wLen, i, j;
-
-  rtl_Word *wBacking;
-
-  wLen = sLen / 3 + 1;
-
-  wBacking    = rtl_allocGC(M, RTL_STRING, &w, wLen + 1);
-  wBacking[0] = rtl_header(sLen);
-
-  for (i = 0; i < wLen; i++) {
-    j = i*3;
-    if (cstr[j] == '\0') {
-      wBacking[i + 1] = RTL_HEADER;
-    } else if (cstr[j + 1] == '\0') {
-      wBacking[i + 1] = ((uint32_t)cstr[j] << 8)
-	              | RTL_HEADER;
-    } else {
-      wBacking[i + 1] = ((uint32_t)cstr[j + 2] << 24)
-	              | ((uint32_t)cstr[j + 1] << 16)
-	              | ((uint32_t)cstr[j + 0] <<  8)
-	              | RTL_HEADER;
-    }
-  }
-
-  return w;
-}
-size_t rtl_stringLength(rtl_Machine *M, rtl_Word str)
-{
-  rtl_Word const *wPtr;
-
-  wPtr = __rtl_reifyPtr(M, str);
-
-  return rtl_headerValue(wPtr[0]);
+  // TODO: Construct strings
+  abort();
 }
 
 void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *len)
 {
-  rtl_Word const *wPtr;
-  size_t wLen, i, j, idx;
-
-  wPtr = __rtl_reifyPtr(M, str);
-  wLen = rtl_headerValue(wPtr[0]) / 3 + 1;
-
-  for (i = 0; i < wLen; i++) {
-    for (j = 0; j < 3; j++) {
-      idx = i*3 + j;
-
-      buf[idx] = (char)(0xFF & (wPtr[i + 1] >> (8*(j + 1))));
-
-      if (idx + 1 == cap || buf[idx] == '\0') {
-	buf[idx] = '\0';
-	if (len) *len = idx;
-
-	return;
-      }
-    }
-  }
-
-  abort(); // Unreachable: we should either find a '\0' or hit capacity -- no
-	   // exceptions!
+  // TODO: Reify strings
+  abort();
 }
 
 rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
@@ -1078,8 +1009,8 @@ char const *rtl_typeName(rtl_WordType type)
   case RTL_TUPLE:
     return "Tuple";
 
-  case RTL_STRING:
-    return "String";
+  case RTL_CHAR:
+    return "Char";
 
   case RTL_NATIVE:
     return "Native";
@@ -1364,16 +1295,6 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(rtl_gensym());
       break;
 
-    case RTL_OP_STRING:
-      // Here, literal is actually just a 32-bit integer
-      M->pc = readWord(M->pc, &literal);
-
-      a      = rtl_stringWithLen(M, (char const *)M->pc, literal);
-      M->pc += literal + 1;
-
-      VPUSH(a);
-      break;
-
     case RTL_OP_CONS:
       VSTACK_ASSERT_LEN(2);
 
@@ -1583,11 +1504,11 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(rtl_isMap(a) ? RTL_TOP : RTL_NIL);
       break;
 
-    case RTL_OP_IS_STRING:
+    case RTL_OP_IS_CHAR:
       VSTACK_ASSERT_LEN(1);
 
       a = VPOP();
-      VPUSH(rtl_isString(a) ? RTL_TOP : RTL_NIL);
+      VPUSH(rtl_isChar(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_IS_TUPLE:
@@ -2167,6 +2088,9 @@ void rtl_emitWordToFunc(rtl_CodeBase *cb, uint32_t fnID, rtl_Word w)
 
 void rtl_emitStringToFunc(rtl_CodeBase *cb, uint32_t fnID, char const *cstr)
 {
+  // TODO: Construct strings
+  abort();
+
   for (; *cstr != '\0'; cstr++) {
     rtl_emitByteToFunc(cb, fnID, *cstr);
   }

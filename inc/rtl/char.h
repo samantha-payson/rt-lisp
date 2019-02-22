@@ -14,5 +14,16 @@
 // along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef _RTL_INSIDE_RT_LISP_H_
-# error "rtl/string.h should only be included indirectly via rt-lisp.h"
+# error "rtl/char.h should only be included indirectly via char.h"
 #endif
+
+#include "utf8/utf8.h"
+
+static inline
+bool rtl_isChar(rtl_Word w) { return rtl_typeOf(w) == RTL_CHAR; }
+
+static inline
+rtl_Word rtl_char(utf8_int32_t c) { return (c << 4) | RTL_CHAR; }
+
+static inline
+utf8_int32_t rtl_charValue(rtl_Word w) { return (utf8_int32_t)w >> 4; }

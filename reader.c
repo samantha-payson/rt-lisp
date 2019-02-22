@@ -202,27 +202,27 @@ rtl_Word readChar(FILE *f)
       abort();
 
     case '\\':
-      w = rtl_int28('\\');
+      w = rtl_char('\\');
       break;
 
     case '0':
-      w = rtl_int28('\0');
+      w = rtl_char('\0');
       break;
 
     case 'n':
-      w = rtl_int28('\n');
+      w = rtl_char('\n');
       break;
 
     case 'r':
-      w = rtl_int28('\r');
+      w = rtl_char('\r');
       break;
 
     case 't':
-      w = rtl_int28('\t');
+      w = rtl_char('\t');
       break;
 
-    case '"':
-      w = rtl_int28('"');
+    case '\'':
+      w = rtl_char('\'');
       break;
 
     default:
@@ -230,7 +230,7 @@ rtl_Word readChar(FILE *f)
       abort();
     }
   } else {
-    w = rtl_int28(ch);
+    w = rtl_char(ch);
   }
 
   if ((ch = fgetc(f)) != '\'') {
@@ -279,10 +279,6 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
 
       case 't':
 	ch = '\t';
-	break;
-
-      case '"':
-	ch = '"';
 	break;
 
       default:

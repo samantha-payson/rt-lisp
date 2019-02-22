@@ -34,45 +34,46 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
 		     rtl_Word const *args,
 		     size_t         argsLen)
 {
-  rtl_io_File rif;
-  rif.tag = MULTICHAR('F', 'I', 'L', 'E');
+  /* rtl_io_File rif; */
+  /* rif.tag = MULTICHAR('F', 'I', 'L', 'E'); */
 
-  const rtl_Word dotRead  = rtl_internSelector(NULL, "read");
-  const rtl_Word dotWrite = rtl_internSelector(NULL, "write");
+  /* const rtl_Word dotRead  = rtl_internSelector(NULL, "read"); */
+  /* const rtl_Word dotWrite = rtl_internSelector(NULL, "write"); */
 
-  size_t pathLen;
-  char   *path;
+  /* size_t pathLen; */
+  /* char   *path; */
 
-  assert(argsLen == 2);
-  assert(rtl_isString(args[0]));
-  assert(rtl_isSelector(args[1]));
+  /* assert(argsLen == 2); */
+  /* assert(rtl_isString(args[0])); */
+  /* assert(rtl_isSelector(args[1])); */
 
-  pathLen = rtl_stringLength(M, args[0]);
-  path    = malloc(pathLen + 1);
+  /* pathLen = rtl_stringLength(M, args[0]); */
+  /* path    = malloc(pathLen + 1); */
 
-  rtl_reifyString(M, args[0], path, pathLen + 1, NULL);
+  /* rtl_reifyString(M, args[0], path, pathLen + 1, NULL); */
 
-  if (args[1] == dotRead) {
-    rif.f = fopen(path, "r");
-    if (!rif.f) {
-      fprintf(stderr, "  error: can't open \"%s\"\n", path);
-      abort();
-    }
+  /* if (args[1] == dotRead) { */
+  /*   rif.f = fopen(path, "r"); */
+  /*   if (!rif.f) { */
+  /*     fprintf(stderr, "  error: can't open \"%s\"\n", path); */
+  /*     abort(); */
+  /*   } */
 
-    return rtl_native(M, &rif, sizeof(rtl_io_File));
-  } else if (args[1] == dotWrite) {
-    rif.f = fopen(path, "w");
-    if (!rif.f) {
-      fprintf(stderr, "  error: can't open \"%s\"\n", path);
-      abort();
-    }
+  /*   return rtl_native(M, &rif, sizeof(rtl_io_File)); */
+  /* } else if (args[1] == dotWrite) { */
+  /*   rif.f = fopen(path, "w"); */
+  /*   if (!rif.f) { */
+  /*     fprintf(stderr, "  error: can't open \"%s\"\n", path); */
+  /*     abort(); */
+  /*   } */
 
-    return rtl_native(M, &rif, sizeof(rtl_io_File));
-  } else {
-    fprintf(stderr, "\n   usage: (io:open <path> .read)\n"
-	              "          (io:open <path> .write)\n\n");
-    abort();
-  }
+  /*   return rtl_native(M, &rif, sizeof(rtl_io_File)); */
+  /* } else { */
+  /*   fprintf(stderr, "\n   usage: (io:open <path> .read)\n" */
+  /* 	              "          (io:open <path> .write)\n\n"); */
+  /*   abort(); */
+  /* } */
+  abort();
 }
 
 static

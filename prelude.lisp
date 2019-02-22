@@ -296,7 +296,7 @@
 
 	  nil? not unless cons quote)
 
-  (export nil? symbol? selector? int28? fix14? tuple? string? map? cons?
+  (export nil? symbol? selector? int28? fix14? tuple? char? map? cons?
 	  top?
 	  not unless)
 
@@ -306,7 +306,7 @@
   (definline int28?    (x) `(intrinsic:int28?    ~x))
   (definline fix14?    (x) `(intrinsic:fix14?    ~x))
   (definline tuple?    (x) `(intrinsic:tuple?    ~x))
-  (definline string?   (x) `(intrinsic:string?   ~x))
+  (definline char?     (x) `(intrinsic:char?     ~x))
   (definline map?      (x) `(intrinsic:map?      ~x))
   (definline cons?     (x) `(intrinsic:cons?     ~x))
   ;; (definline function? (x) `(intrinsic:function? ~x))

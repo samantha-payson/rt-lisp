@@ -44,7 +44,7 @@ typedef enum rtl_WordType {
   RTL_INT28    = 3,
   RTL_FIX14    = 4,
   RTL_TUPLE    = 5,
-  RTL_STRING   = 6,
+  RTL_CHAR     = 6,
   RTL_MAP      = 7,
   RTL_CONS     = 8,
 
@@ -53,10 +53,6 @@ typedef enum rtl_WordType {
   //
   //    RTL_TUPLE:  an unsigned 28-bit integer encoding the number of elements in
   //                the tuple.
-  //
-  //    RTL_STRING: an unsigned 28-bit integer encoding the number of (ASCII)
-  //                characters in the string, excluding null terminator byte (in
-  //                other words, the result of calling strlen).
   //
   //    RTL_NATIVE: an unsigned 28-bit integer encoding the number of bytes.
   //
@@ -285,9 +281,6 @@ void rtl_emitShortToFunc(rtl_CodeBase *cb, uint32_t fnID, uint16_t u16);
 // encoding. This is the format expected by instructions with a word argument.
 void rtl_emitWordToFunc(rtl_CodeBase *cb, uint32_t fnID, rtl_Word w);
 
-// Add a string at the end of the fnID'th function, with null terminator.
-void rtl_emitStringToFunc(rtl_CodeBase *cb, uint32_t fnID, char const *cstr);
-
 // Return the offset of the next byte to be emitted to this page.
 uint32_t rtl_nextFuncOffs(rtl_CodeBase *cb, uint32_t fnID);
 
@@ -329,9 +322,10 @@ char const *rtl_errString(rtl_Error err);
 // type t with this pointer to w. t must be one of:
 //
 //   - RTL_TUPLE
-//   - RTL_STRING
 //   - RTL_MAP
 //   - RTL_CONS
+//   - RTL_NATIVE
+//   - RTL_CLOSURE
 //
 // Errors:
 //   RTL_ERR_INVALID_OPERATION:  if t is not one of the types listed above.
@@ -346,15 +340,15 @@ void rtl_testGarbageCollector(size_t count);
 // Return true if w is one of the pointer types:
 //
 //   - RTL_TUPLE
-//   - RTL_STRING
 //   - RTL_MAP
+//   - RTL_NATIVE
 //   - RTL_CONS
+//   - RTL_CLOSURE
 //
 static inline
 int rtl_isPtr(rtl_Word w) {
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
-  case RTL_STRING:
   case RTL_MAP:
   case RTL_NATIVE:
   case RTL_CONS:
@@ -377,7 +371,7 @@ bool rtl_isClosure(rtl_Word w) {
 #include "rtl/int28.h"
 #include "rtl/fix14.h"
 #include "rtl/tuple.h"
-#include "rtl/string.h"
+#include "rtl/char.h"
 #include "rtl/map.h"
 #include "rtl/cons.h"
 #include "rtl/native.h"
@@ -417,5 +411,11 @@ void rtl_io_installBuiltins(rtl_Compiler *C);
 void rtl_repl(rtl_Compiler *C);
 
 void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path);
+
+bool rtl_isString(rtl_Machine *M, rtl_Word w);
+
+void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap, size_t *size);
+
+rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
 
 #endif // rt-lisp.h

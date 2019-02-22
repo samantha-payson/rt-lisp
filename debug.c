@@ -17,6 +17,35 @@
 
 #include <stdio.h>
 
+static
+void formatChar(utf8_int32_t ch)
+{
+  switch (ch) {
+  case '\\':
+    printf("\\\\");
+    break;
+
+  case '\n':
+    printf("\\n");
+    break;
+
+  case '\r':
+    printf("\\r");
+    break;
+
+  case '\t':
+    printf("\\t");
+    break;
+
+  case '\'':
+    printf("\\'");
+    break;
+
+  default:
+    printf("%lc", ch);
+    break;
+  }
+}
 
 // Format an expression, but don't follow any pointers. Basically just print
 // atoms, and addresses for non-atoms.
@@ -65,8 +94,10 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("Tuple#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
     break;
 
-  case RTL_STRING:
-    printf("String#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
+  case RTL_CHAR:
+    printf("'");
+    formatChar(rtl_charValue(w));
+    printf("'");
     break;
 
   case RTL_MAP:
@@ -152,39 +183,6 @@ void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mas
   printf("} ");
 }
 
-static
-void formatString(char const *cstr)
-{
-  printf("\"");
-  for (; *cstr; cstr++) {
-    switch (*cstr) {
-    case '\\':
-      printf("\\\\");
-      break;
-
-    case '\n':
-      printf("\\n");
-      break;
-
-    case '\r':
-      printf("\\r");
-      break;
-
-    case '\t':
-      printf("\\t");
-      break;
-
-    case '"':
-      printf("\\\"");
-      break;
-
-    default:
-      printf("%c", *cstr);
-      break;
-    }
-  }
-  printf("\"");
-}
 
 void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 {
@@ -192,8 +190,6 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 
   size_t         len,
                  i;
-
-  char strBuf[1024];
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
@@ -232,11 +228,6 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
       __rtl_formatMap(M, w, indent, 1);
       printf("}");
     }
-    break;
-
-  case RTL_STRING:
-    rtl_reifyString(M, w, strBuf, 1024, &len);
-    formatString(strBuf);
     break;
 
   default:
@@ -296,17 +287,6 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   gensym\n");
     return bc + 1;
 
-  case RTL_OP_STRING:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   string      %d ", (int)literal);
-    formatString((char const *)bc + 5);
-    printf("\n");
-    return bc + 5 + strlen((char const *)bc + 5) + 1;
-
   case RTL_OP_CONS:
     printf("   cons\n");
     return bc + 1;
@@ -351,8 +331,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   selector?\n");
     return bc + 1;
 
-  case RTL_OP_IS_STRING:
-    printf("   selector?\n");
+  case RTL_OP_IS_CHAR:
+    printf("   char?\n");
     return bc + 1;
 
     // `nil?' and `not' are actually the same function.
@@ -827,7 +807,7 @@ bool rtl_debugCheckForCycles(rtl_Machine *M)
     for (j = 0; j < gen->fillPtr; j++) {
       w = gen->words[j];
 
-      if (rtl_isPtr(w) && !rtl_isClosure(w)) {
+      if (rtl_isCons(w)) {
 	offs   = __rtl_ptrOffs(w);
 	genNbr = __rtl_ptrGen(w);
 

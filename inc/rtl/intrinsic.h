@@ -60,7 +60,6 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_NEQ,
   RTL_INTRINSIC_ISO,
   RTL_INTRINSIC_TYPE_PRED,
-  RTL_INTRINSIC_STRING,
   RTL_INTRINSIC_CONSTANT,
   RTL_INTRINSIC_GENSYM,
 } rtl_IntrinsicType;
@@ -705,33 +704,6 @@ rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
 	.test  = test,
 	.then  = then,
 	._else = _else,
-      },
-    },
-  };
-
-  return intr;
-}
-
-static inline
-rtl_Intrinsic *rtl_mkStringIntrinsic(rtl_Machine *M, rtl_Word str)
-{
-  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
-  char          *strBuf;
-  size_t        len, cap;
-
-  cap = rtl_stringLength(M, str) + 1;
-  strBuf = malloc(cap);
-
-  rtl_reifyString(M, str, strBuf, cap, &len);
-
-  assert(len + 1 == cap);
-
-  *intr = (rtl_Intrinsic) {
-    .type = RTL_INTRINSIC_STRING,
-    .as = {
-      .string = {
-	.str    = strBuf,
-	.strLen = len,
       },
     },
   };

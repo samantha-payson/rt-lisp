@@ -264,7 +264,7 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(int28p,       "int28?")			\
   M(fix14p,       "fix14?")			\
   M(tuplep,       "tuple?")			\
-  M(stringp,      "string?")			\
+  M(charp,        "char?")			\
   M(mapp,         "map?")			\
   M(consp,        "cons?")			\
   M(functionp,    "function?")			\
@@ -1225,9 +1225,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkTypePredIntrinsic(RTL_TUPLE,
 				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
-    } else if (head == symCache.intrinsic.stringp) {
+    } else if (head == symCache.intrinsic.charp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_STRING,
+      return rtl_mkTypePredIntrinsic(RTL_CHAR,
 				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.mapp) {
@@ -1306,9 +1306,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   case RTL_SYMBOL:
     return rtl_mkVarIntrinsic(sxp);
 
-  case RTL_STRING:
-    return rtl_mkStringIntrinsic(C->M, sxp);
-
+  case RTL_CHAR:
   case RTL_SELECTOR:
   case RTL_INT28:
   case RTL_NIL:
@@ -1570,7 +1568,6 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
   case RTL_INTRINSIC_EXPORT:
   case RTL_INTRINSIC_QUOTE:
-  case RTL_INTRINSIC_STRING:
   case RTL_INTRINSIC_CONSTANT:
   case RTL_INTRINSIC_GENSYM:
     break;
@@ -1778,7 +1775,6 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
 
   case RTL_INTRINSIC_EXPORT:
   case RTL_INTRINSIC_QUOTE:
-  case RTL_INTRINSIC_STRING:
   case RTL_INTRINSIC_CONSTANT:
   case RTL_INTRINSIC_GENSYM:
     break;
@@ -2076,9 +2072,6 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
                        + thenJmpBytes + 1
                        + elseSize
                        + elseJmpBytes + 1;
-
-  case RTL_INTRINSIC_STRING:
-    return x->codeSize = 5 + strlen(x->as.string.str) + 1;
 
   case RTL_INTRINSIC_GENSYM:
     return x->codeSize = 1;
@@ -2637,8 +2630,8 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_MAP);
       break;
 
-    case RTL_STRING:
-      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_STRING);
+    case RTL_CHAR:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_IS_CHAR);
       break;
 
     case RTL_TUPLE:
@@ -2710,12 +2703,6 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     rtl_emitIntrinsicCode(C, fnID, x->as._if._else);
 
-    break;
-
-  case RTL_INTRINSIC_STRING:
-    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STRING);
-    rtl_emitWordToFunc(codeBase, fnID, x->as.string.strLen);
-    rtl_emitStringToFunc(codeBase, fnID, x->as.string.str);
     break;
 
   case RTL_INTRINSIC_GENSYM:
