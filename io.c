@@ -175,6 +175,39 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
 }
 
 static
+rtl_Word rtl_io_writeString(rtl_Machine    *M,
+			    rtl_Word const *args,
+			    size_t         argsLen)
+{
+  rtl_io_File  rif;
+  char         *utf8;
+  uint32_t     size;
+
+  int32_t      count;
+
+  assert(argsLen == 2);
+  assert(rtl_isNative(args[0]) && rtl_isString(args[1]));
+
+  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
+
+  size = rtl_stringSize(M, args[1]);
+  utf8 = malloc(size + 1);
+
+  rtl_reifyString(M, args[1], utf8, size + 1);
+
+  count = fwrite(utf8, 1, size, rif.f);
+
+  free(utf8);
+
+  if (count < size) {
+    return rtl_internSelector("io", "EOF");
+  }
+
+  return rtl_int28(count);
+}
+
+static
 rtl_Word rtl_io_close(rtl_Machine    *M,
 		      rtl_Word const *args,
 		      size_t         argsLen)
@@ -206,6 +239,9 @@ void rtl_io_installBuiltins(rtl_Compiler *C)
 
   rtl_registerBuiltin(C, rtl_intern("io", "write-char"), rtl_io_writeChar);
   rtl_export(C, rtl_intern("io", "write-char"));
+
+  rtl_registerBuiltin(C, rtl_intern("io", "write-string"), rtl_io_writeString);
+  rtl_export(C, rtl_intern("io", "write-string"));
 
   rtl_registerBuiltin(C, rtl_intern("io", "close"), rtl_io_close);
   rtl_export(C, rtl_intern("io", "close"));
