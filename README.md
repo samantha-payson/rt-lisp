@@ -85,3 +85,10 @@ PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more details.
 
 You should have received a copy of the GNU Lesser General Public License along
 with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+## Submodule Licenses
+
+All git submodules in this repository (listed in the .gitmodules file) have
+their own licenses. The LGPLv3 license does not necessarily apply to those
+submodules, and the only license which applies to the main RT Lisp repository
+(excluding submodules) is the LGPLv3.

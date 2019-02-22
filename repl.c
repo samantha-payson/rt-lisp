@@ -147,7 +147,7 @@ void rtl_repl(rtl_Compiler *C)
 
   // First step: Load the prelude
   intrinsicNS = rtl_nsInPackage(NULL, rtl_internPackage(C, "intrinsic"));
-  rtl_load(C, &intrinsicNS, "prelude.lisp");
+  rtl_load(C, &intrinsicNS, "lisp/prelude.lisp");
 
   replNS = rtl_nsInPackage(NULL, rtl_internPackage(C, "repl"));
   useNS  = rtl_nsUsePackage(&replNS, rtl_internPackage(C, "std"));

@@ -224,6 +224,12 @@
 	  T
 	  (any fn (cdr ls)))))
 
+  (defun all (fn ls)
+    (if ls
+	(when (fn (car ls))
+	  (all fn (cdr ls)))
+	T))
+
   (defun mapcar-n (fn ls*)
     (rlet rec ((fwd* ls*)
 	       (rev  nil))
@@ -294,7 +300,9 @@
 	  cdaaar cdaadr cdadar cdaddr
 	  cddaar cddadr cdddar cddddr
 
-	  nil? not unless cons quote)
+	  nil? not unless cons quote
+
+	  all any)
 
   (export nil? symbol? selector? int28? fix14? tuple? char? map? cons?
 	  top?
@@ -459,4 +467,14 @@
 
   (defmacro alias-package (clause . body)
     `(intrinsic:alias-package ~clause
-       @body)))
+       @body))
+
+  (defun maptuple-1 (fn tpl)
+    (let ((len (intrinsic:len tpl)))
+      (rlet rec ((i 0)
+		 (rev nil))
+	(if (< i len)
+	    (rec (+ i 1) (cons (fn (intrinsic:get tpl i)) rev))
+	  (reverse rev)))))
+
+  (export maptuple-1))
