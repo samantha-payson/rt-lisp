@@ -26,6 +26,9 @@
     (defmacro list args
       (build-list args))
 
+    (defun list args
+      args)
+
     (defun append2 (a b)
       (if (nil? a)
 	  b
@@ -34,12 +37,29 @@
 
     (defmacro and arg*
       (if (cons? arg*)
-	  (if (cdr arg*)
+ 	  (if (cdr arg*)
 	      (list (quote if)
 		    (car arg*)
 		    (cons (quote and) (cdr arg*)))
 	    (car arg*))
 	  T))
+
+    (defun and arg*
+      (fold-1 (lambda (a b)
+		(and a b))
+	      T
+	      arg*))
+
+    (defun self-eval? (x)
+      (if (nil? x)
+	  T
+	(if (selector? x)
+	    T
+	  (if (int28? x)
+	      T
+	    (if (fix14? x)
+		T
+	      nil)))))
 
     (defun build-semiquote-tail (x)
       (if (cons? x)
@@ -51,7 +71,9 @@
 	    (list (quote cons)
 		  (build-semiquote (car x))
 		  (build-semiquote-tail (cdr x))))
-	(list (quote quote) x)))
+	(if (self-eval? x)
+	    x
+	  (list (quote quote) x))))
 
     (defun build-semiquote (x)
       (if (cons? x)
@@ -60,7 +82,9 @@
 	    (list (quote cons)
 		  (build-semiquote (car x))
 		  (build-semiquote-tail (cdr x))))
-	(list (quote quote) x))))
+	(if (self-eval? x)
+	    x
+	  (list (quote quote) x)))))
 
   (intrinsic:defmacro semiquote (x)
     (build-semiquote x))
@@ -131,6 +155,9 @@
   (defmacro labels arg*
     `(intrinsic:labels @arg*))
 
+  (defmacro quote (x)
+    `(intrinsic:quote ~x))
+
   (defun reverse (ls)
     (labels ((rec (fwd rev)
 	       (if fwd
@@ -151,7 +178,6 @@
     `(intrinsic:labels ((~name ~(mapcar-1 car letarg*)
 			  @body))
        (~name @(mapcar-1 cadr letarg*))))
-
 
   (defun mapcar-2 (fn ls0 ls1)
     (rlet rec ((fwd0 ls0)
@@ -177,13 +203,28 @@
 		     rev))
 	(reverse rev))))
 
+  (defun mapcar-4 (fn ls0 ls1 ls2 ls3)
+    (rlet rec ((fwd0 ls0)
+	       (fwd1 ls1)
+	       (fwd2 ls2)
+	       (fwd3 ls3)
+	       (rev nil))
+      (if (and fwd0 fwd1 fwd2)
+	  (rec (cdr fwd0)
+	       (cdr fwd1)
+	       (cdr fwd2)
+	       (cdr fwd3)
+	       (cons (fn (car fwd0) (car fwd1) (car fwd2) (car fwd3))
+		     rev))
+	(reverse rev))))
+
   (defun any (fn ls)
     (when ls
       (if (fn (car ls))
 	  T
 	  (any fn (cdr ls)))))
 
-  (defun mapcar-n (fn . ls*)
+  (defun mapcar-n (fn ls*)
     (rlet rec ((fwd* ls*)
 	       (rev  nil))
       (if (any nil? fwd*)
@@ -198,8 +239,40 @@
 
   (defun fold-1 (fn init ls)
     (if ls
-	(fold-1 (fn init (car ls)) (cdr ls))
+	(fold-1 fn (fn init (car ls))
+		(cdr ls))
       init))
+
+  (defun fold-2 (fn init ls0 ls1)
+    (if ls
+	(fold-2 fn (fn init (car ls0) (car ls1))
+		(cdr ls0)
+		(cdr ls1))
+      init))
+
+  (defun fold-3 (fn init ls0 ls1 ls2)
+    (if ls
+	(fold-3 fn (fn init (car ls0) (car ls1) (car ls2))
+		(cdr ls0)
+		(cdr ls1)
+		(cdr ls2))
+      init))
+
+  (defun fold-4 (fn init ls0 ls1 ls2 ls3)
+    (if ls
+	(fold-4 fn (fn init (car ls0) (car ls1) (car ls2) (car ls3))
+		(cdr ls0)
+		(cdr ls1)
+		(cdr ls2)
+		(cdr ls3))
+      init))
+
+  (defun fold-n (fn init ls*)
+    (if (any nil? ls*)
+	init
+	(fold-n fn
+		(intrinsic:apply-list fn (cons init (mapcar car ls*)))
+		(mapcar cdr ls*))))
 
   (defmacro export sym*
     `(progn
@@ -208,8 +281,6 @@
   		  sym*)))
 
   (export list and semiquote defmacro defun definline if progn when lambda export
-
-	  mapcar-1 mapcar-2 mapcar-3 mapcar-n
 
 	  car cdr
 
@@ -223,7 +294,7 @@
 	  cdaaar cdaadr cdadar cdaddr
 	  cddaar cddadr cdddar cddddr
 
-	  nil? not unless)
+	  nil? not unless cons quote)
 
   (export nil? symbol? selector? int28? fix14? tuple? string? map? cons?
 	  top?
@@ -250,9 +321,6 @@
     `(when (not ~test)
        @body))
 
-  (export fold-1)
-
-
   (export let cond gensym)
 
   (defmacro let (letarg* . body)
@@ -271,7 +339,6 @@
   (defun gensym ()
     (intrinsic:gensym))
 
-
   (export +)
 
   (defmacro + arg*
@@ -279,7 +346,6 @@
       ((nil? arg*) 0)
       ((nil? (cdr arg*)) (car arg*))
       (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*))))))
-
 
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
@@ -325,7 +391,7 @@
 	    (if (eq ~first ~tmp)
 		(eq ~tmp @(cdr rest*))))))))
 
-  (export with-gensyms rlambda rlet length mapcar)
+  (export with-gensyms rlambda rlet length mapcar vmapcar fold vfold)
 
   (defmacro rlambda (name arg* . body)
     `(intrinsic:labels ((~name ~arg* @body))
@@ -338,9 +404,8 @@
 	  (rec (cdr ls) (+ n 1))
 	n)))
 
-
   (defun mapcar (fn . ls*)
-    (intrinsic:apply-list mapcar-n (cons fn ls*)))
+    (mapcar-n fn ls*))
 
   (defmacro mapcar (fn . ls*)
     (cond
@@ -350,8 +415,37 @@
        `(mapcar-2 ~fn @ls*))
       ((eq (length ls*) 3)
        `(mapcar-3 ~fn @ls*))
+      ((eq (length ls*) 4)
+       `(mapcar-4 ~fn @ls*))
       (T
-       `(mapcar-n ~fn @ls*))))
+       `(mapcar-n ~fn (list @ls*)))))
+
+  (defmacro vmapcar (letarg* . body)
+    `(mapcar (lambda ~(mapcar car letarg*)
+  	       @body)
+  	     @(mapcar cadr letarg*)))
+
+  (defun fold (fn init . ls*)
+    (intrinsic:apply-list fold-n (cons fn (cons init ls*))))
+
+  (defmacro fold (fn init . ls*)
+    (cond
+      ((eq (length ls*) 1)
+       `(fold-1 ~fn ~init @ls*))
+      ((eq (length ls*) 2)
+       `(fold-2 ~fn ~init @ls*))
+      ((eq (length ls*) 3)
+       `(fold-3 ~fn ~init @ls*))
+      ((eq (length ls*) 4)
+       `(fold-4 ~fn ~init @ls*))
+      (T
+       `(fold-n ~fn ~init @ls*))))
+
+  (defmacro vfold (init letarg* . body)
+    `(fold (lambda (~(car init) @(mapcar car letarg*))
+  	     @body)
+  	   ~(cadr init)
+  	   @(mapcar cadr letarg*)))
 
   (export in-package use-package alias-package)
 
@@ -366,4 +460,3 @@
   (defmacro alias-package (clause . body)
     `(intrinsic:alias-package ~clause
        @body)))
-
