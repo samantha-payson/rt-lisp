@@ -1312,7 +1312,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   // Ensure these words are involved in any garbage collection that may happen.
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
-  func = rtl_reifyFunction(M->codeBase, fn); 
+  func = rtl_reifyFunction(M->codeBase, fn);
 
   assert(!func->isBuiltin);
 

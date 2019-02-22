@@ -58,6 +58,7 @@ uint32_t __rtl_ptrOffs(rtl_Word ptr) {
 rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr);
 
 void rtl_disasmFn(rtl_Machine *M, rtl_Word fn);
+void rtl_disasmMacro(rtl_Machine *M, rtl_Word name);
 
 void rtl_dumpHeap(rtl_Machine *M);
 

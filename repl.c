@@ -123,6 +123,19 @@ rtl_Word rtl_repl_disassemble(rtl_Machine *M, rtl_Word const *args, size_t argsL
   return rtl_internSelector(NULL, "ok");
 }
 
+static
+rtl_Word rtl_repl_disassembleMacro(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+{
+  if (argsLen != 1) {
+    printf("\n  usage: (disassemble-macro <name>)\n\n");
+    return RTL_NIL;
+  }
+
+  rtl_disasmMacro(M, args[0]);
+
+  return rtl_internSelector(NULL, "ok");
+}
+
 void rtl_repl(rtl_Compiler *C)
 {
   rtl_repl_Compiler wrapper;
@@ -154,6 +167,10 @@ void rtl_repl(rtl_Compiler *C)
 
   rtl_registerBuiltin(C, rtl_intern("std", "disassemble"), rtl_repl_disassemble);
   rtl_export(C, rtl_intern("std", "disassemble"));
+
+  rtl_registerBuiltin(C, rtl_intern("std", "disassemble-macro"),
+		      rtl_repl_disassembleMacro);
+  rtl_export(C, rtl_intern("std", "disassemble-macro"));
 
   rtl_registerBuiltin(C, rtl_intern("std", "macroexpand"), rtl_repl_macroExpand);
   rtl_export(C, rtl_intern("std", "macroexpand"));

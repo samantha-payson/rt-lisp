@@ -760,6 +760,26 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
   printf("\n ----------------------------------\n\n");
 }
 
+void rtl_disasmMacro(rtl_Machine *M, rtl_Word name)
+{
+  rtl_FnDef *fnDef;
+
+  if (!rtl_isSymbol(name)) {
+    printf("  error: Can't disassemble %s as macro\n",
+	   rtl_typeNameOf(name));
+    return;
+  }
+
+  fnDef = rtl_lookupFn(M->codeBase, name);
+  if (!fnDef) {
+    printf("  no such macro: %s:%s\n",
+	   rtl_symbolPackageName(name),
+	   rtl_symbolName(name));
+  } else {
+    rtl_disasmFn(M, fnDef->macro);
+  } return;
+}
+
 char const *rtl_errString(rtl_Error err)
 {
   switch (err) {
