@@ -76,12 +76,23 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
 }
 
 static
+uint8_t utf8ByteCount(uint8_t firstByte) {
+  static const uint8_t utf8_lengths[] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 3, 3, 4, 0
+  };
+
+  return utf8_lengths[firstByte >> 3];
+}
+
+static
 rtl_Word rtl_io_readChar(rtl_Machine    *M,
 			 rtl_Word const *args,
 			 size_t         argsLen)
 {
   rtl_io_File rif;
-  int ch;
+  utf8_int32_t ch;
+  uint8_t byteCount, utf8[4];
 
   assert(argsLen == 1);
   assert(rtl_isNative(args[0]));
@@ -90,12 +101,48 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
   ch = fgetc(rif.f);
+  if (ch == EOF) return rtl_internSelector("io", "EOF");
 
-  if (ch == EOF) {
-    return rtl_internSelector("io", "EOF");
+  utf8[0] = ch;
+
+  byteCount = utf8ByteCount(ch);
+
+  switch (byteCount) {
+  case 0:
+    return rtl_char(0xFFFD); // Replacement char
+
+  case 4:
+    ch = fgetc(rif.f);
+    if (ch == EOF) return rtl_internSelector("io", "EOF");
+
+    utf8[3] = ch;
+    
+    // fallthrough ..
+
+  case 3:
+    ch = fgetc(rif.f);
+    if (ch == EOF) return rtl_internSelector("io", "EOF");
+
+    utf8[2] = ch;
+
+    // fallthrough ..
+
+  case 2:
+    ch = fgetc(rif.f);
+    if (ch == EOF) return rtl_internSelector("io", "EOF");
+
+    utf8[1] = ch;
+
+    utf8codepoint(utf8, &ch);
+
+    // fallthrough ..
+    
+  case 1:
+    return rtl_char(ch);
+
+  default:
+    abort(); // unreachable
   }
-
-  return rtl_int28(ch);
 }
 
 static
@@ -103,9 +150,9 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
 			  rtl_Word const *args,
 			  size_t         argsLen)
 {
-  rtl_io_File rif;
-  char utf[8];
-  int32_t count;
+  rtl_io_File  rif;
+  uint8_t      utf8[4];
+  int32_t      count;
   utf8_int32_t ch;
 
   assert(argsLen == 2);
@@ -116,9 +163,9 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
   rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
-  utf8catcodepoint(utf, ch, 8);
+  utf8catcodepoint(utf8, ch, 4);
 
-  count = fwrite(utf, 1, utf8codepointsize(ch), rif.f);
+  count = fwrite(utf8, 1, utf8codepointsize(ch), rif.f);
   
   if (count < utf8codepointsize(ch)) {
     return rtl_internSelector("io", "EOF");

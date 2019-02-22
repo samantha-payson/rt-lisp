@@ -20,6 +20,7 @@
 static
 void formatChar(utf8_int32_t ch)
 {
+  uint8_t utf8[5];
   switch (ch) {
   case '\\':
     printf("\\\\");
@@ -46,7 +47,9 @@ void formatChar(utf8_int32_t ch)
     break;
 
   default:
-    printf("%lc", ch);
+    *(uint8_t *)utf8catcodepoint(utf8, ch, 4) = '\0';
+
+    printf("%s", (char *)utf8);
     break;
   }
 }
