@@ -140,6 +140,9 @@ typedef enum rtl_Error {
 typedef struct rtl_RetAddr {
   uint8_t  *pc;
   rtl_Word env;
+
+  // The name (a symbol) of the function that this will return FROM.
+  rtl_Word fn;
 } rtl_RetAddr;
 
 typedef struct rtl_Machine rtl_Machine;

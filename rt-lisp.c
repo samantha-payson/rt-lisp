@@ -1052,17 +1052,88 @@ char const *rtl_typeName(rtl_WordType type)
     })						\
   // End of multi-line macro
 
-#define RPUSH() ({							\
+#ifdef RTL_TRACE_FN_CALLS
+# define CALL_TRACE_ENTER()						\
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
+  printf("> '%s:%s'\n",							\
+	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
+	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn));		\
+									\
+  printf("CALL STACK: ");						\
+									\
+  for (size_t i = 0; i < M->rStackLen; i++) {				\
+    printf("%s:%s ",							\
+	   rtl_symbolPackageName(M->rStack[i].fn),			\
+	   rtl_symbolName(M->rStack[i].fn));				\
+  }									\
+  printf("\n");								\
+  // End of multi-line macro
+#else
+# define CALL_TRACE_ENTER()
+#endif
+
+#ifdef RTL_TRACE_FN_CALLS
+# define CALL_TRACE_EXIT()						\
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
+  printf("< '%s:%s'\n",							\
+	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
+	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn));		\
+									\
+  printf("CALL STACK: ");						\
+									\
+  for (size_t i = 0; i < M->rStackLen; i++) {				\
+    printf("%s:%s ",							\
+	   rtl_symbolPackageName(M->rStack[i].fn),			\
+	   rtl_symbolName(M->rStack[i].fn));				\
+  }									\
+  printf("\n");								\
+  // End of multi-line macro
+#else
+# define CALL_TRACE_EXIT()
+#endif
+
+#ifdef RTL_TRACE_FN_CALLS
+# define CALL_TRACE_TAIL(FNAME)						\
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
+  printf("| '%s:%s' -> '%s:%s'\n",					\
+	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
+	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn),		\
+	 rtl_symbolPackageName(FNAME),					\
+	 rtl_symbolName(FNAME));					\
+									\
+  printf("CALL STACK: ");						\
+									\
+  for (size_t i = 0; i < M->rStackLen; i++) {				\
+    printf("%s:%s ",							\
+	   rtl_symbolPackageName(M->rStack[i].fn),			\
+	   rtl_symbolName(M->rStack[i].fn));				\
+  }									\
+  printf("\n");								\
+  // End of multi-line macro
+#else
+# define CALL_TRACE_TAIL(FNAME)
+#endif
+
+#define RPUSH(FNAME) ({							\
       if (unlikely(M->rStackLen == M->rStackCap)) {			\
 	M->rStackCap = M->rStackCap*2;					\
-	M->rStack    = realloc(M->rStack, M->rStackCap * sizeof(rtl_RetAddr)); \
+	M->rStack    = realloc(M->rStack,				\
+			       M->rStackCap * sizeof(rtl_RetAddr));	\
       }									\
 									\
       M->rStack[M->rStackLen++] = (rtl_RetAddr) {			\
 	.pc  = M->pc,							\
 	.env = M->env,							\
+	.fn  = FNAME,							\
       };								\
+      CALL_TRACE_ENTER()						\
     })									\
+  // End of multi-line macro
+
+#define TAIL(FNAME) ({				\
+      CALL_TRACE_TAIL(FNAME);			\
+      M->rStack[M->rStackLen - 1].fn = FNAME;	\
+    })						\
   // End of multi-line macro
 
 #define VPOP() (M->vStack[--M->vStackLen])
@@ -1236,9 +1307,10 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   assert(!func->isBuiltin);
 
   M->pc = NULL;
-  RPUSH();
+  RPUSH(func->name);
 
-  M->pc = func->as.lisp.code;
+  M->pc    = func->as.lisp.code;
+  M->error = RTL_OK;
 
   while (M->error == RTL_OK) {
     /* printf("VSTACK:"); */
@@ -1687,7 +1759,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	  wptr = rtl_allocTuple(M, &b, 1);
 	  wptr[0] = a;
 
-	  if (opcode == RTL_OP_CALL) RPUSH();
+	  if (opcode == RTL_OP_CALL) RPUSH(func->name);
+	  else TAIL(func->name);
 
 	  M->env = b;
 	  M->pc = func->as.lisp.code;
@@ -1713,9 +1786,10 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	if (b != RTL_NIL) rptr = rtl_reifyTuple(M, b, &len);
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
-	if (opcode == RTL_OP_CALL) RPUSH();
-
 	func = rtl_reifyFunction(M->codeBase, f);
+
+	if (opcode == RTL_OP_CALL) RPUSH(func->name);
+	else TAIL(func->name);
 
 	assert(!func->isBuiltin);
 
@@ -1756,7 +1830,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	wptr = rtl_allocTuple(M, &b, 1);
 	wptr[0] = a;
 
-	if (opcode == RTL_OP_STATIC_CALL) RPUSH();
+	if (opcode == RTL_OP_STATIC_CALL) RPUSH(func->name);
+	else TAIL(func->name);
 
 	M->env = b;
 	M->pc  = func->as.lisp.code;
@@ -1792,7 +1867,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	  wptr = rtl_allocTuple(M, &b, 1);
 	  wptr[0] = a;
 
-	  RPUSH();
+	  RPUSH(func->name);
 
 	  M->env = b;
 	  M->pc  = func->as.lisp.code;
@@ -1816,9 +1891,9 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	if (c != RTL_NIL) rptr = rtl_reifyTuple(M, c, &len);
 	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
-	RPUSH();
-
 	func = rtl_reifyFunction(M->codeBase, f);
+
+	RPUSH(func->name);
 
 	assert(!func->isBuiltin);
 
@@ -1857,6 +1932,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       M->pc  = M->rStack[M->rStackLen].pc;
       M->env = M->rStack[M->rStackLen].env;
+
+      CALL_TRACE_EXIT();
 
       if (M->pc == NULL) goto interp_cleanup;
 
