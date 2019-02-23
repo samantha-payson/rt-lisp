@@ -44,7 +44,7 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
   char   *path;
 
   assert(argsLen == 2);
-  assert(rtl_isString(args[0]));
+  assert(rtl_isString(M, args[0]));
   assert(rtl_isSelector(args[1]));
 
   pathLen = rtl_stringSize(M, args[0]);
@@ -186,7 +186,7 @@ rtl_Word rtl_io_writeString(rtl_Machine    *M,
   int32_t      count;
 
   assert(argsLen == 2);
-  assert(rtl_isNative(args[0]) && rtl_isString(args[1]));
+  assert(rtl_isNative(args[0]) && rtl_isString(M, args[1]));
 
   rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));

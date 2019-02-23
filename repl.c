@@ -57,7 +57,6 @@ rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
 {
   rtl_Word          handle = RTL_NIL;
   rtl_repl_Compiler wrapper;
-  rtl_Compiler      *C;
   char              *path;
   size_t            pathLen;
 
@@ -72,14 +71,12 @@ rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
   rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
   assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
 
-  C = wrapper.C;
-
   pathLen = rtl_stringSize(M, args[0]);
   path    = malloc(pathLen + 1);
 
   rtl_reifyString(M, args[0], path, pathLen + 1);
 
-  rtl_load(C, wrapper.ns, path);
+  rtl_load(wrapper.C, wrapper.ns, path);
 
   rtl_popWorkingSet(M);
 
@@ -205,4 +202,3 @@ void rtl_repl(rtl_Compiler *C)
 
   rtl_popWorkingSet(C->M);
 }
-

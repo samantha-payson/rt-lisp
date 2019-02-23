@@ -1826,6 +1826,7 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
   case RTL_SELECTOR:
   case RTL_INT28:
   case RTL_FIX14:
+  case RTL_CHAR:
     return 5;
 
   case RTL_CONS:
@@ -2139,6 +2140,7 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
   case RTL_SYMBOL:
   case RTL_SELECTOR:
   case RTL_INT28:
+  case RTL_CHAR:
   case RTL_FIX14:
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
     rtl_emitWordToFunc(codeBase, fnID, expr);

@@ -1984,9 +1984,10 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 {
   rtl_Word *ptr;
   rtl_Word args = RTL_NIL,
-           env  = RTL_NIL;
+           env  = RTL_NIL,
+           out  = RTL_NIL;
 
-  RTL_PUSH_WORKING_SET(M, &args, &env, &argList);
+  RTL_PUSH_WORKING_SET(M, &args, &env, &argList, &out);
 
   args = rtl_listToTuple(M, argList);
 
@@ -2187,7 +2188,7 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
   end  = buf + cap - 1;
   next = buf;
 
-  assert(rtl_isString(str));
+  assert(rtl_isString(M, str));
 
   rptr = rtl_reifyTuple(M, str, &len);
   for (i = 0; i < len && next < end; i++) {

@@ -3,6 +3,7 @@ CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
   -Wno-error=unused-function \
   -Wno-error=unused-variable \
   -D NDEBUG \
+#  -D RTL_TRACE_FN_CALLS \
 #  -D RTL_TRACE_WORKING_SETS \
 #  -D RTL_BITMAP_SANITY_CHECKS \
 
