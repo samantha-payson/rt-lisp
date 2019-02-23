@@ -342,7 +342,7 @@
 	  `(progn @(cdar arm*))
 	  `(if ~(caar arm*)
 	       (progn @(cdar arm*))
-	       (cond @(cdr arm*))))))
+	     (cond @(cdr arm*))))))
 
   (defun gensym ()
     (intrinsic:gensym))
@@ -462,7 +462,7 @@
        @body))
 
   (defmacro use-package (name . body)
-    `(intrinsic:in-package ~name
+    `(intrinsic:use-package ~name
        @body))
 
   (defmacro alias-package (clause . body)
@@ -477,4 +477,82 @@
 	    (rec (+ i 1) (cons (fn (intrinsic:get tpl i)) rev))
 	  (reverse rev)))))
 
-  (export maptuple-1))
+  (defun min (first . rest*)
+    (rlet rec ((best  first)
+	       (rest* rest*))
+      (if rest*
+	  (if (< (car rest*) best)
+	      (rec (car rest*) (cdr rest*))
+	    (rec best (cdr rest*)))
+	best)))
+
+  (defun mapt-1 (fn tpl)
+    (let ((len (intrinsic:len tpl)))
+      (rlet rec ((i 0))
+	(when (< i len)
+	  (fn (intrinsic:get tpl i))
+	  (rec (+ i 1))))))
+
+  (defun mapt-2 (fn tpl0 tpl1)
+    (let ((len (min (intrinsic:len tpl0)
+		    (intrinsic:len tpl1))))
+      (rlet rec ((i 0))
+	(when (< i len)
+	  (fn (intrinsic:get tpl0 i)
+	      (intrinsic:get tpl1 i))
+	  (rec (+ i 1))))))
+
+  (defun mapt-3 (fn tpl0 tpl1 tpl2)
+    (let ((len (min (intrinsic:len tpl0)
+		    (intrinsic:len tpl1)
+		    (intrinsic:len tpl2))))
+      (rlet rec ((i 0))
+	(when (< i len)
+	  (fn (intrinsic:get tpl0 i)
+	      (intrinsic:get tpl1 i)
+	      (intrinsic:get tpl2 i))
+	  (rec (+ i 1))))))
+
+  (defun mapt-4 (fn tpl0 tpl1 tpl2 tpl3)
+    (let ((len (min (intrinsic:len tpl0)
+		    (intrinsic:len tpl1)
+		    (intrinsic:len tpl2)
+		    (intrinsic:len tpl3))))
+      (rlet rec ((i 0))
+	(when (< i len)
+	  (fn (intrinsic:get tpl0 i)
+	      (intrinsic:get tpl1 i)
+	      (intrinsic:get tpl2 i)
+	      (intrinsic:get tpl3 i))
+	  (rec (+ i 1))))))
+
+  (defun mapt-n (fn tpl*)
+    (let ((len (apply-list min tpl*)))
+      (rlet rec ((i 0))
+	(when (< i len)
+	  (apply-list fn (vmapcar ((tpl tpl*))
+			   (intrinsic:get tpl i)))
+	  (rec (+ i 1))))))
+
+  (defun mapt (fn . tpl*)
+    (mapt-n fn tpl*))
+
+  (defmacro mapt (fn . tpl*)
+    (cond
+      ((eq (length tpl*) 1)
+       `(mapt-1 ~fn @tpl*))
+      ((eq (length tpl*) 2)
+       `(mapt-2 ~fn @tpl*))
+      ((eq (length tpl*) 3)
+       `(mapt-3 ~fn @tpl*))
+      ((eq (length tpl*) 4)
+       `(mapt-4 ~fn @tpl*))
+      (T
+       `(mapt-n ~fn (list @tpl*)))))
+
+  (defmacro vmapt (letarg* . body)
+    `(mapt (lambda ~(mapcar car letarg*)
+  	     @body)
+  	   @(mapcar cadr letarg*)))
+
+  (export maptuple-1 mapt vmapt))
