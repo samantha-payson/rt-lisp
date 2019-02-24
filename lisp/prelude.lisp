@@ -387,6 +387,30 @@
 	    (if (> ~first ~tmp)
 		(> ~tmp @(cdr rest*))))))))
 
+  (defmacro <= (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:leq ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+	 `(let ((~tmp ~(car rest*)))
+	    (if (<= ~first ~tmp)
+		(<= ~tmp @(cdr rest*))))))))
+
+  (defmacro >= (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:geq ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+	 `(let ((~tmp ~(car rest*)))
+	    (if (>= ~first ~tmp)
+		(>= ~tmp @(cdr rest*))))))))
+
   (defmacro eq (first . rest*)
     (cond
       ((nil? rest*)
