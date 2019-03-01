@@ -35,6 +35,10 @@ typedef enum rtl_Opcode {
   RTL_OP_TUPLE,
   RTL_OP_GET,
   RTL_OP_LEN,
+  RTL_OP_PUSH_FIRST,
+  RTL_OP_PUSH_LAST,
+  RTL_OP_CONCAT,
+  RTL_OP_SLICE,
 
   // Basic map operations
   RTL_OP_MAP,

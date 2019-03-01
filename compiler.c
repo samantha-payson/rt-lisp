@@ -222,6 +222,10 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(tuple,        "tuple")			\
   M(len,          "len")			\
   M(get,          "get")			\
+  M(pushFirst,    "push-first")			\
+  M(pushLast,     "push-last")			\
+  M(concat,       "concat")			\
+  M(slice,        "slice")			\
   M(map,          "map")			\
   M(insert,       "insert")			\
   M(lookup,       "lookup")			\
@@ -909,6 +913,26 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkGetIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
 				rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
+    } else if (head == symCache.intrinsic.pushFirst) {
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_FIRST,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.pushLast) {
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_LAST,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.concat) {
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_CONCAT,
+				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.slice) {
+      return rtl_mkSliceIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, rtl_cdr(C->M, sxp))));
+
     } else if (head == symCache.intrinsic.map) {
       return rtl_mkConstantIntrinsic(RTL_MAP);
 
@@ -1396,6 +1420,12 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     x->as.get.index = __impl_transformIntrinsic(env, x->as.get.index);
     break;
 
+  case RTL_INTRINSIC_SLICE:
+    x->as.slice.tuple = __impl_transformIntrinsic(env, x->as.slice.tuple);
+    x->as.slice.beg   = __impl_transformIntrinsic(env, x->as.slice.beg);
+    x->as.slice.end   = __impl_transformIntrinsic(env, x->as.slice.end);
+    break;
+
   case RTL_INTRINSIC_INSERT:
     x->as.insert.map = __impl_transformIntrinsic(env, x->as.insert.map);
     x->as.insert.key = __impl_transformIntrinsic(env, x->as.insert.key);
@@ -1552,6 +1582,9 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   case RTL_INTRINSIC_EQ:
   case RTL_INTRINSIC_NEQ:
   case RTL_INTRINSIC_ISO:
+  case RTL_INTRINSIC_PUSH_FIRST:
+  case RTL_INTRINSIC_PUSH_LAST:
+  case RTL_INTRINSIC_CONCAT:
     x->as.binop.leftArg  = __impl_transformIntrinsic(env, x->as.binop.leftArg);
     x->as.binop.rightArg = __impl_transformIntrinsic(env, x->as.binop.rightArg);
     break;
@@ -1639,6 +1672,12 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
 
   case RTL_INTRINSIC_LEN:
     rtl_tailCallPass(x->as.len.tuple);
+    break;
+
+  case RTL_INTRINSIC_SLICE:
+    rtl_tailCallPass(x->as.slice.tuple);
+    rtl_tailCallPass(x->as.slice.beg);
+    rtl_tailCallPass(x->as.slice.end);
     break;
 
   case RTL_INTRINSIC_INSERT:
@@ -1759,6 +1798,9 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
   case RTL_INTRINSIC_EQ:
   case RTL_INTRINSIC_NEQ:
   case RTL_INTRINSIC_ISO:
+  case RTL_INTRINSIC_PUSH_FIRST:
+  case RTL_INTRINSIC_PUSH_LAST:
+  case RTL_INTRINSIC_CONCAT:
     rtl_tailCallPass(x->as.binop.leftArg);
     rtl_tailCallPass(x->as.binop.rightArg);
     break;
@@ -1896,6 +1938,12 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
   case RTL_INTRINSIC_GET:
     return x->codeSize = annotateCodeSize(M, x->as.get.tuple)
                        + annotateCodeSize(M, x->as.get.index)
+                       + 1;
+
+  case RTL_INTRINSIC_SLICE:
+    return x->codeSize = annotateCodeSize(M, x->as.slice.tuple)
+                       + annotateCodeSize(M, x->as.slice.beg)
+                       + annotateCodeSize(M, x->as.slice.end)
                        + 1;
 
   case RTL_INTRINSIC_DYN_GET:
@@ -2039,6 +2087,9 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
   case RTL_INTRINSIC_EQ:
   case RTL_INTRINSIC_NEQ:
   case RTL_INTRINSIC_ISO:
+  case RTL_INTRINSIC_PUSH_FIRST:
+  case RTL_INTRINSIC_PUSH_LAST:
+  case RTL_INTRINSIC_CONCAT:
     return x->codeSize = annotateCodeSize(M, x->as.binop.leftArg)
                        + annotateCodeSize(M, x->as.binop.rightArg)
                        + 1;
@@ -2227,6 +2278,13 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
   case RTL_INTRINSIC_LEN:
     rtl_emitIntrinsicCode(C, fnID, x->as.len.tuple);
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_LEN);
+    break;
+
+  case RTL_INTRINSIC_SLICE:
+    rtl_emitIntrinsicCode(C, fnID, x->as.slice.tuple);
+    rtl_emitIntrinsicCode(C, fnID, x->as.slice.beg);
+    rtl_emitIntrinsicCode(C, fnID, x->as.slice.end);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_SLICE);
     break;
 
   case RTL_INTRINSIC_GET:
@@ -2543,6 +2601,9 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
   case RTL_INTRINSIC_EQ:
   case RTL_INTRINSIC_NEQ:
   case RTL_INTRINSIC_ISO:
+  case RTL_INTRINSIC_PUSH_FIRST:
+  case RTL_INTRINSIC_PUSH_LAST:
+  case RTL_INTRINSIC_CONCAT:
     rtl_emitIntrinsicCode(C, fnID, x->as.binop.leftArg);
     rtl_emitIntrinsicCode(C, fnID, x->as.binop.rightArg);
 
@@ -2593,6 +2654,18 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     case RTL_INTRINSIC_ISO:
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_ISO);
+      break;
+
+    case RTL_INTRINSIC_PUSH_FIRST:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_PUSH_FIRST);
+      break;
+
+    case RTL_INTRINSIC_PUSH_LAST:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_PUSH_LAST);
+      break;
+
+    case RTL_INTRINSIC_CONCAT:
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONCAT);
       break;
 
     default:

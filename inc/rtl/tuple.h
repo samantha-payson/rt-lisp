@@ -25,3 +25,25 @@ rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len);
 // Return a pointer to the fields of tpl. Write the length of that tuple to
 // *len, which MUST point to a valid size_t.
 rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len);
+
+// Allocate a tuple with all the same elements, but with an extra position
+// containing w at the end.
+rtl_Word rtl_tuplePushLast(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
+
+// Allocate a tuple with all the same elements, but with an extra position
+// containing w at the beginning.
+rtl_Word rtl_tuplePushFirst(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
+
+// Allocate a tuple with the elements of a at the beginning, and the elements of
+// b at the end.
+rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b);
+
+// Allocate a tuple which contains the elements of the input tuple in the index
+// range [beg, end).
+rtl_Word rtl_tupleSlice(rtl_Machine *M,
+			rtl_Word    tuple,
+			uint32_t    beg,
+			uint32_t    end);
+
+// Allocate a new tuple and fill it with elemsLen words pointed to by elems.
+rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen);

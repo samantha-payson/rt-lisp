@@ -564,6 +564,22 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   len\n");
     return bc + 1;
 
+  case RTL_OP_PUSH_FIRST:
+    printf("   push-first\n");
+    return bc + 1;
+
+  case RTL_OP_PUSH_LAST:
+    printf("   push-last\n");
+    return bc + 1;
+
+  case RTL_OP_CONCAT:
+    printf("   concat\n");
+    return bc + 1;
+
+  case RTL_OP_SLICE:
+    printf("   slice\n");
+    return bc + 1;
+
   case RTL_OP_DYN_GET:
     literal = (rtl_Word)bc[1] << 0
             | (rtl_Word)bc[2] << 8

@@ -145,26 +145,26 @@ rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
 rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   rtl_Word *backing;
 
-#ifndef NDEBUG
-  if (!len) {
-    M->error = RTL_ERR_INVALID_OPERATION;
-    return NULL;
+  if (unlikely(!len)) {
+    abort();
   }
-#endif
 
   if (!rtl_isTuple(tpl)) {
     M->error = RTL_ERR_EXPECTED_TUPLE;
     *len = 0;
     return NULL;
-  }
-
-  backing = __rtl_reifyPtr(M, tpl);
-  if (backing) {
-    *len = (size_t)((*backing) >> 4);
-    return backing + 1;
-  } else {
+  } else if (tpl == RTL_TUPLE) {
     *len = 0;
     return NULL;
+  } else {
+    backing = __rtl_reifyPtr(M, tpl);
+    if (backing) {
+      *len = (size_t)((*backing) >> 4);
+      return backing + 1;
+    } else {
+      *len = 0;
+      return NULL;
+    }
   }
 }
 
@@ -583,9 +583,17 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
 
 rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len)
 {
-  rtl_Word *ptr = rtl_allocGC(M, RTL_TUPLE, w, len + 1);
-  ptr[0] = (len << 4) | RTL_HEADER;
-  return ptr + 1;
+  rtl_Word *ptr;
+
+  if (len == 0) {
+    *w = RTL_TUPLE;
+
+    return NULL;
+  } else {
+    ptr    = rtl_allocGC(M, RTL_TUPLE, w, len + 1);
+    ptr[0] = (len << 4) | RTL_HEADER;
+    return ptr + 1;
+  }
 }
 
 rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
@@ -1426,6 +1434,45 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(rtl_int28(len));
       break;
 
+    case RTL_OP_PUSH_FIRST:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP(); // elem
+      a = VPOP(); // tuple
+
+      VPUSH(rtl_tuplePushFirst(M, a, b));
+      break;
+
+    case RTL_OP_PUSH_LAST:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP(); // elem
+      a = VPOP(); // tuple
+
+      VPUSH(rtl_tuplePushLast(M, a, b));
+      break;
+
+    case RTL_OP_CONCAT:
+      VSTACK_ASSERT_LEN(2);
+
+      b = VPOP(); // second
+      a = VPOP(); // first
+
+      VPUSH(rtl_tupleConcat(M, a, b));
+      break;
+
+    case RTL_OP_SLICE:
+      VSTACK_ASSERT_LEN(3);
+
+      c = VPOP(); // end
+      b = VPOP(); // beg
+      a = VPOP(); // tuple
+
+      VPUSH(rtl_tupleSlice(M, a,
+			   rtl_int28Value(b),
+			   rtl_int28Value(c)));
+      break;
+
     case RTL_OP_MAP:
       VPUSH(rtl_emptyMap());
       break;
@@ -1673,19 +1720,13 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       sptr = M->vStack + M->vStackLen - size;
 
-      if (rtl_isTuple(M->env)) {
-	rptr = rtl_reifyTuple(M, M->env, &len);
-      } else {
-	rptr = NULL;
-	len = 0;
-      }
+      rtl_reifyTuple(M, M->env, &len);
+
       wptr = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+size + 2*size);
       wptr[0] = rtl_header(len + 1);
 
-      if (rtl_isTuple(M->env)) {
-	// Reify again, incase rptr was invalidated by a collection.
-	rptr = rtl_reifyTuple(M, M->env, &len);
-      }
+      // Reify again, incase rptr was invalidated by a collection.
+      rptr = rtl_reifyTuple(M, M->env, &len);
 
       // Here we build all of the closures.
       for (i = 0; i < size; i++) {
@@ -1772,19 +1813,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	f = rptr[0];
 	b = rptr[1];
 
-	if (b != RTL_NIL) {
-	  rptr = rtl_reifyTuple(M, b, &len);
-	} else {
-	  len  = 0;
-	  rptr = NULL;
-	}
-
-	wptr      = rtl_allocTuple(M, &c, len + 1);
-	wptr[len] = a;
-
-	// Need to re-load ptr after alloc, in case it was invalidated by GC.
-	if (b != RTL_NIL) rptr = rtl_reifyTuple(M, b, &len);
-	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+	c = rtl_tuplePushLast(M, b, a);
 
 	func = rtl_reifyFunction(M->codeBase, f);
 
@@ -1877,19 +1906,9 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 	rptr = __rtl_reifyPtr(M, f);
 
 	f = rptr[0];
-	c = rptr[1];
+	b = rptr[1];
 
-	if (c != RTL_NIL) {
-	  rptr = rtl_reifyTuple(M, c, &len);
-	} else {
-	  len  = 0;
-	  rptr = NULL;
-	}
-
-	wptr      = rtl_allocTuple(M, &b, len + 1);
-	wptr[len] = a;
-	if (c != RTL_NIL) rptr = rtl_reifyTuple(M, c, &len);
-	memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+	c = rtl_tuplePushLast(M, b, a);
 
 	func = rtl_reifyFunction(M->codeBase, f);
 
@@ -1897,7 +1916,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
 	assert(!func->isBuiltin);
 
-	M->env = b;
+	M->env = c;
 	M->pc  = func->as.lisp.code;
 	break;
 
@@ -2255,7 +2274,6 @@ bool rtl_isString(rtl_Machine *M, rtl_Word w)
   }
 }
 
-
 void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
 {
   char *end, *prev, *next;
@@ -2318,3 +2336,137 @@ rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
 
   return str;
 }
+
+rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
+{
+  rtl_Word const *aptr, *bptr;
+  size_t aLen, bLen;
+  rtl_Word *wptr;
+  rtl_Word out = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &a, &b, &out);
+
+  rtl_reifyTuple(M, a, &aLen);
+  rtl_reifyTuple(M, b, &bLen);
+
+  wptr = rtl_allocTuple(M, &out, aLen + bLen);
+  aptr = rtl_reifyTuple(M, a, &aLen);
+  bptr = rtl_reifyTuple(M, b, &bLen);
+
+  memcpy(wptr,        aptr, sizeof(rtl_Word)*aLen);
+  memcpy(wptr + aLen, bptr, sizeof(rtl_Word)*bLen);
+
+  rtl_popWorkingSet(M);
+
+  return out;
+}
+
+rtl_Word rtl_tupleSlice(rtl_Machine *M,
+			rtl_Word    tuple,
+			uint32_t    beg,
+			uint32_t    end)
+{
+  size_t   i, inLen, outLen;
+  rtl_Word out = RTL_NIL;
+
+  rtl_Word const *rptr;
+  rtl_Word       *wptr;
+
+  RTL_PUSH_WORKING_SET(M, &tuple, &out);
+
+  rtl_reifyTuple(M, tuple, &inLen);
+
+  // TODO: Trigger faults here ...
+  if (inLen < end) abort();
+  if (end < beg) abort();
+
+  outLen = end - beg;
+
+  wptr = rtl_allocTuple(M, &out, outLen);
+  rptr = rtl_reifyTuple(M, tuple, &inLen);
+
+  for (i = 0; i < outLen; i++)
+    wptr[i] = rptr[beg + i];
+
+  return out;
+}
+
+
+rtl_Word rtl_tuplePushLast(rtl_Machine *M, rtl_Word in, rtl_Word w)
+{
+  rtl_Word const *rptr;
+  rtl_Word       *wptr;
+
+  size_t   len;
+  rtl_Word out = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &in, &out, &w);
+
+  if (in != RTL_NIL) {
+    rptr = rtl_reifyTuple(M, in, &len);
+  } else {
+    rptr = NULL;
+    len  = 0;
+  }
+
+  wptr = rtl_allocTuple(M, &out, len + 1);
+  wptr[len] = w;
+
+  if (in != RTL_NIL) rptr = rtl_reifyTuple(M, in, &len);
+  memcpy(wptr, rptr, sizeof(rtl_Word)*len);
+
+  rtl_popWorkingSet(M);
+
+  return out;
+}
+
+rtl_Word rtl_tuplePushFirst(rtl_Machine *M, rtl_Word in, rtl_Word w)
+{
+  rtl_Word const *rptr;
+  rtl_Word       *wptr;
+
+  size_t   len;
+  rtl_Word out = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &in, &out, &w);
+
+  if (in != RTL_NIL) {
+    rptr = rtl_reifyTuple(M, in, &len);
+  } else {
+    rptr = NULL;
+    len  = 0;
+  }
+
+  wptr = rtl_allocTuple(M, &out, len + 1);
+  wptr[0] = w;
+
+  if (in != RTL_NIL) rptr = rtl_reifyTuple(M, in, &len);
+  memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
+
+  rtl_popWorkingSet(M);
+
+  return out;
+}
+
+rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen)
+{
+  rtl_Word *workingSet[elemsLen + 1];
+  rtl_Word *wptr;
+  rtl_Word tuple;
+
+  size_t i;
+
+  workingSet[elemsLen] = NULL;
+  for (i = 0; i < elemsLen; i++)
+    workingSet[i] = elems + i;
+
+  rtl_pushWorkingSet(M, workingSet);
+
+  wptr = rtl_allocTuple(M, &tuple, elemsLen);
+  memcpy(wptr, elems, sizeof(rtl_Word)*elemsLen);
+
+  rtl_popWorkingSet(M);
+
+  return tuple;
+}
+

@@ -27,6 +27,10 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_TUPLE,
   RTL_INTRINSIC_LEN,
   RTL_INTRINSIC_GET,
+  RTL_INTRINSIC_PUSH_FIRST,
+  RTL_INTRINSIC_PUSH_LAST,
+  RTL_INTRINSIC_CONCAT,
+  RTL_INTRINSIC_SLICE,
   RTL_INTRINSIC_INSERT,
   RTL_INTRINSIC_LOOKUP,
   RTL_INTRINSIC_DYN_GET,
@@ -111,6 +115,12 @@ struct rtl_Intrinsic {
       rtl_Intrinsic *tuple;
       rtl_Intrinsic *index;
     } get;
+
+    struct {
+      rtl_Intrinsic *tuple;
+      rtl_Intrinsic *beg;
+      rtl_Intrinsic *end;
+    } slice;
 
     struct {
       rtl_Intrinsic *map;
@@ -401,6 +411,27 @@ rtl_Intrinsic *rtl_mkGetIntrinsic(rtl_Intrinsic *tuple, rtl_Intrinsic *index)
       .get = {
 	.tuple = tuple,
 	.index = index,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkSliceIntrinsic(rtl_Intrinsic *tuple,
+				    rtl_Intrinsic *beg,
+				    rtl_Intrinsic *end)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_SLICE,
+    .as = {
+      .slice = {
+	.tuple = tuple,
+	.beg   = beg,
+	.end   = end,
       },
     },
   };
