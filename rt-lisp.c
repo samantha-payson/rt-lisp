@@ -70,9 +70,9 @@ rtl_Word addBuiltin(rtl_CodeBase *cb, rtl_Word name, rtl_BuiltinFn cFn)
   return rtl_function(fnID);
 }
 
-void rtl_registerBuiltin(rtl_Compiler  *C,
-			 rtl_Word      name,
-			 rtl_BuiltinFn cFn)
+rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
+			     rtl_Word      name,
+			     rtl_BuiltinFn cFn)
 {
   rtl_FnDef    *def;
   size_t       idx;
@@ -101,7 +101,7 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
 
       rtl_resolveCallSites(C, name, def->fn);
 
-      return;
+      return def->fn;
     }
   }
 
@@ -115,6 +115,8 @@ void rtl_registerBuiltin(rtl_Compiler  *C,
   codeBase->fnsByName[idx] = def;
 
   rtl_resolveCallSites(C, name, def->fn);
+
+  return def->fn;
 }
 
 void rtl_initHeap(rtl_Heap *h)
@@ -150,7 +152,9 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   }
 
   if (!rtl_isTuple(tpl)) {
-    M->error = RTL_ERR_EXPECTED_TUPLE;
+    rtl_triggerFault(M, "expected-tuple",
+		     "Passed non-tuple to rtl_reifyTuple!");
+
     *len = 0;
     return NULL;
   } else if (tpl == RTL_TUPLE) {
@@ -171,7 +175,9 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
 rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
-    M->error = RTL_ERR_EXPECTED_CONS;
+    rtl_triggerFault(M, "expected-cons",
+		     "Passed non-cons to rtl_reifyCons!");
+
     return NULL;
   }
 
@@ -292,6 +298,8 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     fields = rtl_reifyTuple(M, w, &len);
 
     // Mark the length word ..
+    if (unlikely(w == RTL_TUPLE)) break;
+
     rtl_bmpSetBit(gen->marks, wOffs, true);
 
     // .. then each of the element words.
@@ -340,7 +348,6 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     }
 
     break;
-
   }
 }
 
@@ -352,7 +359,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   uint32_t oldOffs, newOffs;
   rtl_Generation *gen, *nextGen;
 
-  if (!rtl_isPtr(w) || w == RTL_MAP) {
+  if (!rtl_isPtr(w) || unlikely(unlikely(w == RTL_MAP) || unlikely(w == RTL_TUPLE))) {
     return w;
   }
 
@@ -390,8 +397,8 @@ int collectGen(rtl_Machine *M, int g)
   // but for now we just consider ourselves OOM if the last generation needs to
   // be collected.
   if (g + 1 >= RTL_MAX_GENERATIONS) {
-    M->error = RTL_ERR_OUT_OF_MEMORY;
-    return -1;
+    printf("    --------> Lisp Machine OUT OF MEMORY <--------\n");
+    abort();
   }
 
   gen = M->heap.gen[g];
@@ -535,6 +542,13 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   size_t         offs;
   rtl_Word       *ptr;
 
+#ifndef NDEBUG
+  if (M->fault) {
+    printf(" error: Performing allocation with a pending fault!\n");
+    abort();
+  }
+#endif
+
   // Validate t, ensure it's one of the accepted types.
   switch (t) {
   case RTL_TUPLE:
@@ -545,7 +559,8 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
     break;
 
   default:
-    M->error = RTL_ERR_INVALID_OPERATION;
+    rtl_triggerFault(M, "invalid-allocation",
+		     "Trying to allocate non-pointer type!\n");
     return NULL;
   }
 
@@ -876,11 +891,33 @@ rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key)
   return __rtl_mapLookup(M, map, key, 1, 0);
 }
 
+rtl_Word rtl_std_handleFault(rtl_Machine    *M,
+			     rtl_Word const *args,
+			     size_t         argsLen)
+{
+  assert(argsLen == 1);
+
+  printf("unhandled fault:\n     ");
+  rtl_formatExpr(M, args[0]);
+  printf("\n\n");
+
+  rtl_stackTrace(M);
+
+  M->fault = true;
+
+  return RTL_NIL;
+}
+
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
+  // Required to register the initial handleFault builtin.
+  rtl_Compiler C;
+
+  rtl_Word handleFault;
+
   rtl_initHeap(&M->heap);
 
-  M->env = RTL_NIL;
+  M->env = RTL_TUPLE;
 
   M->dynamic = RTL_MAP;
 
@@ -904,7 +941,15 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   M->codeBase = codeBase;
 
-  M->error = RTL_OK;
+  M->fault = RTL_NIL;
+
+  rtl_initCompiler(&C, M);
+
+  handleFault = rtl_registerBuiltin(&C, rtl_intern("std", "handle-fault"),
+				    rtl_std_handleFault);
+
+  rtl_setVar(M, rtl_intern("std", "*error-handler*"),
+	     handleFault);
 }
 
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
@@ -938,7 +983,7 @@ void rtl_testGarbageCollector(size_t count)
   // Cons up a gigantic linked list.
   for (i = 0, M.vStack[0] = RTL_NIL; i < count; i++) {
     M.vStack[0] = rtl_cons(&M, rtl_int28(i), M.vStack[0]);
-    if (rtl_getError(&M)) {
+    if (rtl_checkFault(&M)) {
       printf("There's an error!\n");
       abort();
     }
@@ -964,7 +1009,7 @@ void rtl_testGarbageCollector(size_t count)
     straggler0 = rtl_cons(&M, rtl_int28(-1), M.vStack[0]);
     straggler1 = rtl_cons(&M, rtl_int28(-2), straggler0);
 
-    if (rtl_getError(&M)) {
+    if (rtl_checkFault(&M)) {
       printf("There's an error!\n");
       abort();
     }
@@ -1044,20 +1089,22 @@ char const *rtl_typeName(rtl_WordType type)
     })									\
   // End of multi-line macro
 
-#define VSTACK_ASSERT_LEN(N) ({			\
-      if (unlikely((N) > M->vStackLen)) {	\
-	M->error = RTL_ERR_STACK_UNDERFLOW;	\
-	goto interp_cleanup;			\
-      }						\
-    })						\
+#define VSTACK_ASSERT_LEN(N) ({					\
+      if (unlikely((N) > M->vStackLen)) {			\
+	rtl_triggerFault(M, "stack-underflow",			\
+			 "VStack underflow in interpreter.");	\
+	goto interp_cleanup;					\
+      }								\
+    })								\
   // End of multi-line macro
 
-#define RSTACK_ASSERT_LEN(N) ({			\
-      if (unlikely((N) > M->rStackLen)) {	\
-	M->error = RTL_ERR_STACK_UNDERFLOW;	\
-	goto interp_cleanup;			\
-      }						\
-    })						\
+#define RSTACK_ASSERT_LEN(N) ({					\
+      if (unlikely((N) > M->rStackLen)) {			\
+	rtl_triggerFault(M, "stack-underflow",			\
+			 "RStack underflow in interpreter.");	\
+	goto interp_cleanup;					\
+      }								\
+    })								\
   // End of multi-line macro
 
 #ifdef RTL_TRACE_FN_CALLS
@@ -1151,15 +1198,16 @@ char const *rtl_typeName(rtl_WordType type)
 #define VPEEK(N) (M->vStack[M->vStackLen - ((N) + 1)])
 
 // This is the decode/dispatch template for all hard-coded binary operators.
-#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_ERR, TYPE_MK, TYPE_VAL)	\
+#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_NAME, TYPE_MK, TYPE_VAL)	\
       case RTL_OP_##INAME:						\
 	VSTACK_ASSERT_LEN(2);						\
 									\
 	b = VPOP();							\
 	a = VPOP();							\
 									\
-	if (unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b))) {	\
-	  M->error = TYPE_ERR;						\
+	if (unlikely(unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b)))) { \
+	  rtl_triggerFault(M, "type-mismatch",				\
+			   "Binary operation expected two " TYPE_NAME "."); \
 	  goto interp_cleanup;						\
 	}								\
 									\
@@ -1312,15 +1360,25 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
   func = rtl_reifyFunction(M->codeBase, fn);
 
-  assert(!func->isBuiltin);
+  if (func->isBuiltin) {
+    rptr = rtl_reifyTuple(M, M->env, &len);
+    if (len == 0) {
+      VPUSH(func->as.builtin.cFn(M, NULL, 0));
+    } else {
+      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
+
+      VPUSH(func->as.builtin.cFn(M, rptr, len));
+    }
+
+    goto interp_cleanup;
+  }
 
   M->pc = NULL;
   RPUSH(func->name);
 
   M->pc    = func->as.lisp.code;
-  M->error = RTL_OK;
 
-  while (M->error == RTL_OK) {
+  while (!M->fault) {
     /* printf("VSTACK:"); */
     /* for (i = 0; i < M->vStackLen; i++) { */
     /*   printf(" "); */
@@ -1529,7 +1587,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       M->pc = readWord(M->pc, &literal);
 
       if (unlikely(M->dStackLen == 0)) {
-	M->error = RTL_ERR_STACK_UNDERFLOW;
+	rtl_triggerFault(M, "stack-underflow",
+			 "DStack underflow in interpreter.");
 	goto interp_cleanup;
       }
 
@@ -1931,18 +1990,26 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
     case RTL_OP_UNDEFINED_TAIL:
       M->pc = readWord(M->pc, &literal);
 
-      printf("tried to call undefined function: '%s:%s'\n",
+      printf("Tried to call undefined function %s:%s\n",
 	     rtl_symbolPackageName(literal),
 	     rtl_symbolName(literal));
-      abort();
+
+      rtl_triggerFault(M, "undefined-variable",
+		       "Tried to reference undefined variable");
+      break;
 
     case RTL_OP_UNDEFINED_VAR:
       M->pc = readWord(M->pc, &literal);
 
-      printf("tried to load undefined function: '%s:%s'\n",
+      printf("Referenced undefined variable %s:%s\n",
 	     rtl_symbolPackageName(literal),
 	     rtl_symbolName(literal));
-      abort();
+
+      rtl_triggerFault(M, "undefined-variable",
+		       "Tried to reference undefined variable");
+
+
+      break;
 
     case RTL_OP_RETURN:
       assert(M->rStackLen > 0);
@@ -1990,24 +2057,24 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
 
     // Generate code for binary operations using the BINARY_OP macro.
-    BINARY_OP(IADD, +, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+    BINARY_OP(IADD, +, rtl_isInt28, "int28",
 	      rtl_int28, rtl_int28Value);
-    BINARY_OP(ISUB, -, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+    BINARY_OP(ISUB, -, rtl_isInt28, "int28",
 	      rtl_int28, rtl_int28Value);
-    BINARY_OP(IMUL, *, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+    BINARY_OP(IMUL, *, rtl_isInt28, "int28",
 	      rtl_int28, rtl_int28Value);
-    BINARY_OP(IDIV, /, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+    BINARY_OP(IDIV, /, rtl_isInt28, "int28",
 	      rtl_int28, rtl_int28Value);
-    BINARY_OP(IMOD, %, rtl_isInt28, RTL_ERR_EXPECTED_INT28,
+    BINARY_OP(IMOD, %, rtl_isInt28, "int28",
 	      rtl_int28, rtl_int28Value);
 
-    BINARY_OP(FADD, +, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+    BINARY_OP(FADD, +, rtl_isFix14, "fix14",
 	      rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FSUB, -, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+    BINARY_OP(FSUB, -, rtl_isFix14, "fix14",
 	      rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FMUL, *, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+    BINARY_OP(FMUL, *, rtl_isFix14, "fix14",
 	      rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FDIV, /, rtl_isFix14, RTL_ERR_EXPECTED_FIX14,
+    BINARY_OP(FDIV, /, rtl_isFix14, "fix14",
 	      rtl_fix14, rtl_fix14Value);
 
     CMP_OP(LT,  <  0);
@@ -2048,7 +2115,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
  interp_cleanup:
   rtl_popWorkingSet(M);
 
-  M->env = RTL_NIL;
+  M->env = RTL_TUPLE;
 
   return M->vStackLen ? VPOP() : RTL_NIL;
 }
@@ -2169,17 +2236,6 @@ void rtl_emitWordToFunc(rtl_CodeBase *cb, uint32_t fnID, rtl_Word w)
   rtl_emitByteToFunc(cb, fnID, (w >>  8) & 0xFF);
   rtl_emitByteToFunc(cb, fnID, (w >> 16) & 0xFF);
   rtl_emitByteToFunc(cb, fnID, (w >> 24) & 0xFF);
-}
-
-void rtl_emitStringToFunc(rtl_CodeBase *cb, uint32_t fnID, char const *cstr)
-{
-  // TODO: Construct strings
-  abort();
-
-  for (; *cstr != '\0'; cstr++) {
-    rtl_emitByteToFunc(cb, fnID, *cstr);
-  }
-  rtl_emitByteToFunc(cb, fnID, '\0');
 }
 
 uint32_t rtl_nextFuncOffs(rtl_CodeBase *cb, uint32_t fnID)
@@ -2337,6 +2393,42 @@ rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
   return str;
 }
 
+void __rtl_triggerFault(rtl_Machine *M, rtl_Word data)
+{
+  rtl_Word lispHandler;
+
+  if (data == RTL_NIL) {
+    rtl_triggerFault(M, "nil-fault", "Nil was passed as fault data!");
+  } else {
+    lispHandler = rtl_getVar(M, rtl_intern("std", "*error-handler*"));
+
+    rtl_callWithArgs(M, lispHandler, data);
+  }
+}
+
+void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message)
+{
+  rtl_Word data = RTL_NIL,
+           key  = RTL_NIL,
+           val  = RTL_NIL;
+
+  RTL_PUSH_WORKING_SET(M, &data, &key, &val);
+
+  data = RTL_MAP;
+
+  key  = rtl_internSelector(NULL, "type");
+  val  = rtl_internSelector(NULL, type);
+  data = rtl_mapInsert(M, data, key, val);
+
+  key  = rtl_internSelector(NULL, "message");
+  val  = rtl_string(M, message);
+  data = rtl_mapInsert(M, data, key, val);
+
+  rtl_popWorkingSet(M);
+
+  __rtl_triggerFault(M, data);
+}
+
 rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
 {
   rtl_Word const *aptr, *bptr;
@@ -2377,8 +2469,17 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
   rtl_reifyTuple(M, tuple, &inLen);
 
   // TODO: Trigger faults here ...
-  if (inLen < end) abort();
-  if (end < beg) abort();
+  if (unlikely(inLen < end)) {
+    rtl_triggerFault(M, "bad-slice",
+		     "Trying to slice past the end of a tuple.");
+    return RTL_NIL;
+  }
+    
+  if (unlikely(end < beg)) {
+    rtl_triggerFault(M, "bad-slice",
+		     "Trying to slice with end index < beginning index.");
+    return RTL_NIL;
+  }
 
   outLen = end - beg;
 
@@ -2470,3 +2571,38 @@ rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen)
   return tuple;
 }
 
+rtl_Word __rtl_callWithArgs(rtl_Machine *M,
+			    rtl_Word    callable,
+			    rtl_Word    *args,
+			    size_t      argsLen)
+{
+  rtl_Word argsTuple = RTL_NIL,
+           envTuple  = RTL_NIL;
+
+  rtl_Word const *rptr;
+
+  RTL_PUSH_WORKING_SET(M, &argsTuple, &envTuple);
+
+  argsTuple = rtl_tuple(M, args, argsLen);
+
+  switch (rtl_typeOf(callable)) {
+  case RTL_CLOSURE:
+    rptr = __rtl_reifyPtr(M, callable);
+
+    callable = rptr[0];
+    envTuple = rptr[1];
+
+    envTuple = rtl_tuplePushLast(M, envTuple, argsTuple);
+    break;
+
+  case RTL_FUNCTION:
+    envTuple = rtl_tuple(M, &argsTuple, 1);
+    break;
+  }
+
+  M->env = envTuple;
+
+  rtl_popWorkingSet(M);
+
+  return rtl_call(M, callable);
+}

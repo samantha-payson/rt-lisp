@@ -29,19 +29,12 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 
     rtl_compile(C, ns, scratchFnID, w);
 
-    if (C->error.type) {
-      printf("Error compiling expression!\n");
-      asm("int3");
-    }
+    if (!rtl_clearFault(C->M)) {
+      rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RETURN);
 
-    rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RETURN);
+      w = rtl_call(C->M, rtl_function(scratchFnID));
 
-    w = rtl_call(C->M, rtl_function(scratchFnID));
-
-    if (rtl_peekError(C->M) != RTL_OK) {
-      printf("Error running snippet: '%s'\n",
-	     rtl_errString(rtl_getError(C->M)));
-      asm("int3");
+      rtl_clearFault(C->M);
     }
 
     rtl_newFuncVersion(C->M->codeBase, scratchFnID);
@@ -173,31 +166,27 @@ void rtl_repl(rtl_Compiler *C)
   rtl_export(C, rtl_intern("std", "macroexpand"));
 
   while (!feof(stdin)) {
-    printf("\n[crtl] ");
+    printf("\n[ \x1B[1mCRTL\x1B[0m ] ");
     fflush(stdout);
     w = rtl_read(C, stdin);
 
     rtl_compile(C, &useNS, replFnID, w);
 
-    if (C->error.type) {
-      printf("Error compiling expression!\n");
-      asm("int3");
-    }
-
     rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RETURN);
 
-    w = rtl_call(C->M, rtl_function(replFnID));
+    if (!rtl_clearFault(C->M)) {
+      w = rtl_call(C->M, rtl_function(replFnID));
 
-    if (rtl_peekError(C->M) != RTL_OK) {
-      printf("Error running snippet: '%s'\n",
-	     rtl_errString(rtl_getError(C->M)));
+      if (!rtl_checkFault(C->M)) {
+	printf("\n=> ");
+	rtl_formatExpr(C->M, w);
+	printf("\n");
+      } else {
+	printf("\n  \x1B[1mERROR!\x1B[0m\n");
+      }
+
+      rtl_newFuncVersion(C->M->codeBase, replFnID);
     }
-
-    printf("\n=> ");
-    rtl_formatExpr(C->M, w);
-    printf("\n");
-
-    rtl_newFuncVersion(C->M->codeBase, replFnID);
   }
 
   rtl_popWorkingSet(C->M);

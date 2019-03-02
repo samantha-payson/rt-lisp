@@ -322,10 +322,6 @@ void ensureSymCache(rtl_Compiler *C) {
 #undef EXPORT_INTRINSIC
 
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
-  C->error = (rtl_CompilerError) {
-    .type = RTL_COMPILER_OK,
-  };
-
   C->M = M;
 
   memset(C->callSitesByName, 0, sizeof C->callSitesByName);

@@ -126,17 +126,6 @@ typedef struct rtl_Heap {
   rtl_Generation *gen[RTL_MAX_GENERATIONS];
 } rtl_Heap;
 
-typedef enum rtl_Error {
-  RTL_OK,
-  RTL_ERR_INVALID_OPERATION,
-  RTL_ERR_OUT_OF_MEMORY,
-  RTL_ERR_STACK_UNDERFLOW,
-  RTL_ERR_EXPECTED_TUPLE,
-  RTL_ERR_EXPECTED_CONS,
-  RTL_ERR_EXPECTED_INT28,
-  RTL_ERR_EXPECTED_FIX14,
-} rtl_Error;
-
 typedef struct rtl_RetAddr {
   uint8_t  *pc;
   rtl_Word env;
@@ -150,7 +139,6 @@ typedef struct rtl_Machine rtl_Machine;
 typedef rtl_Word (*rtl_BuiltinFn)(rtl_Machine    *M,
 				  rtl_Word const *args,
 				  size_t         argsLen);
-
 
 typedef struct rtl_Function {
   // The name of this function
@@ -203,6 +191,8 @@ typedef struct rtl_CodeBase {
 
 void rtl_initCodeBase(rtl_CodeBase *codeBase);
 
+typedef void (*rtl_FaultHandler)(rtl_Machine *M, rtl_Word data);
+
 typedef rtl_Word **rtl_WorkingSet;
 
 struct rtl_Machine {
@@ -230,9 +220,11 @@ struct rtl_Machine {
   size_t         wsStackLen;
   size_t         wsStackCap;
 
-  rtl_CodeBase *codeBase;
+  bool fault;
 
-  rtl_Error error;
+  rtl_FaultHandler faultHandler;
+
+  rtl_CodeBase *codeBase;
 };
 
 // Initialize the machine M.
@@ -296,30 +288,12 @@ void  __rtl_pushWorkingSet(rtl_Machine *M, rtl_WorkingSet ws, char const *fName)
 void  __rtl_popWorkingSet(rtl_Machine *M, char const *fName);
 #define rtl_popWorkingSet(M) __rtl_popWorkingSet(M, __func__)
 
+
+
 #define RTL_PUSH_WORKING_SET(M, PTRS...)		\
   rtl_Word *___rtl_workingSet___[] = { PTRS, NULL };	\
   rtl_pushWorkingSet(M, ___rtl_workingSet___);		\
   // End of multi-line macro
-
-// Return any pending error from M, or RTL_OK if there is no error. This
-// function does not clear the error.
-static inline
-rtl_Error rtl_peekError(rtl_Machine *M) { return M->error; }
-
-// Return any pending error from M, or RTL_OK if there is no error, then clear
-// the error.
-static inline
-rtl_Error rtl_getError(rtl_Machine *M) {
-  rtl_Error err;
-
-  err      = M->error;
-  M->error = RTL_OK;
-
-  return err;
-}
-
-// Return a human-readable string describing err.
-char const *rtl_errString(rtl_Error err);
 
 // Returns a pointer to a newly allocated block of nbr words. Writes a word of
 // type t with this pointer to w. t must be one of:
@@ -329,12 +303,6 @@ char const *rtl_errString(rtl_Error err);
 //   - RTL_CONS
 //   - RTL_NATIVE
 //   - RTL_CLOSURE
-//
-// Errors:
-//   RTL_ERR_INVALID_OPERATION:  if t is not one of the types listed above.
-//
-//   RTL_ERR_OUT_OF_MEMORY:      if the allocator can't allocate a block of nbr
-//                               words.
 //
 rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr);
 
@@ -389,11 +357,26 @@ bool rtl_isClosure(rtl_Word w) {
 
 #undef _RTL_INSIDE_RT_LISP_H_
 
-void rtl_registerBuiltin(rtl_Compiler  *C,
-			 rtl_Word      name,
-			 rtl_BuiltinFn cFn);
+// Returns word referring to the function.
+rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
+			     rtl_Word      name,
+			     rtl_BuiltinFn cFn);
 
 rtl_Word rtl_call(rtl_Machine *M, rtl_Word addr);
+
+rtl_Word __rtl_callWithArgs(rtl_Machine *M,
+			    rtl_Word    callable,
+			    rtl_Word    *args,
+			    size_t      argsLen);
+
+#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({			\
+      rtl_Word ___callArgs___[]  = { ARGS };				\
+      size_t   ___callArgsLen___ = (sizeof ___callArgs___) / sizeof(rtl_Word); \
+      									\
+      __rtl_callWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___); \
+    })									\
+  // End of multi-line macro
+
 
 rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 
@@ -402,6 +385,27 @@ rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list);
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 			   rtl_NameSpace const *ns,
 			   uint32_t            unresID);
+
+// Trigger a fault from C
+void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message);
+
+// Internal method for triggering a fault, called by rtl_triggerFault.
+void __rtl_triggerFault(rtl_Machine *M, rtl_Word data);
+
+static inline
+bool rtl_checkFault(rtl_Machine *M)
+{
+  return M->fault;
+}
+
+static inline
+bool rtl_clearFault(rtl_Machine *M)
+{
+  bool fault = M->fault;
+
+  M->fault = false;
+  return fault;
+}
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f);
 

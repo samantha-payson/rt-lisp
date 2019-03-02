@@ -790,38 +790,6 @@ void rtl_disasmMacro(rtl_Machine *M, rtl_Word name)
   } return;
 }
 
-char const *rtl_errString(rtl_Error err)
-{
-  switch (err) {
-  case RTL_OK:
-    return "OK -- No Error";
-
-  case RTL_ERR_INVALID_OPERATION:
-    return "Invalid Operation";
-
-  case RTL_ERR_OUT_OF_MEMORY:
-    return "Out of Memory";
-
-  case RTL_ERR_STACK_UNDERFLOW:
-    return "Stack Underflow";
-
-  case RTL_ERR_EXPECTED_TUPLE:
-    return "Expected Tuple";
-
-  case RTL_ERR_EXPECTED_CONS:
-    return "Expected Cons";
-
-  case RTL_ERR_EXPECTED_INT28:
-    return "Expected Int28";
-
-  case RTL_ERR_EXPECTED_FIX14:
-    return "Expected Fix14";
-
-  default:
-    return "[Uknown Error]";
-  }
-}
-
 bool rtl_debugCheckForCycles(rtl_Machine *M)
 {
   size_t i, j;
@@ -916,5 +884,17 @@ void rtl_dumpHeap(rtl_Machine *M)
     }
 
     printf("  ------------------------\n");
+  }
+}
+
+void rtl_stackTrace(rtl_Machine *M)
+{
+  size_t i;
+
+  printf("Stack Trace (most recent at bottom):\n");
+  for (i = 0; i < M->rStackLen; i++) {
+    printf("        %s:%s\n",
+	   rtl_symbolPackageName(M->rStack[i].fn),
+	   rtl_symbolName(M->rStack[i].fn));
   }
 }

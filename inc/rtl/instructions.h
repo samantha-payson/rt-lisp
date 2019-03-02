@@ -18,6 +18,9 @@
 #endif
 
 typedef enum rtl_Opcode {
+  // Trigger Fault
+  RTL_OP_FAULT,
+
   // No-op
   RTL_OP_NOP,
 
