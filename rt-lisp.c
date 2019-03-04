@@ -219,68 +219,11 @@ rtl_Word mkPtr(rtl_WordType t, uint32_t gen, uint32_t offs)
   return ((__rtl_genCapacity(gen) | offs) << 4) | t;
 }
 
-static
-void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w);
-
-// TODO: Profiling shows that this is the slowest function in the interpreter BY
-//       FAR. It takes more than 50% of our runtime, probably more than 80% if I
-//       did the math out...
-//
-//       The most likely way to fix this is to have the bitmap stored at the
-//       beginning of each node in the HAMT, rather than keeping it in a
-//       header. This will allow us to avoid marking the same words over and
-//       over, which is what we're currently doing.
-//
-//       The current version doesn't allow the GC to capitalize on shared state
-//       between maps, which is completely unacceptable from a performance
-//       perspective.
-static
-void markMap(rtl_Machine *M, rtl_Generation *gen, rtl_Word map, uint32_t mask)
-{
-  size_t         i,
-                 len;
-
-  rtl_Word const *entry,
-                 *rptr;
-
-  rtl_Generation *mapGen;
-
-  bool alreadyMarked;
-
-  uint32_t offs, entryOffs;
-
-  if (rtl_isEmptyMap(map) || !rtl_isMap(map)) return;
-
-  mapGen = M->heap.gen[__rtl_ptrGen(map)];
-  if (mapGen->nbr > gen->nbr) return;
-
-  offs = __rtl_ptrOffs(map);
-  rptr  = __rtl_reifyPtr(M, map);
-  len   = __builtin_popcount(mask);
-
-  for (i = 0; i < len; i++) {
-    entry     = rptr + 2*i;
-    entryOffs = offs + 2*i;
-
-    alreadyMarked  = rtl_bmpSetBit(mapGen->marks, entryOffs, true);
-    alreadyMarked &= rtl_bmpSetBit(mapGen->marks, entryOffs + 1, true);
-
-    if (rtl_isHeader(entry[0])) {
-      if (mapGen->nbr != gen->nbr || !alreadyMarked) {
-	markMap(M, gen, entry[1], rtl_headerValue(entry[0]));
-      }
-    } else if (!alreadyMarked) {
-      markWord(M, gen, entry[0]);
-      markWord(M, gen, entry[1]);
-
-    }
-  }
-}
-
 // Mark the memory w points to, for generation g.
 static
 void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
-  uint32_t       wOffs;
+  uint32_t       wOffs,
+                 mask;
 
   size_t         i,
                  len;
@@ -288,7 +231,11 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   rtl_Word const *fields;
 
   // Don't bother with pointers into other generations.
-  if (!rtl_isMap(w) && __rtl_ptrGen(w) != gen->nbr)
+  if (__rtl_ptrGen(w) != gen->nbr)
+    return;
+
+  // Zero pointers don't need marking.
+  if (rtl_isZeroValue(w))
     return;
 
   wOffs = __rtl_ptrOffs(w);
@@ -297,16 +244,16 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   case RTL_TUPLE:
     fields = rtl_reifyTuple(M, w, &len);
 
-    // Mark the length word ..
-    if (unlikely(w == RTL_TUPLE)) break;
-
-    rtl_bmpSetBit(gen->marks, wOffs, true);
+    // First mark the header ..
+    if (rtl_bmpSetBit(gen->marks, wOffs, true)) {
+      // If this bit is set, all of them are. Otherwise, none are.
+      break;
+    }
 
     // .. then each of the element words.
     for (i = 0; i < len; i++) {
-      if (!rtl_bmpSetBit(gen->marks, wOffs + i + 1, true)) {
-	markWord(M, gen, fields[i]);
-      }
+      rtl_bmpSetBit(gen->marks, (wOffs + 1) + i, true);
+      markWord(M, gen, fields[i]);
     }
     break;
 
@@ -314,13 +261,29 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     len = rtl_sizeOfNative(M, w);
     for (i = 0; i < (len + 2) / 3 + 1; i++) {
       if (rtl_bmpSetBit(gen->marks, wOffs + i, true)) {
-	// If any bit is set, then all of them are.
-	break;
+        // If any bit is set, then all of them are.
+        break;
       }
     } break;
 
   case RTL_MAP:
-    markMap(M, gen, w, 1);
+    fields = __rtl_reifyPtr(M, w);
+
+    mask = rtl_headerValue(fields[0]);
+    len  = __builtin_popcount(mask);
+
+    // First mark the mask ..
+    if (rtl_bmpSetBit(gen->marks, wOffs, true)) {
+      // If this bit is set, all of them are. Otherwise, none are.
+      break;
+    }
+
+    // .. then each of the entries.
+    for (i = 0; i < 2*len; i++) {
+      rtl_bmpSetBit(gen->marks, wOffs + 1 + i, true);
+      markWord(M, gen, fields[i + 1]);
+    }
+
     break;
 
   case RTL_CLOSURE:
@@ -359,7 +322,7 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   uint32_t oldOffs, newOffs;
   rtl_Generation *gen, *nextGen;
 
-  if (!rtl_isPtr(w) || unlikely(unlikely(w == RTL_MAP) || unlikely(w == RTL_TUPLE))) {
+  if (!rtl_isPtr(w) || rtl_isZeroValue(w)) {
     return w;
   }
 
@@ -441,15 +404,7 @@ int collectGen(rtl_Machine *M, int g)
   // .. any words in live working sets ..
   for (i = 0; i < M->wsStackLen; i++) {
     for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
-      if (unlikely(rtl_isHeader(*pp[j]))) {
-	rtl_Word const *header, *map;
-	header = pp[j++];
-	map    = pp[j];
-
-	markMap(M, gen, *map, rtl_headerValue(*header));
-      } else {
-	markWord(M, gen, *pp[j]);
-      }
+      markWord(M, gen, *pp[j]);
     }
   }
 
@@ -687,16 +642,14 @@ uint32_t mask32(unsigned k) {
 
 // IMPORTANT: Always returns 0 at depth 0.
 uint32_t hashKey(uint32_t key, uint32_t depth) {
-  return (key ^ key*(depth + 1)) % 28;
+  return (key >> depth) % 28;
 }
 
 rtl_Word __rtl_mapInsert(rtl_Machine *M,
-			 uint32_t    *newMask,
-			 uint32_t    mask,
-			 rtl_Word    map,
-			 rtl_Word    key,
-			 rtl_Word    val,
-			 uint32_t    depth)
+                         rtl_Word    map,
+                         rtl_Word    key,
+                         rtl_Word    val,
+                         uint32_t    depth)
 {
   rtl_Word const *backing,
                  *entry;
@@ -707,122 +660,117 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
   rtl_Word newMap      = RTL_NIL,
            newInnerMap = RTL_NIL;
 
-  rtl_Word newMapTmpMask      = RTL_HEADER,
-           newInnerMapTmpMask = RTL_HEADER;
-
-  uint32_t index,
+  uint32_t mask,
+           newMask,
+           index,
            hash,
            otherHash,
            len,
-           innerMask,
-           newInnerMask;
+           innerMask;
 
-  RTL_PUSH_WORKING_SET(M, &map, &key, &val,
-		       &newMapTmpMask,      &newMap,
-		       &newInnerMapTmpMask, &newInnerMap);
+  RTL_PUSH_WORKING_SET(M, &map, &key, &val, &newMap, &newInnerMap);
 
   hash    = hashKey(key, depth);
-  len     = __builtin_popcount(mask);
-  index   = __builtin_popcount(mask32(hash) & mask);
   backing = __rtl_reifyPtr(M, map);
-  entry   = backing + 2*index;
+
+  mask = rtl_headerValue(backing[0]);
+
+  len   = __builtin_popcount(mask);
+  index = __builtin_popcount(mask32(hash) & mask);
+
+  entry = backing + 1 + 2*index;
 
   if (mask & (1 << hash)) { // There's something in this slot already
     if (rtl_isHeader(entry[0])) { // It's a sub-map.
-      innerMask = rtl_headerValue(entry[0]);
-
       newInnerMap = __rtl_mapInsert(M,
-				    &newInnerMask,
-				    innerMask,
-				    entry[1],
-				    key,
-				    val,
-				    depth + 1);
-      newInnerMapTmpMask = rtl_header(newInnerMask);
+                                    entry[1],
+                                    key,
+                                    val,
+                                    depth + 1);
 
-      newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
-      *newMask   = mask; // Mask doesn't change
-
-      newMapTmpMask = rtl_header(mask);
+      newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 1 + 2*len);
 
       backing = __rtl_reifyPtr(M, map);
 
-      memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
-      newEntry = newBacking + 2*index;
+      memcpy(newBacking, backing, sizeof(rtl_Word)*(1 + 2*len));
+      newEntry = newBacking + 1 + 2*index;
 
-      newEntry[0] = rtl_header(newInnerMask);
+      newEntry[0] = rtl_header(0); // Placeholder, to indicate submap.
       newEntry[1] = newInnerMap;
 
     } else if (entry[0] == key) { // It's an entry with the same key.
-      newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
-      *newMask   = mask; // Mask doesn't change
-      newMapTmpMask = rtl_header(mask);
+      if (entry[1] == val) {
+        newMap = map; // Same key and same value, no need for a new map...
+      } else {
+        newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 1 + 2*len);
 
-      backing = __rtl_reifyPtr(M, map);
-      entry   = backing + 2*index;
+        backing = __rtl_reifyPtr(M, map);
+        entry   = backing + 1 + 2*index;
 
-      memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
-      newEntry = newBacking + 2*index;
+        memcpy(newBacking, backing, sizeof(rtl_Word)*(1 + 2*len));
+        newEntry = newBacking + 1 + 2*index;
 
-      newEntry[1] = val;
-
+        newEntry[1] = val;
+      }
     } else { // It's an entry with a different key.
 
       // Create a new singleton map containing only the old element.
-      newBacking = rtl_allocGC(M, RTL_MAP, &newInnerMap, 2);
+      newBacking = rtl_allocGC(M, RTL_MAP, &newInnerMap, 3);
       otherHash  = hashKey(entry[0], depth + 1);
       innerMask  = 1 << otherHash;
-      newInnerMapTmpMask = rtl_header(innerMask);
 
+      // Reload backing -- allocGC may have moved it.
       backing = __rtl_reifyPtr(M, map);
-      entry   = backing + 2*index;
+      entry   = backing + 1 + 2*index;
 
-      newBacking[0] = entry[0];
-      newBacking[1] = entry[1];
+      newBacking[0] = rtl_header(innerMask);
+
+      newBacking[1] = entry[0];
+      newBacking[2] = entry[1];
 
       // Insert key/val into the singleton map.
       newInnerMap = __rtl_mapInsert(M,
-				    &newInnerMask,
-				    innerMask,
-				    newInnerMap,
-				    key,
-				    val,
-				    depth + 1);
-      newInnerMapTmpMask = rtl_header(newInnerMask);
+                                    newInnerMap,
+                                    key,
+                                    val,
+                                    depth + 1);
 
-      newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*len);
-      *newMask   = mask;
-      newMapTmpMask = rtl_header(mask);
+      newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 1 + 2*len);
 
+      // Again, reload backing -- allocGC may have moved it.
       backing = __rtl_reifyPtr(M, map);
-      entry   = backing + 2*index;
+      entry   = backing + 1 + 2*index;
 
-      memcpy(newBacking, backing, sizeof(rtl_Word)*2*len);
-      newEntry = newBacking + 2*index;
+      memcpy(newBacking, backing, sizeof(rtl_Word)*(1 + 2*len));
+      newEntry = newBacking + 1 + 2*index;
 
-      newEntry[0] = rtl_header(newInnerMask);
+      newEntry[0] = rtl_header(0); // Marker
       newEntry[1] = newInnerMap;
     }
   } else { // There's nothing in this slot yet
-    newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2*(len + 1));
-    *newMask   = mask | (1 << hash);
+    
+    newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 1 + 2*(len + 1));
+    newMask    = mask | (1 << hash);
 
+    // Reload backing -- allocGC may have moved it.
     backing = __rtl_reifyPtr(M, map);
-    entry   = backing + 2*index;
+    entry   = backing + 1 + 2*index;
 
     // Copy everything before the new slot ..
-    memcpy(newBacking, backing, sizeof(rtl_Word)*2*index);
-    newEntry = newBacking + 2*index;
+    memcpy(newBacking + 1, backing + 1, sizeof(rtl_Word)*2*index);
+    newEntry = newBacking + 1 + 2*index;
 
     // .. then fill the new slot ..
     newEntry[0] = key;
     newEntry[1] = val;
 
     // .. then copy everything after the new slot.
-    memcpy(newBacking + 2*index + 2,
-	   backing + 2*index,
-	   sizeof(rtl_Word)*2*(len - index));
-  }
+    memcpy(newBacking + 1 + 2*index + 2,
+           backing + 1 + 2*index,
+           sizeof(rtl_Word)*2*(len - index));
+
+    newBacking[0] = rtl_header(newMask);
+}
 
   rtl_popWorkingSet(M);
 
@@ -831,33 +779,41 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 
 
 rtl_Word rtl_mapInsert(rtl_Machine *M,
-		       rtl_Word    map,
-		       rtl_Word    key,
-		       rtl_Word    val)
+                       rtl_Word    map,
+                       rtl_Word    key,
+                       rtl_Word    val)
 {
-  uint32_t dummy;
-  rtl_Word newMap;
-  rtl_Word *newBacking;
+  rtl_Word *backing;
+  uint32_t hash, mask;
 
-  if (rtl_isEmptyMap(map)) {
-    newBacking = rtl_allocGC(M, RTL_MAP, &newMap, 2);
+  if (map == RTL_MAP) {
+    RTL_PUSH_WORKING_SET(M, &map, &key, &val);
 
-    newBacking[0] = key;
-    newBacking[1] = val;
+    backing = rtl_allocGC(M, RTL_MAP, &map, 3);
 
-    return newMap;
+    hash = hashKey(key, 0);
+    mask = 1 << hash;
+
+    backing[0] = rtl_header(mask);
+    backing[1] = key;
+    backing[2] = val;
+
+    rtl_popWorkingSet(M);
+
+    return map;
+  } else {
+    return __rtl_mapInsert(M, map, key, val, 0);
   }
-
-  return __rtl_mapInsert(M, &dummy, 1, map, key, val, 0);
 }
 
 rtl_Word __rtl_mapLookup(rtl_Machine *M,
-			 rtl_Word    map,
-			 rtl_Word    key,
-			 uint32_t    mask,
-			 uint32_t    depth)
+                         rtl_Word    map,
+                         rtl_Word    key,
+                         rtl_Word    def,
+                         uint32_t    depth)
 {
-  uint32_t hash,
+  uint32_t mask,
+           hash,
            index;
 
   rtl_Word const *backing,
@@ -865,30 +821,72 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
 
   hash = hashKey(key, depth);
 
-  if (!rtl_isEmptyMap(map) && (mask & (1 << hash))) {
-    index   = __builtin_popcount(mask32(hash) & mask);
+  if (!rtl_isEmptyMap(map)) {
     backing = __rtl_reifyPtr(M, map);
-    entry   = backing + 2*index;
+    mask    = rtl_headerValue(backing[0]);
+
+    if ((mask & (1 << hash)) == 0) {
+      return def;
+    }
+
+    index = __builtin_popcount(mask32(hash) & mask);
+    entry = backing + 1 + 2*index;
 
     if (rtl_isHeader(entry[0])) {
       return __rtl_mapLookup(M,
-			     entry[1],
-			     key,
-			     rtl_headerValue(entry[0]),
-			     depth + 1);
+                             entry[1],
+                             key,
+                             def,
+                             depth + 1);
     } else if (entry[0] == key) {
       return entry[1];
     } else {
-      return RTL_NIL;
+      return def;
     }
   } else {
-    return RTL_NIL;
+    return def;
   }
 }
 
-rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key)
+rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
 {
-  return __rtl_mapLookup(M, map, key, 1, 0);
+  return __rtl_mapLookup(M, map, key, def, 0);
+}
+
+void rtl_visitMap(rtl_Machine      *M,
+                  void             *accum,
+                  rtl_MapVisitorFn fn,
+                  rtl_Word         map)
+{
+  uint32_t mask,
+           len,
+           i;
+
+  rtl_Word const *backing,
+                 *entry;
+
+  if (rtl_isZeroValue(map)) {
+    return;
+  }
+
+  RTL_PUSH_WORKING_SET(M, &map);
+
+  backing = __rtl_reifyPtr(M, map);
+  mask    = rtl_headerValue(backing[0]);
+  len     = __builtin_popcount(mask);
+
+  for (i = 0; i < len; i++) {
+    backing = __rtl_reifyPtr(M, map);
+    entry   = backing + 1 + 2*i;
+
+    if (rtl_isHeader(entry[0])) {
+      rtl_visitMap(M, accum, fn, entry[1]);
+    } else {
+      fn(M, accum, entry[0], entry[1]);
+    }
+  }
+
+  rtl_popWorkingSet(M);
 }
 
 rtl_Word rtl_std_handleFault(rtl_Machine    *M,
@@ -1358,6 +1356,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   // Ensure these words are involved in any garbage collection that may happen.
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
+  assert(M->env != RTL_NIL);
+
   func = rtl_reifyFunction(M->codeBase, fn);
 
   if (func->isBuiltin) {
@@ -1551,13 +1551,13 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       b = VPOP(); // Key
       a = VPOP(); // Map
 
-      VPUSH(rtl_mapLookup(M, a, b));
+      VPUSH(rtl_mapLookup(M, a, b, RTL_NIL));
       break;
 
     case RTL_OP_DYN_GET:
       M->pc = readWord(M->pc, &literal);
 
-      VPUSH(rtl_mapLookup(M, M->dynamic, literal));
+      VPUSH(rtl_mapLookup(M, M->dynamic, literal, RTL_NIL));
       break;
 
     case RTL_OP_DYN_SET:
@@ -1577,7 +1577,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       }
 
       // Save the old value
-      M->dStack[M->dStackLen++] = rtl_mapLookup(M, M->dynamic, literal);
+      M->dStack[M->dStackLen++] = rtl_mapLookup(M, M->dynamic, literal, RTL_NIL);
 
       // Set the new
       M->dynamic = rtl_mapInsert(M, M->dynamic, literal, VPOP());
@@ -2309,7 +2309,7 @@ void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word val)
 
 rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
 {
-  return rtl_mapLookup(M, M->dynamic, key);
+  return rtl_mapLookup(M, M->dynamic, key, RTL_NIL);
 }
 
 bool rtl_isString(rtl_Machine *M, rtl_Word w)

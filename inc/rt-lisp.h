@@ -332,6 +332,11 @@ int rtl_isPtr(rtl_Word w) {
 }
 
 static inline
+bool rtl_isZeroValue(rtl_Word w) {
+  return (w >> 4) == 0;
+}
+
+static inline
 bool rtl_isClosure(rtl_Word w) {
   return rtl_typeOf(w) == w;
 }

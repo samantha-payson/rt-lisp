@@ -28,10 +28,23 @@ static inline
 bool rtl_isEmptyMap(rtl_Word w) { return w == RTL_MAP; }
 
 rtl_Word rtl_mapInsert(rtl_Machine *M,
-		       rtl_Word    map,
-		       rtl_Word    key,
-		       rtl_Word    val);
+                       rtl_Word    map,
+                       rtl_Word    key,
+                       rtl_Word    val);
 
-rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key);
+rtl_Word rtl_mapLookup(rtl_Machine *M,
+                       rtl_Word    map,
+                       rtl_Word    key,
+                       rtl_Word    def);
 
 rtl_Word rtl_mapDelete(rtl_Machine *M, rtl_Word map, rtl_Word key);
+
+typedef void (*rtl_MapVisitorFn)(rtl_Machine *M,
+                                 void        *accum,
+                                 rtl_Word    key,
+                                 rtl_Word    val);
+
+void rtl_visitMap(rtl_Machine      *M,
+                  void             *accum,
+                  rtl_MapVisitorFn fn,
+                  rtl_Word         map);

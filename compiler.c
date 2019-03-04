@@ -332,42 +332,48 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
 			rtl_NameSpace const *ns,
 			rtl_Word sxp);
 
-rtl_Word rtl_resolveMap(rtl_Compiler *C,
-			rtl_NameSpace const *ns,
-			uint32_t mask,
-			rtl_Word map)
+typedef struct mapAccum {
+  rtl_Compiler         *C;
+  rtl_NameSpace const  *ns;
+  rtl_Word             map;
+} mapAccum;
+
+static
+void __resolveMapEntry(rtl_Machine *M,
+                      void         *vaccum,
+                      rtl_Word     key,
+                      rtl_Word     val)
 {
-  rtl_Word const *rptr, *entry;
-  size_t   len,
-           i;
+  mapAccum *acc = (mapAccum *)vaccum;
 
-  rtl_Word *wptr, *newEntry;
+  RTL_PUSH_WORKING_SET(M, &key, &val);
 
-  rtl_Word newMap = RTL_NIL;
+  key = rtl_resolveAll(acc->C, acc->ns, key);
+  val = rtl_resolveAll(acc->C, acc->ns, val);
 
-  RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
+  acc->map = rtl_mapInsert(M, acc->map, key, val);
 
-  len  = __builtin_popcount(mask);
+  rtl_popWorkingSet(M);
+}
 
-  wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
-  rptr = __rtl_reifyPtr(C->M, map);
+rtl_Word rtl_resolveMap(rtl_Compiler *C,
+                        rtl_NameSpace const *ns,
+                        uint32_t mask,
+                        rtl_Word map)
+{
+  mapAccum acc = {
+    .C   = C,
+    .ns  = ns,
+    .map = RTL_MAP,
+  };
 
-  memcpy(wptr, rptr, sizeof(rtl_Word)*2*len);
+  RTL_PUSH_WORKING_SET(C->M, &map, &acc.map);
 
-  for (i = 0; i < len; i++) {
-    entry    = rptr + 2*i;
-    newEntry = wptr + 2*i;
+  rtl_visitMap(C->M, &acc, __resolveMapEntry, map);
 
-    if (rtl_isHeader(entry[0])) {
-      newEntry[1] = rtl_resolveMap(C, ns, rtl_headerValue(entry[0]), entry[1]);
-      newEntry[0] = rtl_resolveAll(C, ns, entry[0]);
-    } else {
-      newEntry[0] = rtl_resolveAll(C, ns, entry[0]);
-      newEntry[1] = rtl_resolveAll(C, ns, entry[1]);
-    }
-  }
+  rtl_popWorkingSet(C->M);
 
-  return newMap;
+  return acc.map;
 }
 
 rtl_Word rtl_resolveAll(rtl_Compiler *C,
@@ -392,11 +398,8 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
     break;
 
   case RTL_MAP:
-    if (rtl_isEmptyMap(in)) {
-      out = in;
-    } else {
-      out = rtl_resolveMap(C, ns, 1, in);
-    } break;
+    out = rtl_resolveMap(C, ns, 1, in);
+    break;
 
   case RTL_TUPLE:
     rtl_reifyTuple(C->M, in, &len);
@@ -422,44 +425,43 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
   return out;
 }
 
-rtl_Word macroExpandMap(rtl_Compiler        *C,
-			rtl_NameSpace const *ns,
-			rtl_Word            map,
-			uint32_t            mask)
+static
+void __macroExpandEntry(rtl_Machine *M,
+                        void        *vaccum,
+                        rtl_Word    key,
+                        rtl_Word    val)
 {
-  rtl_Word const *rptr, *entry;
-  size_t   len,
-           i;
+  mapAccum *acc = (mapAccum *)vaccum;
 
-  rtl_Word *wptr, *newEntry;
+  RTL_PUSH_WORKING_SET(M, &key, &val);
 
-  rtl_Word newMap = RTL_NIL;
+  key = rtl_macroExpand(acc->C, acc->ns, key);
 
-  RTL_PUSH_WORKING_SET(C->M, &map, &newMap);
+  val = rtl_macroExpand(acc->C, acc->ns, val);
 
-  len  = __builtin_popcount(mask);
+  acc->map = rtl_mapInsert(M, acc->map, key, val);
 
-  wptr = rtl_allocGC(C->M, RTL_MAP, &newMap, 2*len);
-  rptr = __rtl_reifyPtr(C->M, map);
+  rtl_popWorkingSet(M);
+}
 
-  memset(wptr, 0, sizeof(rtl_Word)*2*len);
+static
+rtl_Word macroExpandMap(rtl_Compiler        *C,
+                        rtl_NameSpace const *ns,
+                        rtl_Word            map)
+{
+  mapAccum acc = {
+    .C = C,
+    .ns = ns,
+    .map = RTL_MAP,
+  };
 
-  for (i = 0; i < len; i++) {
-    entry    = rptr + 2*i;
-    newEntry = wptr + 2*i;
+  RTL_PUSH_WORKING_SET(C->M, &map, &acc.map);
 
-    if (rtl_isHeader(entry[0])) {
-      newEntry[1] = macroExpandMap(C, ns, entry[1], rtl_headerValue(entry[0]));
-      newEntry[0] = entry[0];
-    } else {
-      newEntry[0] = rtl_macroExpand(C, ns, entry[0]);
-      newEntry[1] = rtl_macroExpand(C, ns, entry[1]);
-    }
-  }
+  rtl_visitMap(C->M, &acc, __macroExpandEntry, map);
 
   rtl_popWorkingSet(C->M);
 
-  return newMap;
+  return acc.map;
 }
 
 // Expects everything after the 'lambda' symbol of a lambda expression.
@@ -529,11 +531,8 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     } break;
 
   case RTL_MAP:
-    if (rtl_isEmptyMap(in)) {
-      out = in;
-    } else {
-      out = macroExpandMap(C, ns, in, 1);
-    } break;
+    out = macroExpandMap(C, ns, in);
+    break;
 
   case RTL_CONS:
     head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
@@ -786,33 +785,35 @@ void rtl_compile(rtl_Compiler *C,
   rtl_popWorkingSet(C->M);
 }
 
-rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
-			      rtl_Intrinsic *soFar,
-			      rtl_Word      map,
-			      uint32_t      mask)
+typedef struct intrAccum {
+  rtl_Compiler  *C;
+  rtl_Intrinsic *intr;
+} intrAccum;
+
+static
+void __entryToIntrinsic(rtl_Machine *M,
+                        void        *vaccum,
+                        rtl_Word    key,
+                        rtl_Word    val)
 {
-  rtl_Word const *rptr,
-                 *entry;
+  intrAccum *acc = (intrAccum *)vaccum;
 
-  size_t         len,
-                 i;
+  acc->intr = rtl_mkInsertIntrinsic(acc->intr,
+                                    rtl_exprToIntrinsic(acc->C, key),
+                                    rtl_exprToIntrinsic(acc->C, val));
+}
 
-  rptr = __rtl_reifyPtr(C->M, map);
-  len  = __builtin_popcount(mask);
+rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
+                              rtl_Word      map)
+{
+  intrAccum acc = {
+    .C    = C,
+    .intr = rtl_mkConstantIntrinsic(RTL_MAP),
+  };
 
-  for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
+  rtl_visitMap(C->M, &acc, __entryToIntrinsic, map);
 
-    if (rtl_isHeader(entry[0])) {
-      soFar = mapToIntrinsic(C, soFar, entry[1], rtl_headerValue(entry[0]));
-    } else {
-      soFar = rtl_mkInsertIntrinsic(soFar,
-				    rtl_exprToIntrinsic(C, entry[0]),
-				    rtl_exprToIntrinsic(C, entry[1]));
-    }
-  }
-
-  return soFar;
+  return acc.intr;
 }
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
@@ -864,11 +865,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     return rtl_mkTupleIntrinsic(buf, bufLen);
 
   case RTL_MAP:
-    if (rtl_isEmptyMap(sxp)) {
-      return rtl_mkConstantIntrinsic(RTL_MAP);
-    } else {
-      return mapToIntrinsic(C, rtl_mkConstantIntrinsic(RTL_MAP), sxp, 1);
-    } abort(); // unreachable ..
+    return mapToIntrinsic(C, sxp);
 
   case RTL_CONS:
     head = rtl_car(C->M, sxp);
@@ -1823,28 +1820,24 @@ static
 size_t quoteCodeSize(rtl_Machine *M, rtl_Word x);
 
 static
-size_t quoteMapCodeSize(rtl_Machine *M, rtl_Word x, uint32_t mask)
+void __quoteEntryCodeSize(rtl_Machine *M,
+                          void        *vaccum,
+                          rtl_Word    key,
+                          rtl_Word    val)
 {
-  rtl_Word const *rptr, *entry;
-  size_t   len,
-           i,
-           codeSize;
+  size_t *acc = (size_t *)vaccum;
 
-  rptr     = __rtl_reifyPtr(M, x);
-  len      = __builtin_popcount(mask);
-  codeSize = 0;
+  *acc += quoteCodeSize(M, key)
+        + quoteCodeSize(M, val)
+        + 1;
+}
 
-  for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
+static
+size_t quoteMapCodeSize(rtl_Machine *M, rtl_Word map)
+{
+  size_t codeSize = 1;
 
-    if (rtl_isHeader(entry[0])) {
-      codeSize += quoteMapCodeSize(M, entry[1], rtl_headerValue(entry[0]));
-    } else {
-      codeSize += quoteCodeSize(M, entry[0])
-	        + quoteCodeSize(M, entry[1])
-		+ 1;
-    }
-  }
+  rtl_visitMap(M, &codeSize, __quoteEntryCodeSize, map);
 
   return codeSize;
 }
@@ -1873,11 +1866,7 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
          + 1;
 
   case RTL_MAP:
-    if (rtl_isEmptyMap(x)) {
-      return 1;
-    }
-
-    return 1 + quoteMapCodeSize(M, x, 1);
+    return quoteMapCodeSize(M, x);
 
   case RTL_TUPLE:
     codeSize = 0;
@@ -2143,30 +2132,37 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
 static
 void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr);
 
+typedef struct qCodeAccum {
+  rtl_Compiler *C;
+  uint32_t     fnID;
+} qCodeAccum;
+
+static
+void __emitEntryQuoteCode(rtl_Machine *M,
+                          void        *vaccum,
+                          rtl_Word    key,
+                          rtl_Word    val)
+{
+  qCodeAccum *acc = (qCodeAccum *)vaccum;
+
+  emitQuoteCode(acc->C, acc->fnID, key);
+  emitQuoteCode(acc->C, acc->fnID, val);
+  rtl_emitByteToFunc(acc->C->M->codeBase, acc->fnID, RTL_OP_INSERT);
+}
+
 static
 void emitMapQuoteCode(rtl_Compiler        *C,
-		      uint16_t            fnID,
-		      rtl_Word            map,
-		      uint32_t            mask)
+                      uint32_t            fnID,
+                      rtl_Word            map)
 {
-  rtl_Word const *rptr, *entry;
-  size_t   len,
-           i;
+  qCodeAccum acc = {
+    .C    = C,
+    .fnID = fnID,
+  };
 
-  rptr = __rtl_reifyPtr(C->M, map);
-  len  = __builtin_popcount(mask);
+  rtl_emitByteToFunc(C->M->codeBase, fnID, RTL_OP_MAP);
 
-  for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
-
-    if (rtl_isHeader(entry[0])) {
-      emitMapQuoteCode(C, fnID, entry[1], rtl_headerValue(entry[0]));
-    } else {
-      emitQuoteCode(C, fnID, entry[0]);
-      emitQuoteCode(C, fnID, entry[1]);
-      rtl_emitByteToFunc(C->M->codeBase, fnID, RTL_OP_INSERT);
-    }
-  }
+  rtl_visitMap(C->M, &acc, __emitEntryQuoteCode, map);
 }
 
 static
@@ -2204,10 +2200,8 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
     break;
 
   case RTL_MAP:
-    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_MAP);
-    if (!rtl_isEmptyMap(expr)) {
-      emitMapQuoteCode(C, fnID, expr, 1);
-    } break;
+    emitMapQuoteCode(C, fnID, expr);
+    break;
 
   case RTL_TUPLE:
     rptr = rtl_reifyTuple(C->M, expr, &len);

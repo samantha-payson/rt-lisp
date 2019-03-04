@@ -309,6 +309,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
            i;
 
   rtl_Word w = RTL_NIL,
+           k = RTL_NIL,
+           v = RTL_NIL,
            *ptr;
 
   RTL_PUSH_WORKING_SET(C->M, &w);
@@ -333,7 +335,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     break;
 
   case '{': {
-    RTL_PUSH_WORKING_SET(C->M, &w);
+    RTL_PUSH_WORKING_SET(C->M, &w, &k, &v);
 
     n = rtl_readDelim(C, f, '}');
 
@@ -342,15 +344,16 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     w = rtl_emptyMap();
 
     for (i = 0; i*2 < n; i++) {
-      w = rtl_mapInsert(C->M,
-			w,
-			C->M->vStack[C->M->vStackLen - n + i*2],
-			C->M->vStack[C->M->vStackLen - n + i*2 + 1]);
+      k = C->M->vStack[C->M->vStackLen - n + i*2];
+      v = C->M->vStack[C->M->vStackLen - n + i*2 + 1];
+      w = rtl_mapInsert(C->M, w, k, v);
     }
 
     C->M->vStackLen -= n;
 
     rtl_popWorkingSet(C->M);
+
+
 
   } break;
 

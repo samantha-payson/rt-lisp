@@ -137,22 +137,25 @@ void rtl_formatExprShallow(rtl_Word w)
   }
 }
 
-void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
+void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent)
 {
   rtl_Word const *rptr, *entry;
+  uint32_t mask;
   size_t   len,
            i;
 
-  if (rtl_isEmptyMap(map)) return;
+  if (rtl_isZeroValue(map)) return;
 
   rptr = __rtl_reifyPtr(M, map);
-  len  = __builtin_popcount(mask);
+  mask = rtl_headerValue(rptr[0]);
+
+  len = __builtin_popcount(mask);
 
   for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
+    entry = rptr + 1 + 2*i;
 
     if (rtl_isHeader(entry[0])) {
-      __rtl_formatMap(M, entry[1], indent, rtl_headerValue(entry[0]));
+      __rtl_formatMap(M, entry[1], indent);
     } else {
       rtl_formatExprIndented(M, entry[0], indent + 1);
       printf(" ");
@@ -162,24 +165,27 @@ void __rtl_formatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
   }
 }
 
-void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent, uint32_t mask)
+void __rtl_debugFormatMap(rtl_Machine *M, rtl_Word map, int indent)
 {
   rtl_Word const *rptr, *entry;
+  uint32_t mask;
   size_t   len,
            i;
 
-  if (rtl_isEmptyMap(map)) return;
+  if (rtl_isZeroValue(map)) return;
 
   rptr = __rtl_reifyPtr(M, map);
-  len  = __builtin_popcount(mask);
+  mask = rtl_headerValue(rptr[0]);
+
+  len = __builtin_popcount(mask);
 
   printf("%04Xg%d#%d{ ", __rtl_ptrOffs(map), (int)__rtl_ptrGen(map), (int)len);
 
   for (i = 0; i < len; i++) {
-    entry = rptr + 2*i;
+    entry = rptr + 1 + 2*i;
 
     if (rtl_isHeader(entry[0])) {
-      __rtl_debugFormatMap(M, entry[1], indent, rtl_headerValue(entry[0]));
+      __rtl_debugFormatMap(M, entry[1], indent);
     } else {
       rtl_formatExprIndented(M, entry[0], indent + 1);
       printf(" ");
@@ -239,7 +245,7 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
       printf("{}");
     } else {
       printf("{ ");
-      __rtl_formatMap(M, w, indent, 1);
+      __rtl_formatMap(M, w, indent);
       printf("}");
     }
     break;
