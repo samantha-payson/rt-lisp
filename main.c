@@ -20,11 +20,11 @@
 
 // This macro is just a helper, designed to be expanded in the middle of a
 // uint8_t[] literal.
-#define I28(N)					\
-  (RTL_INT28 | ((N & 0xF) << 4)),		\
-    ((N & 0xFF0) << 4),				\
-    ((N & 0xFF000) << 4),			\
-    ((N & 0xFF00000) << 4)			\
+#define I28(N)                                  \
+  (RTL_INT28 | ((N & 0xF) << 4)),               \
+    ((N & 0xFF0) << 4),                         \
+    ((N & 0xFF000) << 4),                       \
+    ((N & 0xFF00000) << 4)                      \
 
 rtl_Word builtinHello(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
 {

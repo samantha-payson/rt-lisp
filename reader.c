@@ -27,7 +27,7 @@ void eatWhitespace(FILE *f)
   while (isspace(ch = fgetc(f)) || ch == ',' || ch == ';')
     if (ch == ';')
       while (fgetc(f) != '\n' && !feof(f))
-	;;
+        ;;
 
   ungetc(ch, f);
 }
@@ -53,7 +53,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
       // This atom is too long, complain and abort ...
       buf[next] = '\0';
       printf("An atom must be less than 512 characters...\n     got \"%s\"\n",
-	     buf);
+             buf);
       abort();
     }
 
@@ -125,7 +125,7 @@ int rtl_readDelim(rtl_Compiler *C, FILE *f, int delim)
 
   if (ch == EOF) {
     printf("\n   !!! EOF WHILE READING DELIMITED EXPRESSION  { .delim '%c' }\n\n",
-	   (char)delim);
+           (char)delim);
     abort();
   }
 
@@ -238,7 +238,7 @@ rtl_Word readChar(FILE *f)
       printf("  error: EOF during char constant.\n");
     } else {
       printf("Malformed character constant %02X followed by %c (expected '\\'')\n",
-	     (unsigned)rtl_int28Value(w), ch);
+             (unsigned)rtl_int28Value(w), ch);
     }
 
     abort();
@@ -262,28 +262,28 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
     if (ch == '\\') {
       switch ((ch = fgetc(f))) {
       case '\\':
-	ch = '\\';
-	break;
+        ch = '\\';
+        break;
 
       case '0':
-	ch = '\0';
-	break;
+        ch = '\0';
+        break;
 
       case 'n':
-	ch = '\n';
-	break;
+        ch = '\n';
+        break;
 
       case 'r':
-	ch = '\r';
-	break;
+        ch = '\r';
+        break;
 
       case 't':
-	ch = '\t';
-	break;
+        ch = '\t';
+        break;
 
       default:
-	printf(" !!! BAD ESCAPE '%c' (%02X) IN STRING !!!", ch, (unsigned)ch);
-	break;
+        printf(" !!! BAD ESCAPE '%c' (%02X) IN STRING !!!", ch, (unsigned)ch);
+        break;
       }
     }
 
@@ -293,7 +293,7 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
   if (idx == 2048) {
     buf[32] = '\0';
     printf(" READ ERROR: String longer than 2048 characters,"
-	   " beginning with \"%s...\n", buf);
+           " beginning with \"%s...\n", buf);
     abort();
   }
 

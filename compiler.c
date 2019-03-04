@@ -51,9 +51,9 @@ rtl_CallSiteArray *getCallSiteArray(rtl_Compiler *C, rtl_Word name)
 }
 
 void rtl_registerCallSite(rtl_Compiler *C,
-			  rtl_Word     name,
-			  rtl_Word     fn,
-			  uint32_t     offs)
+                          rtl_Word     name,
+                          rtl_Word     fn,
+                          uint32_t     offs)
 {
   rtl_CallSiteArray *csa;
   uint16_t          fnID;
@@ -97,34 +97,34 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
       switch (code[0]) {
       case RTL_OP_UNDEFINED_CALL:
       case RTL_OP_STATIC_CALL:
-	code[0] = RTL_OP_STATIC_CALL;
-	code[1] = (fn >>  0) & 0xFF;
-	code[2] = (fn >>  8) & 0xFF;
-	code[3] = (fn >> 16) & 0xFF;
-	code[4] = (fn >> 24) & 0xFF;
-	break;
+        code[0] = RTL_OP_STATIC_CALL;
+        code[1] = (fn >>  0) & 0xFF;
+        code[2] = (fn >>  8) & 0xFF;
+        code[3] = (fn >> 16) & 0xFF;
+        code[4] = (fn >> 24) & 0xFF;
+        break;
 
       case RTL_OP_UNDEFINED_TAIL:
       case RTL_OP_STATIC_TAIL:
-	code[0] = RTL_OP_STATIC_TAIL;
-	code[1] = (fn >>  0) & 0xFF;
-	code[2] = (fn >>  8) & 0xFF;
-	code[3] = (fn >> 16) & 0xFF;
-	code[4] = (fn >> 24) & 0xFF;
-	break;
+        code[0] = RTL_OP_STATIC_TAIL;
+        code[1] = (fn >>  0) & 0xFF;
+        code[2] = (fn >>  8) & 0xFF;
+        code[3] = (fn >> 16) & 0xFF;
+        code[4] = (fn >> 24) & 0xFF;
+        break;
 
       case RTL_OP_UNDEFINED_VAR:
       case RTL_OP_CONST:
-	code[0] = RTL_OP_CONST;
-	code[1] = (fn >>  0) & 0xFF;
-	code[2] = (fn >>  8) & 0xFF;
-	code[3] = (fn >> 16) & 0xFF;
-	code[4] = (fn >> 24) & 0xFF;
-	break;
+        code[0] = RTL_OP_CONST;
+        code[1] = (fn >>  0) & 0xFF;
+        code[2] = (fn >>  8) & 0xFF;
+        code[3] = (fn >> 16) & 0xFF;
+        code[4] = (fn >> 24) & 0xFF;
+        break;
 
       default:
-	printf("   !!! Invalid call site !!!\n");
-	abort();
+        printf("   !!! Invalid call site !!!\n");
+        abort();
       }
     }
   }
@@ -147,9 +147,9 @@ void rtl_defineFn(rtl_Compiler *C, rtl_Word name, rtl_Word fn, bool isMacro)
   for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
       if (isMacro) {
-	def->macro = fn;
+        def->macro = fn;
       } else {
-	def->fn = fn;
+        def->fn = fn;
       }
       return;
     }
@@ -215,70 +215,70 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   return rtl_selector(id);
 }
 
-#define MAP_INTRINSICS(M)			\
-  M(cons,         "cons")			\
-  M(car,          "car")			\
-  M(cdr,          "cdr")			\
-  M(tuple,        "tuple")			\
-  M(len,          "len")			\
-  M(get,          "get")			\
-  M(pushFirst,    "push-first")			\
-  M(pushLast,     "push-last")			\
-  M(concat,       "concat")			\
-  M(slice,        "slice")			\
-  M(map,          "map")			\
-  M(insert,       "insert")			\
-  M(lookup,       "lookup")			\
-  M(dynGet,       "dyn-get")			\
-  M(dynSet,       "dyn-set")			\
-  M(bind,         "bind")			\
-  M(var,          "var")			\
-  M(gensym,       "gensym")			\
-  M(call,         "call")			\
-  M(namedCall,    "named-call")			\
-  M(applyList,    "apply-list")			\
-  M(applyTuple,   "apply-tuple")		\
-  M(progn,        "progn")			\
-  M(lambda,       "lambda")			\
-  M(labels,       "labels")			\
-  M(defun,        "defun")			\
-  M(defmacro,     "defmacro")			\
-  M(load,         "load")			\
-  M(quote,        "quote")			\
-  M(inPackage,    "in-package")			\
-  M(usePackage,   "use-package")		\
-  M(aliasPackage, "alias-package")		\
-  M(alias,        "alias")			\
-  M(export,       "export")			\
-  M(iadd,         "iadd")			\
-  M(isub,         "isub")			\
-  M(imul,         "imul")			\
-  M(idiv,         "idiv")			\
-  M(imod,         "imod")			\
-  M(lt,           "lt")				\
-  M(leq,          "leq")			\
-  M(gt,           "gt")				\
-  M(geq,          "geq")			\
-  M(eq,           "eq")				\
-  M(neq,          "neq")			\
-  M(iso,          "iso")			\
-  M(nilp,         "nil?")			\
-  M(symbolp,      "symbol?")			\
-  M(selectorp,    "selector?")			\
-  M(int28p,       "int28?")			\
-  M(fix14p,       "fix14?")			\
-  M(tuplep,       "tuple?")			\
-  M(charp,        "char?")			\
-  M(mapp,         "map?")			\
-  M(consp,        "cons?")			\
-  M(functionp,    "function?")			\
-  M(closurep,     "closure?")			\
-  M(unresolvedp,  "unresolved?")		\
-  M(topp,         "top?")			\
-  M(_if,          "if")				\
+#define MAP_INTRINSICS(M)                       \
+  M(cons,         "cons")                       \
+  M(car,          "car")                        \
+  M(cdr,          "cdr")                        \
+  M(tuple,        "tuple")                      \
+  M(len,          "len")                        \
+  M(get,          "get")                        \
+  M(pushFirst,    "push-first")                 \
+  M(pushLast,     "push-last")                  \
+  M(concat,       "concat")                     \
+  M(slice,        "slice")                      \
+  M(map,          "map")                        \
+  M(insert,       "insert")                     \
+  M(lookup,       "lookup")                     \
+  M(dynGet,       "dyn-get")                    \
+  M(dynSet,       "dyn-set")                    \
+  M(bind,         "bind")                       \
+  M(var,          "var")                        \
+  M(gensym,       "gensym")                     \
+  M(call,         "call")                       \
+  M(namedCall,    "named-call")                 \
+  M(applyList,    "apply-list")                 \
+  M(applyTuple,   "apply-tuple")                \
+  M(progn,        "progn")                      \
+  M(lambda,       "lambda")                     \
+  M(labels,       "labels")                     \
+  M(defun,        "defun")                      \
+  M(defmacro,     "defmacro")                   \
+  M(load,         "load")                       \
+  M(quote,        "quote")                      \
+  M(inPackage,    "in-package")                 \
+  M(usePackage,   "use-package")                \
+  M(aliasPackage, "alias-package")              \
+  M(alias,        "alias")                      \
+  M(export,       "export")                     \
+  M(iadd,         "iadd")                       \
+  M(isub,         "isub")                       \
+  M(imul,         "imul")                       \
+  M(idiv,         "idiv")                       \
+  M(imod,         "imod")                       \
+  M(lt,           "lt")                         \
+  M(leq,          "leq")                        \
+  M(gt,           "gt")                         \
+  M(geq,          "geq")                        \
+  M(eq,           "eq")                         \
+  M(neq,          "neq")                        \
+  M(iso,          "iso")                        \
+  M(nilp,         "nil?")                       \
+  M(symbolp,      "symbol?")                    \
+  M(selectorp,    "selector?")                  \
+  M(int28p,       "int28?")                     \
+  M(fix14p,       "fix14?")                     \
+  M(tuplep,       "tuple?")                     \
+  M(charp,        "char?")                      \
+  M(mapp,         "map?")                       \
+  M(consp,        "cons?")                      \
+  M(functionp,    "function?")                  \
+  M(closurep,     "closure?")                   \
+  M(unresolvedp,  "unresolved?")                \
+  M(topp,         "top?")                       \
+  M(_if,          "if")                         \
   // End of multi-line macro
 
-#define DECLARE_INTRINSIC_WORD(CNAME, LISPNAME)	CNAME,
+#define DECLARE_INTRINSIC_WORD(CNAME, LISPNAME) CNAME,
 
 static struct symCache_t {
   struct {
@@ -292,12 +292,12 @@ static struct symCache_t {
 
 static bool symCacheWasInit;
 
-#define CACHE_INTRINSIC_SYM(CNAME, LISPNAME)	\
-  .CNAME = rtl_intern("intrinsic", LISPNAME),	\
+#define CACHE_INTRINSIC_SYM(CNAME, LISPNAME)    \
+  .CNAME = rtl_intern("intrinsic", LISPNAME),   \
   // End of multi-line macro
 
-#define EXPORT_INTRINSIC(CNAME, LISPNAME)	\
-  rtl_export(C, symCache.intrinsic.CNAME);	\
+#define EXPORT_INTRINSIC(CNAME, LISPNAME)       \
+  rtl_export(C, symCache.intrinsic.CNAME);      \
   // End of multi-line macro
 
 static inline
@@ -309,7 +309,7 @@ void ensureSymCache(rtl_Compiler *C) {
 
     symCache = (struct symCache_t) {
       .intrinsic = {
-	MAP_INTRINSICS(CACHE_INTRINSIC_SYM)
+        MAP_INTRINSICS(CACHE_INTRINSIC_SYM)
       },
     };
   }
@@ -329,8 +329,8 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
 }
 
 rtl_Word rtl_resolveAll(rtl_Compiler *C,
-			rtl_NameSpace const *ns,
-			rtl_Word sxp);
+                        rtl_NameSpace const *ns,
+                        rtl_Word sxp);
 
 typedef struct mapAccum {
   rtl_Compiler         *C;
@@ -377,8 +377,8 @@ rtl_Word rtl_resolveMap(rtl_Compiler *C,
 }
 
 rtl_Word rtl_resolveAll(rtl_Compiler *C,
-			rtl_NameSpace const *ns,
-			rtl_Word in)
+                        rtl_NameSpace const *ns,
+                        rtl_Word in)
 {
   rtl_Word a = RTL_NIL, b = RTL_NIL, out = RTL_NIL;
 
@@ -541,27 +541,27 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
       newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
       out   = rtl_macroExpand(C, &newNS,
-			      rtl_cons(C->M,
-				       rtl_intern("intrinsic", "progn"),
-				       rtl_cddr(C->M, in)));
+                              rtl_cons(C->M,
+                                       rtl_intern("intrinsic", "progn"),
+                                       rtl_cddr(C->M, in)));
 
     } else if (head == symCache.intrinsic.usePackage) {
       name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
       newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
       out   = rtl_macroExpand(C, &newNS,
-			      rtl_cons(C->M,
-				       rtl_intern("intrinsic", "progn"),
-				       rtl_cddr(C->M, in)));
+                              rtl_cons(C->M,
+                                       rtl_intern("intrinsic", "progn"),
+                                       rtl_cddr(C->M, in)));
 
     } else if (head == symCache.intrinsic.aliasPackage) {
       name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
       alias = rtl_macroExpand(C, ns, rtl_cadr(C->M, rtl_cadr(C->M, in)));
       newNS = rtl_nsAliasPackage(ns, rtl_internPackage(C, rtl_symbolName(name)),
-				 rtl_symbolName(alias));
+                                 rtl_symbolName(alias));
       out   = rtl_macroExpand(C, &newNS,
-			      rtl_cons(C->M,
-				       rtl_intern("intrinsic", "progn"),
-				       rtl_cddr(C->M, in)));
+                              rtl_cons(C->M,
+                                       rtl_intern("intrinsic", "progn"),
+                                       rtl_cddr(C->M, in)));
 
     } else if (head == symCache.intrinsic.alias) {
       out = in;
@@ -571,25 +571,25 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
     } else if (head == symCache.intrinsic.lambda) {
       out = rtl_cons(C->M, head,
-		     rtl_macroExpandLambda(C, ns, rtl_cdr(C->M, in)));
+                     rtl_macroExpandLambda(C, ns, rtl_cdr(C->M, in)));
 
     } else if (head == symCache.intrinsic.labels) {
       arg = RTL_NIL;
 
       for (clause = rtl_cadr(C->M, in); clause != RTL_NIL; clause = rtl_cdr(C->M, clause)) {
-	name = rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caar(C->M, clause)));
-	arg  = rtl_cons(C->M, rtl_cons(C->M, name,
-				       rtl_macroExpandLambda(C, ns, rtl_cdar(C->M, clause))),
-			arg);
+        name = rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caar(C->M, clause)));
+        arg  = rtl_cons(C->M, rtl_cons(C->M, name,
+                                       rtl_macroExpandLambda(C, ns, rtl_cdar(C->M, clause))),
+                        arg);
       }
 
       out = rtl_cons(C->M, arg,
-		     rtl_cons(C->M, head,
-			      RTL_NIL));
+                     rtl_cons(C->M, head,
+                              RTL_NIL));
 
       for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
-	arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-	out = rtl_cons(C->M, arg, out);
+        arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+        out = rtl_cons(C->M, arg, out);
       }
 
       out = rtl_reverseList(C->M, out);
@@ -597,13 +597,13 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     } else if (head == symCache.intrinsic.defun) {
       tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
       tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
-		      tail);
+                      tail);
       out = rtl_cons(C->M, head, tail);
 
     } else if (head == symCache.intrinsic.defmacro) {
       tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
       tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
-		      tail);
+                      tail);
       out = rtl_cons(C->M, head, tail);
 
     } else if (head == symCache.intrinsic.dynGet) {
@@ -611,50 +611,50 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
     } else if (head == symCache.intrinsic.dynSet) {
       tail = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_caddr(C->M, in)),
-		      RTL_NIL);
+                      RTL_NIL);
       tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
-		      tail);
+                      tail);
       out = rtl_cons(C->M, head,
-		     tail);
+                     tail);
 
     } else if (head == symCache.intrinsic.bind) {
       clause = rtl_cadr(C->M, in);
       clause = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_cadr(C->M, clause)),
-			RTL_NIL);
+                        RTL_NIL);
       clause = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caadr(C->M, in))),
-			clause);
+                        clause);
 
       out = RTL_NIL;
 
       for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
-	out = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_car(C->M, tail)),
-		       out);
+        out = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_car(C->M, tail)),
+                       out);
       }
 
       out = rtl_reverseList(C->M, out);
       out = rtl_cons(C->M, head,
-		     rtl_cons(C->M, clause,
-			      out));
+                     rtl_cons(C->M, clause,
+                              out));
 
     } else {
       fnDef = rtl_lookupFn(C->M->codeBase, head);
 
       if (fnDef != NULL && fnDef->macro != RTL_NIL) {
-	out = rtl_macroExpand(C, ns,
-			      rtl_applyList(C->M,
-					    fnDef->macro,
-					    rtl_cdr(C->M, in)));
+        out = rtl_macroExpand(C, ns,
+                              rtl_applyList(C->M,
+                                            fnDef->macro,
+                                            rtl_cdr(C->M, in)));
 
      } else {
-	out = rtl_cons(C->M, head, RTL_NIL);
+        out = rtl_cons(C->M, head, RTL_NIL);
 
-	for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
-	{
-	  arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
-	  out = rtl_cons(C->M, arg, out);
-	}
+        for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
+        {
+          arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+          out = rtl_cons(C->M, arg, out);
+        }
 
-	out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
+        out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
       }
 
     } break;
@@ -676,9 +676,9 @@ static
 void rtl_tailCallPass(rtl_Intrinsic *x);
 
 void rtl_compile(rtl_Compiler *C,
-		 rtl_NameSpace const *ns,
-		 uint32_t fnID,
-		 rtl_Word in)
+                 rtl_NameSpace const *ns,
+                 uint32_t fnID,
+                 rtl_Word in)
 {
   rtl_Word head  = RTL_NIL,
            arg   = RTL_NIL,
@@ -707,8 +707,8 @@ void rtl_compile(rtl_Compiler *C,
       name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
       newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
       rtl_compile(C, &newNS, fnID,
-		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-			   rtl_cddr(C->M, in)));
+                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+                           rtl_cddr(C->M, in)));
 
       rtl_popWorkingSet(C->M);
       return;
@@ -717,8 +717,8 @@ void rtl_compile(rtl_Compiler *C,
       name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
       newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
       rtl_compile(C, &newNS, fnID,
-		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-			   rtl_cddr(C->M, in)));
+                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+                           rtl_cddr(C->M, in)));
 
       rtl_popWorkingSet(C->M);
       return;
@@ -727,10 +727,10 @@ void rtl_compile(rtl_Compiler *C,
       name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
       alias = rtl_macroExpand(C, ns, rtl_cadr(C->M, rtl_cadr(C->M, in)));
       newNS = rtl_nsAliasPackage(ns, rtl_internPackage(C, rtl_symbolName(name)),
-				 rtl_symbolName(alias));
+                                 rtl_symbolName(alias));
       rtl_compile(C, &newNS, fnID,
-		  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-			   rtl_cddr(C->M, in)));
+                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
+                           rtl_cddr(C->M, in)));
 
       rtl_popWorkingSet(C->M);
       return;
@@ -741,14 +741,14 @@ void rtl_compile(rtl_Compiler *C,
 
     } else if (head == symCache.intrinsic.progn) {
       for (tail = rtl_cdr(C->M, in);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	rtl_compile(C, ns, fnID, rtl_car(C->M, tail));
+        rtl_compile(C, ns, fnID, rtl_car(C->M, tail));
 
-	if (rtl_cdr(C->M, tail) != RTL_NIL) {
-	  rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
-	}
+        if (rtl_cdr(C->M, tail) != RTL_NIL) {
+          rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+        }
       }
 
       rtl_popWorkingSet(C->M);
@@ -760,9 +760,9 @@ void rtl_compile(rtl_Compiler *C,
 
     if (fnDef != NULL && fnDef->macro != RTL_NIL) {
       rtl_compile(C, ns, fnID,
-		  rtl_applyList(C->M,
-				fnDef->macro,
-				rtl_cdr(C->M, in)));
+                  rtl_applyList(C->M,
+                                fnDef->macro,
+                                rtl_cdr(C->M, in)));
       rtl_popWorkingSet(C->M);
       return;
     }
@@ -855,8 +855,8 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     rptr = rtl_reifyTuple(C->M, sxp, &len);
     for (i = 0; i < len; i++) {
       if (bufCap == bufLen) {
-	bufCap = !bufCap ? 4 : 2*bufCap;
-	buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        bufCap = !bufCap ? 4 : 2*bufCap;
+        buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
       }
 
       buf[bufLen++] = rtl_exprToIntrinsic(C, rptr[i]);
@@ -874,7 +874,7 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     if (head == symCache.intrinsic.cons) {
       assert(len == 3);
       return rtl_mkConsIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.car) {
       assert(len == 2);
@@ -886,15 +886,15 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
     } else if (head == symCache.intrinsic.tuple) {
       for (tail = rtl_cdr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkTupleIntrinsic(buf, bufLen);
@@ -904,76 +904,76 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
     } else if (head == symCache.intrinsic.get) {
       return rtl_mkGetIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.pushFirst) {
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_FIRST,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.pushLast) {
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_LAST,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.concat) {
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_CONCAT,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.slice) {
       return rtl_mkSliceIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, rtl_cdr(C->M, sxp))));
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, rtl_cdr(C->M, sxp))));
 
     } else if (head == symCache.intrinsic.map) {
       return rtl_mkConstantIntrinsic(RTL_MAP);
 
     } else if (head == symCache.intrinsic.insert) {
       return rtl_mkInsertIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-				   rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+                                   rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
 
     } else if (head == symCache.intrinsic.lookup) {
       return rtl_mkLookupIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.dynGet) {
       return rtl_mkDynGetIntrinsic(rtl_cadr(C->M, sxp));
 
     } else if (head == symCache.intrinsic.dynSet) {
       return rtl_mkDynSetIntrinsic(rtl_cadr(C->M, sxp),
-				   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.bind) {
       for (tail = rtl_cddr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkBindIntrinsic(rtl_car(C->M, rtl_cadr(C->M, sxp)),
-				 rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdadr(C->M, sxp))),
-				 buf,
-				 bufLen);
+                                 rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdadr(C->M, sxp))),
+                                 buf,
+                                 bufLen);
 
     } else if (head == symCache.intrinsic.progn) {
       for (tail = rtl_cdr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkPrognIntrinsic(buf, bufLen);
@@ -982,29 +982,29 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       assert(len >= 2);
 
       for (tail = rtl_cadr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	assert(rtl_isSymbol(rtl_car(C->M, tail)));
+        assert(rtl_isSymbol(rtl_car(C->M, tail)));
 
-	if (argNamesCap == argNamesLen) {
-	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
-	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
-	}
+        if (argNamesCap == argNamesLen) {
+          argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+          argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+        }
 
-	argNames[argNamesLen++] = rtl_car(C->M, tail);
+        argNames[argNamesLen++] = rtl_car(C->M, tail);
       }
 
       for (tail = rtl_cddr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
@@ -1013,124 +1013,124 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       assert(len >= 2);
 
       for (clause = rtl_cadr(C->M, sxp);
-	   clause != RTL_NIL;
-	   clause = rtl_cdr(C->M, clause))
+           clause != RTL_NIL;
+           clause = rtl_cdr(C->M, clause))
       {
-	for (tail = rtl_cadar(C->M, clause);
-	     tail != RTL_NIL;
-	     tail = rtl_cdr(C->M, tail))
-	{
-	  assert(rtl_isSymbol(rtl_car(C->M, tail)));
+        for (tail = rtl_cadar(C->M, clause);
+             tail != RTL_NIL;
+             tail = rtl_cdr(C->M, tail))
+        {
+          assert(rtl_isSymbol(rtl_car(C->M, tail)));
 
-	  if (argNamesCap == argNamesLen) {
-	    argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
-	    argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
-	  }
+          if (argNamesCap == argNamesLen) {
+            argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+            argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+          }
 
-	  argNames[argNamesLen++] = rtl_car(C->M, tail);
-	}
+          argNames[argNamesLen++] = rtl_car(C->M, tail);
+        }
 
-	for (tail = rtl_cddar(C->M, clause);
-	     tail != RTL_NIL;
-	     tail = rtl_cdr(C->M, tail))
-	{
-	  if (bufCap == bufLen) {
-	    bufCap = !bufCap ? 4 : 2*bufCap;
-	    buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	  }
+        for (tail = rtl_cddar(C->M, clause);
+             tail != RTL_NIL;
+             tail = rtl_cdr(C->M, tail))
+        {
+          if (bufCap == bufLen) {
+            bufCap = !bufCap ? 4 : 2*bufCap;
+            buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+          }
 
-	  buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
-	}
+          buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        }
 
-	if (labelsCap == labelsLen) {
-	  labelsCap   = !labelsCap ? 4 : 2*labelsCap;
-	  labels      = realloc(labels, sizeof(rtl_Intrinsic *)*labelsCap);
-	  labelsNames = realloc(labelsNames, sizeof(rtl_Word)*labelsCap);
-	}
+        if (labelsCap == labelsLen) {
+          labelsCap   = !labelsCap ? 4 : 2*labelsCap;
+          labels      = realloc(labels, sizeof(rtl_Intrinsic *)*labelsCap);
+          labelsNames = realloc(labelsNames, sizeof(rtl_Word)*labelsCap);
+        }
 
-	labelsNames[labelsLen] = rtl_caar(C->M, clause);
-	labels[labelsLen++]    = rtl_mkLambdaIntrinsic(argNames, argNamesLen,
-						       buf,      bufLen);
+        labelsNames[labelsLen] = rtl_caar(C->M, clause);
+        labels[labelsLen++]    = rtl_mkLambdaIntrinsic(argNames, argNamesLen,
+                                                       buf,      bufLen);
 
-	argNames    = NULL;
-	argNamesCap = argNamesLen = 0;
+        argNames    = NULL;
+        argNamesCap = argNamesLen = 0;
 
-	buf    = NULL;
-	bufCap = bufLen = 0;
+        buf    = NULL;
+        bufCap = bufLen = 0;
       }
 
       for (tail = rtl_cddr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	  if (bufCap == bufLen) {
-	    bufCap = !bufCap ? 4 : 2*bufCap;
-	    buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	  }
+          if (bufCap == bufLen) {
+            bufCap = !bufCap ? 4 : 2*bufCap;
+            buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+          }
 
-	  buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+          buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkLabelsIntrinsic(labelsNames, labels, labelsLen, buf, bufLen);
 
     } else if (head == symCache.intrinsic.defun ||
-	       head == symCache.intrinsic.defmacro) {
+               head == symCache.intrinsic.defmacro) {
       assert(len >= 3);
 
       name = rtl_cadr(C->M, sxp);
 
       for (tail =  rtl_caddr(C->M, sxp);
-	   rtl_isCons(tail);
-	   tail =  rtl_cdr(C->M, tail))
+           rtl_isCons(tail);
+           tail =  rtl_cdr(C->M, tail))
       {
-	assert(rtl_isSymbol(rtl_car(C->M, tail)));
+        assert(rtl_isSymbol(rtl_car(C->M, tail)));
 
-	if (argNamesCap == argNamesLen) {
-	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
-	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
-	}
+        if (argNamesCap == argNamesLen) {
+          argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+          argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+        }
 
-	argNames[argNamesLen++] = rtl_car(C->M, tail);
+        argNames[argNamesLen++] = rtl_car(C->M, tail);
       }
 
       if (!rtl_isNil(tail)) {
-	assert(rtl_isSymbol(tail));
+        assert(rtl_isSymbol(tail));
 
-	if (argNamesCap == argNamesLen) {
-	  argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
-	  argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
-	}
+        if (argNamesCap == argNamesLen) {
+          argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
+          argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
+        }
 
-	argNames[argNamesLen++] = tail;
-	hasRestArg = true;
+        argNames[argNamesLen++] = tail;
+        hasRestArg = true;
       }
 
       for (tail = rtl_cdddr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       if (head == symCache.intrinsic.defun) {
-	return rtl_mkDefunIntrinsic(name,
-				    argNames,
-				    argNamesLen,
-				    hasRestArg,
-				    buf,
-				    bufLen);
+        return rtl_mkDefunIntrinsic(name,
+                                    argNames,
+                                    argNamesLen,
+                                    hasRestArg,
+                                    buf,
+                                    bufLen);
       } else {
-	return rtl_mkDefmacroIntrinsic(name,
-				       argNames,
-				       argNamesLen,
-				       hasRestArg,
-				       buf,
-				       bufLen);
+        return rtl_mkDefmacroIntrinsic(name,
+                                       argNames,
+                                       argNamesLen,
+                                       hasRestArg,
+                                       buf,
+                                       bufLen);
       }
     } else if (head == symCache.intrinsic.export) {
       assert(len == 2);
@@ -1143,158 +1143,158 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else if (head == symCache.intrinsic.iadd) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IADD,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.isub) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISUB,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.imul) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMUL,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.idiv) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IDIV,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.imod) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMOD,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.lt) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LT,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.leq) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LEQ,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.gt) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GT,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.geq) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GEQ,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.eq) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_EQ,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.neq) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_NEQ,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
       
     } else if (head == symCache.intrinsic.iso) {
       assert(len == 3);
       return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISO,
-				  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.nilp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_NIL,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.symbolp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_SYMBOL,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.selectorp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_SELECTOR,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.int28p) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_INT28,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.fix14p) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_FIX14,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.tuplep) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_TUPLE,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.charp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_CHAR,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.mapp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_MAP,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.consp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_CONS,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.functionp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_FUNCTION,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.closurep) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_CLOSURE,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.unresolvedp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_UNRESOLVED_SYMBOL,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.topp) {
       assert(len == 2);
       return rtl_mkTypePredIntrinsic(RTL_TOP,
-				     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic._if) {
       assert(len == 3 || len == 4);
 
       return rtl_mkIfIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-			       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-			       rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+                               rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+                               rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
 
     } else if (head == symCache.intrinsic.applyList) {
       assert(len == 3);
 
       return rtl_mkApplyListIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				      rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                      rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.applyTuple) {
       assert(len == 3);
 
       return rtl_mkApplyTupleIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-				       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+                                       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
     } else if (head == symCache.intrinsic.gensym) {
       assert(len == 1);
@@ -1304,20 +1304,20 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       assert(len >= 1);
 
       for (tail = rtl_cdr(C->M, sxp);
-	   tail != RTL_NIL;
-	   tail = rtl_cdr(C->M, tail))
+           tail != RTL_NIL;
+           tail = rtl_cdr(C->M, tail))
       {
-	if (bufCap == bufLen) {
-	  bufCap = !bufCap ? 4 : 2*bufCap;
-	  buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-	}
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-	buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
       }
 
       return rtl_mkCallIntrinsic(rtl_exprToIntrinsic(C, rtl_car(C->M, sxp)),
-				 buf,
-				 bufLen);
+                                 buf,
+                                 bufLen);
     } break;
 
   case RTL_SYMBOL:
@@ -1354,9 +1354,9 @@ typedef struct Environment {
 // Returns false if there is no variable by this name in scope.
 static
 bool lookupVar(Environment const *env,
-	       rtl_Word name,
-	       uint16_t *frame,
-	       uint16_t *idx)
+               rtl_Word name,
+               uint16_t *frame,
+               uint16_t *idx)
 {
   uint16_t i;
 
@@ -1446,7 +1446,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
   case RTL_INTRINSIC_VAR:
     if ((!env ||
-	 !lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))) {
+         !lookupVar(env, x->as.var.name, &x->as.var.frame, &x->as.var.idx))) {
       x->as.var.global = true;
     }
 
@@ -1470,7 +1470,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     // Then check if this is a named-call (i.e. a call of a global function
     // rather than a function resulting from the evaluation of an expression).
     if (x->as.call.fn->type == RTL_INTRINSIC_VAR &&
-	(!env || !lookupVar(env, x->as.call.fn->as.var.name, NULL, NULL)))
+        (!env || !lookupVar(env, x->as.call.fn->as.var.name, NULL, NULL)))
     {
       nameTmp    = x->as.call.fn->as.var.name;
       argsTmp    = x->as.call.args;
@@ -1480,14 +1480,14 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
       free(x->as.call.fn);
 
       *x = (rtl_Intrinsic) {
-	.type = RTL_INTRINSIC_NAMED_CALL,
-	.as = {
-	  .namedCall = {
-	    .name    = nameTmp,
-	    .args    = argsTmp,
-	    .argsLen = argsLenTmp,
-	  },
-	},
+        .type = RTL_INTRINSIC_NAMED_CALL,
+        .as = {
+          .namedCall = {
+            .name    = nameTmp,
+            .args    = argsTmp,
+            .argsLen = argsLenTmp,
+          },
+        },
       };
     } else {
       x->as.call.fn = __impl_transformIntrinsic(env, x->as.call.fn);
@@ -1518,7 +1518,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
     for (i = 0; i < x->as.lambda.bodyLen; i++) {
       x->as.lambda.body[i] = __impl_transformIntrinsic(&newEnv,
-						       x->as.lambda.body[i]);
+                                                       x->as.lambda.body[i]);
     }
     break;
 
@@ -1530,12 +1530,12 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
     for (i = 0; i < x->as.labels.labelsLen; i++) {
       x->as.labels.labelsFns[i] = __impl_transformIntrinsic(&newEnv,
-							    x->as.labels.labelsFns[i]);
+                                                            x->as.labels.labelsFns[i]);
     }
 
     for (i = 0; i < x->as.labels.bodyLen; i++) {
       x->as.labels.body[i] = __impl_transformIntrinsic(&newEnv,
-						       x->as.labels.body[i]);
+                                                       x->as.labels.body[i]);
     }
     break;
 
@@ -1547,7 +1547,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
     for (i = 0; i < x->as.defun.bodyLen; i++) {
       x->as.defun.body[i] = __impl_transformIntrinsic(&newEnv,
-						      x->as.defun.body[i]);
+                                                      x->as.defun.body[i]);
     }
     break;
 
@@ -1559,7 +1559,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
 
     for (i = 0; i < x->as.defmacro.bodyLen; i++) {
       x->as.defmacro.body[i] = __impl_transformIntrinsic(&newEnv,
-							 x->as.defmacro.body[i]);
+                                                         x->as.defmacro.body[i]);
     }
     break;
 
@@ -1880,7 +1880,7 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
 
   default:
     printf("Can't quote object of type '%s' ... yet?\n",
-	   rtl_typeNameOf(x));
+           rtl_typeNameOf(x));
     abort();
   }
 }
@@ -1944,7 +1944,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     for (i = 0; i < x->as.bind.bodyLen; i++) {
       x->codeSize += annotateCodeSize(M, x->as.bind.body[i]);
       if (i + 1 < x->as.bind.bodyLen) {
-	x->codeSize++;
+        x->codeSize++;
       }
     }
 
@@ -2022,7 +2022,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     for (i = 0; i < x->as.progn.formsLen; i++) {
       x->codeSize += annotateCodeSize(M, x->as.progn.forms[i]);
       if (i + 1 < x->as.progn.formsLen) {
-	x->codeSize++;
+        x->codeSize++;
       }
     }
 
@@ -2214,14 +2214,14 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
 
   default:
     printf("Can't quote object of type '%s' ... yet?\n",
-	   rtl_typeNameOf(expr));
+           rtl_typeNameOf(expr));
     break;
   }
 }
 
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
-			   uint32_t fnID,
-			   rtl_Intrinsic const *x)
+                           uint32_t fnID,
+                           rtl_Intrinsic const *x)
 {
   size_t    i, j;
   uint16_t  newFnID;
@@ -2303,7 +2303,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     for (i = 0; i < x->as.bind.bodyLen; i++) {
       rtl_emitIntrinsicCode(C, fnID, x->as.bind.body[i]);
       if (i + 1 < x->as.bind.bodyLen) {
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
       }
     }
 
@@ -2329,15 +2329,15 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       fnDef = rtl_lookupFn(codeBase, x->as.var.name);
 
       if (fnDef != NULL && fnDef->fn != RTL_NIL) {
-	offs = rtl_nextFuncOffs(codeBase, fnID);
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
+        offs = rtl_nextFuncOffs(codeBase, fnID);
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
 
-	rtl_emitWordToFunc(codeBase, fnID, fnDef->fn);
+        rtl_emitWordToFunc(codeBase, fnID, fnDef->fn);
       } else {
-	offs = rtl_nextFuncOffs(codeBase, fnID);
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_VAR);
+        offs = rtl_nextFuncOffs(codeBase, fnID);
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_VAR);
 
-	rtl_emitWordToFunc(codeBase, fnID, x->as.var.name);
+        rtl_emitWordToFunc(codeBase, fnID, x->as.var.name);
       }
 
       rtl_registerCallSite(C, x->as.var.name, rtl_function(fnID), offs);
@@ -2384,15 +2384,15 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
       switch (x->type) {
       case RTL_INTRINSIC_NAMED_CALL:
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_CALL);
-	break;
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_CALL);
+        break;
 
       case RTL_INTRINSIC_NAMED_TAIL:
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_TAIL);
-	break;
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_STATIC_TAIL);
+        break;
 
       default:
-	abort();
+        abort();
       }
 
       rtl_emitWordToFunc(codeBase, fnID, fnDef->fn);
@@ -2402,15 +2402,15 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
       switch (x->type) {
       case RTL_INTRINSIC_NAMED_CALL:
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_CALL);
-	break;
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_CALL);
+        break;
 
       case RTL_INTRINSIC_NAMED_TAIL:
-	rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_TAIL);
-	break;
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_UNDEFINED_TAIL);
+        break;
 
       default:
-	abort();
+        abort();
       }
 
       rtl_emitWordToFunc(codeBase, fnID, x->as.namedCall.name);
@@ -2437,11 +2437,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST_NIL);
     } else {
       for (i = 0; i < x->as.progn.formsLen; i++) {
-	rtl_emitIntrinsicCode(C, fnID, x->as.progn.forms[i]);
+        rtl_emitIntrinsicCode(C, fnID, x->as.progn.forms[i]);
 
-	// Ignore the result of all but the last expression.
-	if (i + 1 < x->as.progn.formsLen)
-	  rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+        // Ignore the result of all but the last expression.
+        if (i + 1 < x->as.progn.formsLen)
+          rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
       }
     } break;
 
@@ -2459,7 +2459,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
       // Ignore the result of all but the last expression.
       if (i + 1 < x->as.lambda.bodyLen)
-	rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
+        rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
     }
 
     rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
@@ -2478,11 +2478,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitWordToFunc(codeBase, fnID, rtl_function(newFnID));
 
       for (j = 0; j < y->as.lambda.bodyLen; j++) {
-	rtl_emitIntrinsicCode(C, newFnID, y->as.lambda.body[j]);
+        rtl_emitIntrinsicCode(C, newFnID, y->as.lambda.body[j]);
 
-	// Ignore the result of all but the last expression.
-	if (j + 1 < y->as.lambda.bodyLen)
-	  rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
+        // Ignore the result of all but the last expression.
+        if (j + 1 < y->as.lambda.bodyLen)
+          rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
       }
 
       rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
@@ -2493,11 +2493,11 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
     if (x->as.labels.bodyLen > 0) {
       for (i = 0; i < x->as.labels.bodyLen; i++) {
-	rtl_emitIntrinsicCode(C, fnID, x->as.labels.body[i]);
+        rtl_emitIntrinsicCode(C, fnID, x->as.labels.body[i]);
 
-	// Ignore the result of all but the last expression.
-	if (i + 1 < x->as.labels.bodyLen)
-	  rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+        // Ignore the result of all but the last expression.
+        if (i + 1 < x->as.labels.bodyLen)
+          rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
       }
     } else {
       rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST_NIL);
@@ -2522,7 +2522,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
 
       // Ignore the result of all but the last expression.
       if (i + 1 < x->as.defun.bodyLen)
-	rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
+        rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
     }
 
     rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
@@ -2530,8 +2530,8 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_defineFn(C, x->as.defun.name, rtl_function(newFnID), false);
 
     printf("Compiled function '%s:%s'\n",
-	   rtl_symbolPackageName(x->as.defun.name),
-	   rtl_symbolName(x->as.defun.name));
+           rtl_symbolPackageName(x->as.defun.name),
+           rtl_symbolName(x->as.defun.name));
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);
     rtl_emitWordToFunc(codeBase, fnID, x->as.defun.name);
@@ -2554,7 +2554,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       // Ignore the result of all but the last expression.
 
       if (i + 1 < x->as.defmacro.bodyLen)
-	rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
+        rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_POP);
     }
 
     rtl_emitByteToFunc(codeBase, newFnID, RTL_OP_RETURN);
@@ -2562,8 +2562,8 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     rtl_defineFn(C, x->as.defmacro.name, rtl_function(newFnID), true);
 
     printf("Compiled macro    '%s:%s'\n",
-	   rtl_symbolPackageName(x->as.defmacro.name),
-	   rtl_symbolName(x->as.defmacro.name));
+           rtl_symbolPackageName(x->as.defmacro.name),
+           rtl_symbolName(x->as.defmacro.name));
 
 
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST);

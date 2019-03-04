@@ -79,7 +79,7 @@ struct rtl_Intrinsic {
   union {
     struct {
       rtl_Intrinsic *car,
-	            *cdr;
+                    *cdr;
     } cons;
 
     struct {
@@ -220,7 +220,7 @@ struct rtl_Intrinsic {
 
 static inline
 rtl_Intrinsic *rtl_mkConsIntrinsic(rtl_Intrinsic *car,
-				   rtl_Intrinsic *cdr)
+                                   rtl_Intrinsic *cdr)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -228,8 +228,8 @@ rtl_Intrinsic *rtl_mkConsIntrinsic(rtl_Intrinsic *car,
     .type = RTL_INTRINSIC_CONS,
     .as = {
       .cons = {
-	.car = car,
-	.cdr = cdr,
+        .car = car,
+        .cdr = cdr,
       },
     },
   };
@@ -246,7 +246,7 @@ rtl_Intrinsic *rtl_mkCarIntrinsic(rtl_Intrinsic *arg)
     .type = RTL_INTRINSIC_CAR,
     .as = {
       .car = {
-	.arg = arg,
+        .arg = arg,
       },
     },
   };
@@ -263,7 +263,7 @@ rtl_Intrinsic *rtl_mkCdrIntrinsic(rtl_Intrinsic *arg)
     .type = RTL_INTRINSIC_CDR,
     .as = {
       .cdr = {
-	.arg = arg,
+        .arg = arg,
       },
     },
   };
@@ -280,8 +280,8 @@ rtl_Intrinsic *rtl_mkTupleIntrinsic(rtl_Intrinsic **elems, size_t elemsLen)
     .type = RTL_INTRINSIC_TUPLE,
     .as = {
       .tuple = {
-	.elems    = elems,
-	.elemsLen = elemsLen,
+        .elems    = elems,
+        .elemsLen = elemsLen,
       },
     },
   };
@@ -306,8 +306,8 @@ rtl_Intrinsic *rtl_mkLenIntrinsic(rtl_Intrinsic *tuple)
 
 static inline
 rtl_Intrinsic *rtl_mkInsertIntrinsic(rtl_Intrinsic *map,
-				     rtl_Intrinsic *key,
-				     rtl_Intrinsic *val)
+                                     rtl_Intrinsic *key,
+                                     rtl_Intrinsic *val)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -315,9 +315,9 @@ rtl_Intrinsic *rtl_mkInsertIntrinsic(rtl_Intrinsic *map,
     .type = RTL_INTRINSIC_INSERT,
     .as = {
       .insert = {
-	.map = map,
-	.key = key,
-	.val = val,
+        .map = map,
+        .key = key,
+        .val = val,
       },
     },
   };
@@ -327,7 +327,7 @@ rtl_Intrinsic *rtl_mkInsertIntrinsic(rtl_Intrinsic *map,
 
 static inline
 rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
-				     rtl_Intrinsic *key)
+                                     rtl_Intrinsic *key)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -335,8 +335,8 @@ rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
     .type = RTL_INTRINSIC_LOOKUP,
     .as = {
       .lookup = {
-	.map = map,
-	.key = key,
+        .map = map,
+        .key = key,
       },
     },
   };
@@ -368,8 +368,8 @@ rtl_Intrinsic *rtl_mkDynSetIntrinsic(rtl_Word name, rtl_Intrinsic *value)
     .type = RTL_INTRINSIC_DYN_SET,
     .as = {
       .dynSet = {
-	.name  = name,
-	.value = value,
+        .name  = name,
+        .value = value,
       },
     },
   };
@@ -379,9 +379,9 @@ rtl_Intrinsic *rtl_mkDynSetIntrinsic(rtl_Word name, rtl_Intrinsic *value)
 
 static inline
 rtl_Intrinsic *rtl_mkBindIntrinsic(rtl_Word      name,
-				   rtl_Intrinsic *value,
-				   rtl_Intrinsic **body,
-				   size_t        bodyLen)
+                                   rtl_Intrinsic *value,
+                                   rtl_Intrinsic **body,
+                                   size_t        bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -389,10 +389,10 @@ rtl_Intrinsic *rtl_mkBindIntrinsic(rtl_Word      name,
     .type = RTL_INTRINSIC_BIND,
     .as = {
       .bind = {
-	.name    = name,
-	.value   = value,
-	.body    = body,
-	.bodyLen = bodyLen,
+        .name    = name,
+        .value   = value,
+        .body    = body,
+        .bodyLen = bodyLen,
       },
     },
   };
@@ -409,8 +409,8 @@ rtl_Intrinsic *rtl_mkGetIntrinsic(rtl_Intrinsic *tuple, rtl_Intrinsic *index)
     .type = RTL_INTRINSIC_GET,
     .as = {
       .get = {
-	.tuple = tuple,
-	.index = index,
+        .tuple = tuple,
+        .index = index,
       },
     },
   };
@@ -420,8 +420,8 @@ rtl_Intrinsic *rtl_mkGetIntrinsic(rtl_Intrinsic *tuple, rtl_Intrinsic *index)
 
 static inline
 rtl_Intrinsic *rtl_mkSliceIntrinsic(rtl_Intrinsic *tuple,
-				    rtl_Intrinsic *beg,
-				    rtl_Intrinsic *end)
+                                    rtl_Intrinsic *beg,
+                                    rtl_Intrinsic *end)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -429,9 +429,9 @@ rtl_Intrinsic *rtl_mkSliceIntrinsic(rtl_Intrinsic *tuple,
     .type = RTL_INTRINSIC_SLICE,
     .as = {
       .slice = {
-	.tuple = tuple,
-	.beg   = beg,
-	.end   = end,
+        .tuple = tuple,
+        .beg   = beg,
+        .end   = end,
       },
     },
   };
@@ -448,7 +448,7 @@ rtl_Intrinsic *rtl_mkVarIntrinsic(rtl_Word name)
     .type = RTL_INTRINSIC_VAR,
     .as = {
       .var = {
-	.name = name,
+        .name = name,
       },
     },
   };
@@ -458,8 +458,8 @@ rtl_Intrinsic *rtl_mkVarIntrinsic(rtl_Word name)
 
 static inline
 rtl_Intrinsic *rtl_mkCallIntrinsic(rtl_Intrinsic *fn,
-				   rtl_Intrinsic **args,
-				   size_t        argsLen)
+                                   rtl_Intrinsic **args,
+                                   size_t        argsLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -467,9 +467,9 @@ rtl_Intrinsic *rtl_mkCallIntrinsic(rtl_Intrinsic *fn,
     .type = RTL_INTRINSIC_CALL,
     .as = {
       .call = {
-	.fn      = fn,
-	.args    = args,
-	.argsLen = argsLen,
+        .fn      = fn,
+        .args    = args,
+        .argsLen = argsLen,
       },
     },
   };
@@ -479,8 +479,8 @@ rtl_Intrinsic *rtl_mkCallIntrinsic(rtl_Intrinsic *fn,
 
 static inline
 rtl_Intrinsic *rtl_mkNamedCallIntrinsic(rtl_Word      name,
-					rtl_Intrinsic **args,
-					size_t        argsLen)
+                                        rtl_Intrinsic **args,
+                                        size_t        argsLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -488,9 +488,9 @@ rtl_Intrinsic *rtl_mkNamedCallIntrinsic(rtl_Word      name,
     .type = RTL_INTRINSIC_NAMED_CALL,
     .as = {
       .namedCall = {
-	.name    = name,
-	.args    = args,
-	.argsLen = argsLen,
+        .name    = name,
+        .args    = args,
+        .argsLen = argsLen,
       },
     },
   };
@@ -507,8 +507,8 @@ rtl_Intrinsic *rtl_mkApplyListIntrinsic(rtl_Intrinsic *fn, rtl_Intrinsic *arg)
     .type = RTL_INTRINSIC_APPLY_LIST,
     .as = {
       .applyList = {
-	.fn = fn,
-	.arg = arg,
+        .fn = fn,
+        .arg = arg,
       },
     },
   };
@@ -525,8 +525,8 @@ rtl_Intrinsic *rtl_mkApplyTupleIntrinsic(rtl_Intrinsic *fn, rtl_Intrinsic *arg)
     .type = RTL_INTRINSIC_APPLY_TUPLE,
     .as = {
       .applyList = {
-	.fn = fn,
-	.arg = arg,
+        .fn = fn,
+        .arg = arg,
       },
     },
   };
@@ -543,8 +543,8 @@ rtl_Intrinsic *rtl_mkTypePredIntrinsic(rtl_WordType type, rtl_Intrinsic *arg)
     .type = RTL_INTRINSIC_TYPE_PRED,
     .as = {
       .typePred = {
-	.type = type,
-	.arg  = arg,
+        .type = type,
+        .arg  = arg,
       },
     },
   };
@@ -554,7 +554,7 @@ rtl_Intrinsic *rtl_mkTypePredIntrinsic(rtl_WordType type, rtl_Intrinsic *arg)
 
 static inline
 rtl_Intrinsic *rtl_mkPrognIntrinsic(rtl_Intrinsic **forms,
-				    size_t        formsLen)
+                                    size_t        formsLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -562,8 +562,8 @@ rtl_Intrinsic *rtl_mkPrognIntrinsic(rtl_Intrinsic **forms,
     .type = RTL_INTRINSIC_PROGN,
     .as = {
       .progn = {
-	.forms    = forms,
-	.formsLen = formsLen,
+        .forms    = forms,
+        .formsLen = formsLen,
       },
     },
   };
@@ -573,9 +573,9 @@ rtl_Intrinsic *rtl_mkPrognIntrinsic(rtl_Intrinsic **forms,
 
 static inline
 rtl_Intrinsic *rtl_mkLambdaIntrinsic(rtl_Word      *argNames,
-				     size_t        argNamesLen,
-				     rtl_Intrinsic **body,
-				     size_t        bodyLen)
+                                     size_t        argNamesLen,
+                                     rtl_Intrinsic **body,
+                                     size_t        bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -583,10 +583,10 @@ rtl_Intrinsic *rtl_mkLambdaIntrinsic(rtl_Word      *argNames,
     .type = RTL_INTRINSIC_LAMBDA,
     .as = {
       .lambda = {
-	.argNames    = argNames,
-	.argNamesLen = argNamesLen,
-	.body        = body,
-	.bodyLen     = bodyLen,
+        .argNames    = argNames,
+        .argNamesLen = argNamesLen,
+        .body        = body,
+        .bodyLen     = bodyLen,
       },
     },
   };
@@ -596,10 +596,10 @@ rtl_Intrinsic *rtl_mkLambdaIntrinsic(rtl_Word      *argNames,
 
 static inline
 rtl_Intrinsic *rtl_mkLabelsIntrinsic(rtl_Word      *labelsNames,
-				     rtl_Intrinsic **labelsFns,
-				     uint16_t      labelsLen,
-				     rtl_Intrinsic **body,
-				     size_t        bodyLen)
+                                     rtl_Intrinsic **labelsFns,
+                                     uint16_t      labelsLen,
+                                     rtl_Intrinsic **body,
+                                     size_t        bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -607,11 +607,11 @@ rtl_Intrinsic *rtl_mkLabelsIntrinsic(rtl_Word      *labelsNames,
     .type = RTL_INTRINSIC_LABELS,
     .as = {
       .labels = {
-	.labelsNames = labelsNames,
-	.labelsFns   = labelsFns,
-	.labelsLen   = labelsLen,
-	.body        = body,
-	.bodyLen     = bodyLen,
+        .labelsNames = labelsNames,
+        .labelsFns   = labelsFns,
+        .labelsLen   = labelsLen,
+        .body        = body,
+        .bodyLen     = bodyLen,
       },
     },
   };
@@ -621,11 +621,11 @@ rtl_Intrinsic *rtl_mkLabelsIntrinsic(rtl_Word      *labelsNames,
 
 static inline
 rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word       name,
-				    rtl_Word       *argNames,
-				    size_t         argNamesLen,
-				    bool           hasRestArg,
-				    rtl_Intrinsic  **body,
-				    size_t         bodyLen)
+                                    rtl_Word       *argNames,
+                                    size_t         argNamesLen,
+                                    bool           hasRestArg,
+                                    rtl_Intrinsic  **body,
+                                    size_t         bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -633,12 +633,12 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word       name,
     .type = RTL_INTRINSIC_DEFUN,
     .as = {
       .defun = {
-	.name        = name,
-	.argNames    = argNames,
-	.argNamesLen = argNamesLen,
-	.hasRestArg  = hasRestArg,
-	.body        = body,
-	.bodyLen     = bodyLen,
+        .name        = name,
+        .argNames    = argNames,
+        .argNamesLen = argNamesLen,
+        .hasRestArg  = hasRestArg,
+        .body        = body,
+        .bodyLen     = bodyLen,
       },
     },
   };
@@ -648,11 +648,11 @@ rtl_Intrinsic *rtl_mkDefunIntrinsic(rtl_Word       name,
 
 static inline
 rtl_Intrinsic *rtl_mkDefmacroIntrinsic(rtl_Word       name,
-				       rtl_Word       *argNames,
-				       size_t         argNamesLen,
-				       bool           hasRestArg,
-				       rtl_Intrinsic  **body,
-				       size_t         bodyLen)
+                                       rtl_Word       *argNames,
+                                       size_t         argNamesLen,
+                                       bool           hasRestArg,
+                                       rtl_Intrinsic  **body,
+                                       size_t         bodyLen)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -660,12 +660,12 @@ rtl_Intrinsic *rtl_mkDefmacroIntrinsic(rtl_Word       name,
     .type = RTL_INTRINSIC_DEFMACRO,
     .as = {
       .defmacro = {
-	.name        = name,
-	.argNames    = argNames,
-	.argNamesLen = argNamesLen,
-	.hasRestArg  = hasRestArg,
-	.body        = body,
-	.bodyLen     = bodyLen,
+        .name        = name,
+        .argNames    = argNames,
+        .argNamesLen = argNamesLen,
+        .hasRestArg  = hasRestArg,
+        .body        = body,
+        .bodyLen     = bodyLen,
       },
     },
   };
@@ -703,8 +703,8 @@ rtl_Intrinsic *rtl_mkExportIntrinsic(rtl_Word sym)
 
 static inline
 rtl_Intrinsic *rtl_mkBinopIntrinsic(rtl_IntrinsicType type,
-				    rtl_Intrinsic     *leftArg,
-				    rtl_Intrinsic     *rightArg)
+                                    rtl_Intrinsic     *leftArg,
+                                    rtl_Intrinsic     *rightArg)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -712,8 +712,8 @@ rtl_Intrinsic *rtl_mkBinopIntrinsic(rtl_IntrinsicType type,
     .type = type,
     .as = {
       .binop = {
-	.leftArg  = leftArg,
-	.rightArg = rightArg,
+        .leftArg  = leftArg,
+        .rightArg = rightArg,
       },
     },
   };
@@ -723,8 +723,8 @@ rtl_Intrinsic *rtl_mkBinopIntrinsic(rtl_IntrinsicType type,
 
 static inline
 rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
-				 rtl_Intrinsic *then,
-				 rtl_Intrinsic *_else)
+                                 rtl_Intrinsic *then,
+                                 rtl_Intrinsic *_else)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -732,9 +732,9 @@ rtl_Intrinsic *rtl_mkIfIntrinsic(rtl_Intrinsic *test,
     .type = RTL_INTRINSIC_IF,
     .as = {
       ._if = {
-	.test  = test,
-	.then  = then,
-	._else = _else,
+        .test  = test,
+        .then  = then,
+        ._else = _else,
       },
     },
   };

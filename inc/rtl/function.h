@@ -43,6 +43,6 @@ rtl_Word rtl_function(uint32_t fnID)
 }
 
 rtl_Word rtl_callBuiltin(rtl_Machine    *M,
-			 rtl_Word       builtin,
-			 rtl_Word const *args,
-			 size_t         argsLen);
+                         rtl_Word       builtin,
+                         rtl_Word const *args,
+                         size_t         argsLen);

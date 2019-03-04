@@ -71,8 +71,8 @@ rtl_Word addBuiltin(rtl_CodeBase *cb, rtl_Word name, rtl_BuiltinFn cFn)
 }
 
 rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
-			     rtl_Word      name,
-			     rtl_BuiltinFn cFn)
+                             rtl_Word      name,
+                             rtl_BuiltinFn cFn)
 {
   rtl_FnDef    *def;
   size_t       idx;
@@ -87,11 +87,11 @@ rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
   for (def = codeBase->fnsByName[idx]; def != NULL; def = def->next) {
     if (def->name == name) {
       if (def->fn != RTL_NIL) {
-	fnID = rtl_functionID(def->fn);
+        fnID = rtl_functionID(def->fn);
 
-	rtl_newFuncVersion(codeBase, fnID);
+        rtl_newFuncVersion(codeBase, fnID);
       } else {
-	fnID = rtl_newFuncID(codeBase, name);
+        fnID = rtl_newFuncID(codeBase, name);
       }
 
       func = codeBase->fns[fnID];
@@ -153,7 +153,7 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
 
   if (!rtl_isTuple(tpl)) {
     rtl_triggerFault(M, "expected-tuple",
-		     "Passed non-tuple to rtl_reifyTuple!");
+                     "Passed non-tuple to rtl_reifyTuple!");
 
     *len = 0;
     return NULL;
@@ -176,7 +176,7 @@ rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
     rtl_triggerFault(M, "expected-cons",
-		     "Passed non-cons to rtl_reifyCons!");
+                     "Passed non-cons to rtl_reifyCons!");
 
     return NULL;
   }
@@ -412,7 +412,7 @@ int collectGen(rtl_Machine *M, int g)
   for (i = 0; i < g; i++) {
     youngerGen = M->heap.gen[i];
     assert(youngerGen); // Shouldn't be any un-populated younger generations, I
-			// think.
+                        // think.
     for (j = 0; j < youngerGen->marks->nbrOnes; j++) {
       k = rtl_bmpSelect(youngerGen->marks, j);
       markWord(M, gen, youngerGen->words[k]);
@@ -482,7 +482,7 @@ int collectGen(rtl_Machine *M, int g)
     // .. any words in live working sets ..
     for (i = 0; i < M->wsStackLen; i++) {
       for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
-	*pp[j] = moveWord(M, highest, *pp[j]);
+        *pp[j] = moveWord(M, highest, *pp[j]);
       }
     }
   }
@@ -515,7 +515,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
 
   default:
     rtl_triggerFault(M, "invalid-allocation",
-		     "Trying to allocate non-pointer type!\n");
+                     "Trying to allocate non-pointer type!\n");
     return NULL;
   }
 
@@ -587,20 +587,20 @@ rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size)
     switch (size - i*3) {
     case 1:
       wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] << 8)
-	              | RTL_HEADER;
+                      | RTL_HEADER;
       break;
 
     case 2:
       wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] << 8)
-	              | ((rtl_Word)u8[i*3 + 1] << 16)
-	              | RTL_HEADER;
+                      | ((rtl_Word)u8[i*3 + 1] << 16)
+                      | RTL_HEADER;
       break;
 
     default:
       wBacking[i + 1] = ((rtl_Word)u8[i*3 + 0] <<  8)
-	              | ((rtl_Word)u8[i*3 + 1] << 16)
-	              | ((rtl_Word)u8[i*3 + 2] << 24)
-	              | RTL_HEADER;
+                      | ((rtl_Word)u8[i*3 + 1] << 16)
+                      | ((rtl_Word)u8[i*3 + 2] << 24)
+                      | RTL_HEADER;
       break;
     }
   }
@@ -890,8 +890,8 @@ void rtl_visitMap(rtl_Machine      *M,
 }
 
 rtl_Word rtl_std_handleFault(rtl_Machine    *M,
-			     rtl_Word const *args,
-			     size_t         argsLen)
+                             rtl_Word const *args,
+                             size_t         argsLen)
 {
   assert(argsLen == 1);
 
@@ -944,10 +944,10 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
   rtl_initCompiler(&C, M);
 
   handleFault = rtl_registerBuiltin(&C, rtl_intern("std", "handle-fault"),
-				    rtl_std_handleFault);
+                                    rtl_std_handleFault);
 
   rtl_setVar(M, rtl_intern("std", "*error-handler*"),
-	     handleFault);
+             handleFault);
 }
 
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
@@ -993,7 +993,7 @@ void rtl_testGarbageCollector(size_t count)
   {
     if (i != rtl_int28Value(ptr[0])) {
       printf("reifying cons, expected Int28 %d, got %s %d\n",
-	     i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
+             i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
     }
   }
 
@@ -1022,7 +1022,7 @@ void rtl_testGarbageCollector(size_t count)
   {
     if (i != rtl_int28Value(ptr[0])) {
       printf("reifying cons, expected Int28 %d, got %s %d\n",
-	     i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
+             i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
     }
   }
 }
@@ -1077,116 +1077,116 @@ char const *rtl_typeName(rtl_WordType type)
   }
 }
 
-#define VPUSH(W) ({							\
-      if (unlikely(M->vStackLen == M->vStackCap)) {			\
-	M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;	\
-	M->vStack    = realloc(M->vStack, sizeof(rtl_Word)*M->vStackCap); \
-      }									\
-									\
-      M->vStack[M->vStackLen++] = (W);					\
-    })									\
+#define VPUSH(W) ({                                                     \
+      if (unlikely(M->vStackLen == M->vStackCap)) {                     \
+        M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;       \
+        M->vStack    = realloc(M->vStack, sizeof(rtl_Word)*M->vStackCap); \
+      }                                                                 \
+                                                                        \
+      M->vStack[M->vStackLen++] = (W);                                  \
+    })                                                                  \
   // End of multi-line macro
 
-#define VSTACK_ASSERT_LEN(N) ({					\
-      if (unlikely((N) > M->vStackLen)) {			\
-	rtl_triggerFault(M, "stack-underflow",			\
-			 "VStack underflow in interpreter.");	\
-	goto interp_cleanup;					\
-      }								\
-    })								\
+#define VSTACK_ASSERT_LEN(N) ({                                 \
+      if (unlikely((N) > M->vStackLen)) {                       \
+        rtl_triggerFault(M, "stack-underflow",                  \
+                         "VStack underflow in interpreter.");   \
+        goto interp_cleanup;                                    \
+      }                                                         \
+    })                                                          \
   // End of multi-line macro
 
-#define RSTACK_ASSERT_LEN(N) ({					\
-      if (unlikely((N) > M->rStackLen)) {			\
-	rtl_triggerFault(M, "stack-underflow",			\
-			 "RStack underflow in interpreter.");	\
-	goto interp_cleanup;					\
-      }								\
-    })								\
+#define RSTACK_ASSERT_LEN(N) ({                                 \
+      if (unlikely((N) > M->rStackLen)) {                       \
+        rtl_triggerFault(M, "stack-underflow",                  \
+                         "RStack underflow in interpreter.");   \
+        goto interp_cleanup;                                    \
+      }                                                         \
+    })                                                          \
   // End of multi-line macro
 
 #ifdef RTL_TRACE_FN_CALLS
-# define CALL_TRACE_ENTER()						\
-  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
-  printf("> '%s:%s'\n",							\
-	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
-	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn));		\
-									\
-  printf("CALL STACK: ");						\
-									\
-  for (size_t i = 0; i < M->rStackLen; i++) {				\
-    printf("%s:%s ",							\
-	   rtl_symbolPackageName(M->rStack[i].fn),			\
-	   rtl_symbolName(M->rStack[i].fn));				\
-  }									\
-  printf("\n");								\
+# define CALL_TRACE_ENTER()                                             \
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");                \
+  printf("> '%s:%s'\n",                                                 \
+         rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),         \
+         rtl_symbolName(M->rStack[M->rStackLen - 1].fn));               \
+                                                                        \
+  printf("CALL STACK: ");                                               \
+                                                                        \
+  for (size_t i = 0; i < M->rStackLen; i++) {                           \
+    printf("%s:%s ",                                                    \
+           rtl_symbolPackageName(M->rStack[i].fn),                      \
+           rtl_symbolName(M->rStack[i].fn));                            \
+  }                                                                     \
+  printf("\n");                                                         \
   // End of multi-line macro
 #else
 # define CALL_TRACE_ENTER()
 #endif
 
 #ifdef RTL_TRACE_FN_CALLS
-# define CALL_TRACE_EXIT()						\
-  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
-  printf("< '%s:%s'\n",							\
-	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
-	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn));		\
-									\
-  printf("CALL STACK: ");						\
-									\
-  for (size_t i = 0; i < M->rStackLen; i++) {				\
-    printf("%s:%s ",							\
-	   rtl_symbolPackageName(M->rStack[i].fn),			\
-	   rtl_symbolName(M->rStack[i].fn));				\
-  }									\
-  printf("\n");								\
+# define CALL_TRACE_EXIT()                                              \
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");                \
+  printf("< '%s:%s'\n",                                                 \
+         rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),         \
+         rtl_symbolName(M->rStack[M->rStackLen - 1].fn));               \
+                                                                        \
+  printf("CALL STACK: ");                                               \
+                                                                        \
+  for (size_t i = 0; i < M->rStackLen; i++) {                           \
+    printf("%s:%s ",                                                    \
+           rtl_symbolPackageName(M->rStack[i].fn),                      \
+           rtl_symbolName(M->rStack[i].fn));                            \
+  }                                                                     \
+  printf("\n");                                                         \
   // End of multi-line macro
 #else
 # define CALL_TRACE_EXIT()
 #endif
 
 #ifdef RTL_TRACE_FN_CALLS
-# define CALL_TRACE_TAIL(FNAME)						\
-  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");		\
-  printf("| '%s:%s' -> '%s:%s'\n",					\
-	 rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),		\
-	 rtl_symbolName(M->rStack[M->rStackLen - 1].fn),		\
-	 rtl_symbolPackageName(FNAME),					\
-	 rtl_symbolName(FNAME));					\
-									\
-  printf("CALL STACK: ");						\
-									\
-  for (size_t i = 0; i < M->rStackLen; i++) {				\
-    printf("%s:%s ",							\
-	   rtl_symbolPackageName(M->rStack[i].fn),			\
-	   rtl_symbolName(M->rStack[i].fn));				\
-  }									\
-  printf("\n");								\
+# define CALL_TRACE_TAIL(FNAME)                                         \
+  for (size_t i = 1; i < M->rStackLen; i++) printf(" ");                \
+  printf("| '%s:%s' -> '%s:%s'\n",                                      \
+         rtl_symbolPackageName(M->rStack[M->rStackLen - 1].fn),         \
+         rtl_symbolName(M->rStack[M->rStackLen - 1].fn),                \
+         rtl_symbolPackageName(FNAME),                                  \
+         rtl_symbolName(FNAME));                                        \
+                                                                        \
+  printf("CALL STACK: ");                                               \
+                                                                        \
+  for (size_t i = 0; i < M->rStackLen; i++) {                           \
+    printf("%s:%s ",                                                    \
+           rtl_symbolPackageName(M->rStack[i].fn),                      \
+           rtl_symbolName(M->rStack[i].fn));                            \
+  }                                                                     \
+  printf("\n");                                                         \
   // End of multi-line macro
 #else
 # define CALL_TRACE_TAIL(FNAME)
 #endif
 
-#define RPUSH(FNAME) ({							\
-      if (unlikely(M->rStackLen == M->rStackCap)) {			\
-	M->rStackCap = M->rStackCap*2;					\
-	M->rStack    = realloc(M->rStack,				\
-			       M->rStackCap * sizeof(rtl_RetAddr));	\
-      }									\
-									\
-      M->rStack[M->rStackLen++] = (rtl_RetAddr) {			\
-	.pc  = M->pc,							\
-	.env = M->env,							\
-	.fn  = FNAME,							\
-      };								\
-      CALL_TRACE_ENTER()						\
-    })									\
+#define RPUSH(FNAME) ({                                                 \
+      if (unlikely(M->rStackLen == M->rStackCap)) {                     \
+        M->rStackCap = M->rStackCap*2;                                  \
+        M->rStack    = realloc(M->rStack,                               \
+                               M->rStackCap * sizeof(rtl_RetAddr));     \
+      }                                                                 \
+                                                                        \
+      M->rStack[M->rStackLen++] = (rtl_RetAddr) {                       \
+        .pc  = M->pc,                                                   \
+        .env = M->env,                                                  \
+        .fn  = FNAME,                                                   \
+      };                                                                \
+      CALL_TRACE_ENTER()                                                \
+    })                                                                  \
   // End of multi-line macro
 
-#define TAIL(FNAME) ({				\
-      CALL_TRACE_TAIL(FNAME);			\
-      M->rStack[M->rStackLen - 1].fn = FNAME;	\
-    })						\
+#define TAIL(FNAME) ({                          \
+      CALL_TRACE_TAIL(FNAME);                   \
+      M->rStack[M->rStackLen - 1].fn = FNAME;   \
+    })                                          \
   // End of multi-line macro
 
 #define VPOP() (M->vStack[--M->vStackLen])
@@ -1196,36 +1196,36 @@ char const *rtl_typeName(rtl_WordType type)
 #define VPEEK(N) (M->vStack[M->vStackLen - ((N) + 1)])
 
 // This is the decode/dispatch template for all hard-coded binary operators.
-#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_NAME, TYPE_MK, TYPE_VAL)	\
-      case RTL_OP_##INAME:						\
-	VSTACK_ASSERT_LEN(2);						\
-									\
-	b = VPOP();							\
-	a = VPOP();							\
-									\
-	if (unlikely(unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b)))) { \
-	  rtl_triggerFault(M, "type-mismatch",				\
-			   "Binary operation expected two " TYPE_NAME "."); \
-	  goto interp_cleanup;						\
-	}								\
-									\
-	VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));			\
-	break;								\
+#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_NAME, TYPE_MK, TYPE_VAL)   \
+      case RTL_OP_##INAME:                                              \
+        VSTACK_ASSERT_LEN(2);                                           \
+                                                                        \
+        b = VPOP();                                                     \
+        a = VPOP();                                                     \
+                                                                        \
+        if (unlikely(unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b)))) { \
+          rtl_triggerFault(M, "type-mismatch",                          \
+                           "Binary operation expected two " TYPE_NAME "."); \
+          goto interp_cleanup;                                          \
+        }                                                               \
+                                                                        \
+        VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));                     \
+        break;                                                          \
   // end of multi-line macro
 
-#define CMP_OP(INAME, NUMERIC_CMP)		\
-      case RTL_OP_##INAME:			\
-	VSTACK_ASSERT_LEN(2);			\
-						\
-	b = VPOP();				\
-	a = VPOP();				\
-						\
-	if (rtl_cmp(M, a, b) NUMERIC_CMP) {	\
-	  VPUSH(RTL_TOP);			\
-	} else {				\
-	  VPUSH(RTL_NIL);			\
-	}					\
-	break;					\
+#define CMP_OP(INAME, NUMERIC_CMP)              \
+      case RTL_OP_##INAME:                      \
+        VSTACK_ASSERT_LEN(2);                   \
+                                                \
+        b = VPOP();                             \
+        a = VPOP();                             \
+                                                \
+        if (rtl_cmp(M, a, b) NUMERIC_CMP) {     \
+          VPUSH(RTL_TOP);                       \
+        } else {                                \
+          VPUSH(RTL_NIL);                       \
+        }                                       \
+        break;                                  \
   // end of multiline macro
 
 static
@@ -1301,8 +1301,8 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       aPtr = rtl_reifyTuple(M, a, &aLen);
       bPtr = rtl_reifyTuple(M, b, &bLen);
       for (i = 0; i < aLen && i < bLen; i++) {
-	subResult = rtl_cmp(M, aPtr[i], bPtr[i]);
-	if (subResult != 0) return subResult;
+        subResult = rtl_cmp(M, aPtr[i], bPtr[i]);
+        if (subResult != 0) return subResult;
       }
 
       return (int)aLen - (int)bLen;
@@ -1313,7 +1313,7 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
 
       subResult = rtl_cmp(M, aPtr[0], bPtr[0]);
       if (subResult != 0) {
-	return rtl_cmp(M, aPtr[1], bPtr[1]);
+        return rtl_cmp(M, aPtr[1], bPtr[1]);
       }
 
       return subResult;
@@ -1430,7 +1430,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       c = rtl_cons(M, a, b);
 
       VPOPK(2);
-	
+        
       VPUSH(c);
       break;
 
@@ -1441,7 +1441,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       // of the un-saved fields of M.
       rptr = rtl_reifyCons(M, VPOP());
       if (unlikely(!rptr)) {
-	goto interp_cleanup;
+        goto interp_cleanup;
       }
 
       VPUSH(rptr[0]);
@@ -1453,7 +1453,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       rptr = rtl_reifyCons(M, VPOP());
       if (unlikely(!rptr)) {
-	goto interp_cleanup;
+        goto interp_cleanup;
       }
 
       VPUSH(rptr[1]);
@@ -1527,8 +1527,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       a = VPOP(); // tuple
 
       VPUSH(rtl_tupleSlice(M, a,
-			   rtl_int28Value(b),
-			   rtl_int28Value(c)));
+                           rtl_int28Value(b),
+                           rtl_int28Value(c)));
       break;
 
     case RTL_OP_MAP:
@@ -1572,8 +1572,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       M->pc = readWord(M->pc, &literal);
 
       if (unlikely(M->dStackLen == M->dStackCap)) {
-	M->dStackCap = M->dStackCap == M->dStackCap * 2;
-	M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
+        M->dStackCap = M->dStackCap == M->dStackCap * 2;
+        M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
       }
 
       // Save the old value
@@ -1587,9 +1587,9 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       M->pc = readWord(M->pc, &literal);
 
       if (unlikely(M->dStackLen == 0)) {
-	rtl_triggerFault(M, "stack-underflow",
-			 "DStack underflow in interpreter.");
-	goto interp_cleanup;
+        rtl_triggerFault(M, "stack-underflow",
+                         "DStack underflow in interpreter.");
+        goto interp_cleanup;
       }
 
       M->dynamic = rtl_mapInsert(M, M->dynamic, literal, M->dStack[--M->dStackLen]);
@@ -1789,13 +1789,13 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       // Here we build all of the closures.
       for (i = 0; i < size; i++) {
-	wptr[1+len+1 + 1+size + i*2 + 0] = sptr[i];
-	wptr[1+len+1 + 1+size + i*2 + 1] = a;
+        wptr[1+len+1 + 1+size + i*2 + 0] = sptr[i];
+        wptr[1+len+1 + 1+size + i*2 + 1] = a;
       }
 
       // Then build the env tuple
       for (i = 0; i < len; i++) { // First copy the existing frames.
-	wptr[1 + i] = rptr[i];
+        wptr[1 + i] = rptr[i];
       }
 
       gen  = __rtl_ptrGen(a);
@@ -1803,16 +1803,16 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       // Then add a pointer to the new frame
       wptr[1 + len] = mkPtr(RTL_TUPLE,
-			    gen,
-			    offs + 1+len+1);
+                            gen,
+                            offs + 1+len+1);
 
       wptr[1+len+1] = rtl_header(size);
 
       // Finally, populate the new frame
       for (i = 0; i < size; i++) {
-	wptr[1+len+1 + 1 + i] = mkPtr(RTL_CLOSURE,
-				      gen,
-				      offs + 1+len+1 + 1+size + i*2);
+        wptr[1+len+1 + 1 + i] = mkPtr(RTL_CLOSURE,
+                                      gen,
+                                      offs + 1+len+1 + 1+size + i*2);
       }
 
       VPOPK(size);
@@ -1824,7 +1824,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       rptr = rtl_reifyTuple(M, M->env, &len);
       wptr = rtl_allocTuple(M, &a, len - 1);
       rptr = rtl_reifyTuple(M, M->env, &len); // Reify again in-case rptr was
-					      // invalidated by a collection.
+                                              // invalidated by a collection.
 
       memcpy(wptr, rptr, sizeof(rtl_Word)*(len - 1));
 
@@ -1846,50 +1846,50 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       switch (rtl_typeOf(f)) {
       case RTL_FUNCTION:
-	func = rtl_reifyFunction(M->codeBase, f);
-	if (func->isBuiltin) {
-	  savePC = M->pc;
+        func = rtl_reifyFunction(M->codeBase, f);
+        if (func->isBuiltin) {
+          savePC = M->pc;
 
-	  b = func->as.builtin.cFn(M, wptr, size);
-	  VPUSH(b);
+          b = func->as.builtin.cFn(M, wptr, size);
+          VPUSH(b);
 
-	  M->pc = savePC;
-	} else {
-	  
-	  wptr = rtl_allocTuple(M, &b, 1);
-	  wptr[0] = a;
+          M->pc = savePC;
+        } else {
+          
+          wptr = rtl_allocTuple(M, &b, 1);
+          wptr[0] = a;
 
-	  if (opcode == RTL_OP_CALL) RPUSH(func->name);
-	  else TAIL(func->name);
+          if (opcode == RTL_OP_CALL) RPUSH(func->name);
+          else TAIL(func->name);
 
-	  M->env = b;
-	  M->pc = func->as.lisp.code;
-	} break;
+          M->env = b;
+          M->pc = func->as.lisp.code;
+        } break;
 
       case RTL_CLOSURE:
-	rptr = __rtl_reifyPtr(M, f);
+        rptr = __rtl_reifyPtr(M, f);
 
-	f = rptr[0];
-	b = rptr[1];
+        f = rptr[0];
+        b = rptr[1];
 
-	c = rtl_tuplePushLast(M, b, a);
+        c = rtl_tuplePushLast(M, b, a);
 
-	func = rtl_reifyFunction(M->codeBase, f);
+        func = rtl_reifyFunction(M->codeBase, f);
 
-	if (opcode == RTL_OP_CALL) RPUSH(func->name);
-	else TAIL(func->name);
+        if (opcode == RTL_OP_CALL) RPUSH(func->name);
+        else TAIL(func->name);
 
-	assert(!func->isBuiltin);
+        assert(!func->isBuiltin);
 
-	M->env = c;
-	M->pc  = func->as.lisp.code;
+        M->env = c;
+        M->pc  = func->as.lisp.code;
 
-	break;
+        break;
 
       default:
-	printf(" error: Can't call object of type '%s'!\n",
-	       rtl_typeNameOf(f));
-	goto interp_cleanup;
+        printf(" error: Can't call object of type '%s'!\n",
+               rtl_typeNameOf(f));
+        goto interp_cleanup;
 
       } break;
 
@@ -1908,21 +1908,21 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       func = rtl_reifyFunction(M->codeBase, f);
 
       if (func->isBuiltin) {
-	savePC = M->pc;
+        savePC = M->pc;
 
-	b = func->as.builtin.cFn(M, wptr, size);
-	VPUSH(b);
+        b = func->as.builtin.cFn(M, wptr, size);
+        VPUSH(b);
 
-	M->pc = savePC;
+        M->pc = savePC;
       } else {
-	wptr = rtl_allocTuple(M, &b, 1);
-	wptr[0] = a;
+        wptr = rtl_allocTuple(M, &b, 1);
+        wptr[0] = a;
 
-	if (opcode == RTL_OP_STATIC_CALL) RPUSH(func->name);
-	else TAIL(func->name);
+        if (opcode == RTL_OP_STATIC_CALL) RPUSH(func->name);
+        else TAIL(func->name);
 
-	M->env = b;
-	M->pc  = func->as.lisp.code;
+        M->env = b;
+        M->pc  = func->as.lisp.code;
       } break;
 
     case RTL_OP_APPLY_LIST:
@@ -1941,48 +1941,48 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       switch (rtl_typeOf(f)) {
       case RTL_FUNCTION:
-	func = rtl_reifyFunction(M->codeBase, f);
-	if (func->isBuiltin) {
-	  savePC = M->pc;
+        func = rtl_reifyFunction(M->codeBase, f);
+        if (func->isBuiltin) {
+          savePC = M->pc;
 
-	  rptr = rtl_reifyTuple(M, a, &len);
+          rptr = rtl_reifyTuple(M, a, &len);
 
-	  b = func->as.builtin.cFn(M, rptr, len);
-	  VPUSH(b);
+          b = func->as.builtin.cFn(M, rptr, len);
+          VPUSH(b);
 
-	  M->pc = savePC;
-	} else {
-	  wptr = rtl_allocTuple(M, &b, 1);
-	  wptr[0] = a;
+          M->pc = savePC;
+        } else {
+          wptr = rtl_allocTuple(M, &b, 1);
+          wptr[0] = a;
 
-	  RPUSH(func->name);
+          RPUSH(func->name);
 
-	  M->env = b;
-	  M->pc  = func->as.lisp.code;
-	} break;
+          M->env = b;
+          M->pc  = func->as.lisp.code;
+        } break;
 
       case RTL_CLOSURE:
-	rptr = __rtl_reifyPtr(M, f);
+        rptr = __rtl_reifyPtr(M, f);
 
-	f = rptr[0];
-	b = rptr[1];
+        f = rptr[0];
+        b = rptr[1];
 
-	c = rtl_tuplePushLast(M, b, a);
+        c = rtl_tuplePushLast(M, b, a);
 
-	func = rtl_reifyFunction(M->codeBase, f);
+        func = rtl_reifyFunction(M->codeBase, f);
 
-	RPUSH(func->name);
+        RPUSH(func->name);
 
-	assert(!func->isBuiltin);
+        assert(!func->isBuiltin);
 
-	M->env = c;
-	M->pc  = func->as.lisp.code;
-	break;
+        M->env = c;
+        M->pc  = func->as.lisp.code;
+        break;
 
       default:
-	printf(" error: Can't call object of type '%s'!\n",
-	       rtl_typeNameOf(f));
-	goto interp_cleanup;
+        printf(" error: Can't call object of type '%s'!\n",
+               rtl_typeNameOf(f));
+        goto interp_cleanup;
 
       } break;
 
@@ -1991,22 +1991,22 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       M->pc = readWord(M->pc, &literal);
 
       printf("Tried to call undefined function %s:%s\n",
-	     rtl_symbolPackageName(literal),
-	     rtl_symbolName(literal));
+             rtl_symbolPackageName(literal),
+             rtl_symbolName(literal));
 
       rtl_triggerFault(M, "undefined-variable",
-		       "Tried to reference undefined variable");
+                       "Tried to reference undefined variable");
       break;
 
     case RTL_OP_UNDEFINED_VAR:
       M->pc = readWord(M->pc, &literal);
 
       printf("Referenced undefined variable %s:%s\n",
-	     rtl_symbolPackageName(literal),
-	     rtl_symbolName(literal));
+             rtl_symbolPackageName(literal),
+             rtl_symbolName(literal));
 
       rtl_triggerFault(M, "undefined-variable",
-		       "Tried to reference undefined variable");
+                       "Tried to reference undefined variable");
 
 
       break;
@@ -2037,8 +2037,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       a = RTL_NIL;
       for (i = (ssize_t)len - 1; i >= idx; i--) {
-	rptr = rtl_reifyTuple(M, d, &len);     // Reload
-	a    = rtl_cons(M, rptr[i], a);
+        rptr = rtl_reifyTuple(M, d, &len);     // Reload
+        a    = rtl_cons(M, rptr[i], a);
       }
 
       wptr = rtl_allocTuple(M, &b, idx + 1);
@@ -2058,24 +2058,24 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
     // Generate code for binary operations using the BINARY_OP macro.
     BINARY_OP(IADD, +, rtl_isInt28, "int28",
-	      rtl_int28, rtl_int28Value);
+              rtl_int28, rtl_int28Value);
     BINARY_OP(ISUB, -, rtl_isInt28, "int28",
-	      rtl_int28, rtl_int28Value);
+              rtl_int28, rtl_int28Value);
     BINARY_OP(IMUL, *, rtl_isInt28, "int28",
-	      rtl_int28, rtl_int28Value);
+              rtl_int28, rtl_int28Value);
     BINARY_OP(IDIV, /, rtl_isInt28, "int28",
-	      rtl_int28, rtl_int28Value);
+              rtl_int28, rtl_int28Value);
     BINARY_OP(IMOD, %, rtl_isInt28, "int28",
-	      rtl_int28, rtl_int28Value);
+              rtl_int28, rtl_int28Value);
 
     BINARY_OP(FADD, +, rtl_isFix14, "fix14",
-	      rtl_fix14, rtl_fix14Value);
+              rtl_fix14, rtl_fix14Value);
     BINARY_OP(FSUB, -, rtl_isFix14, "fix14",
-	      rtl_fix14, rtl_fix14Value);
+              rtl_fix14, rtl_fix14Value);
     BINARY_OP(FMUL, *, rtl_isFix14, "fix14",
-	      rtl_fix14, rtl_fix14Value);
+              rtl_fix14, rtl_fix14Value);
     BINARY_OP(FDIV, /, rtl_isFix14, "fix14",
-	      rtl_fix14, rtl_fix14Value);
+              rtl_fix14, rtl_fix14Value);
 
     CMP_OP(LT,  <  0);
     CMP_OP(LEQ, <= 0);
@@ -2089,9 +2089,9 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       b = VPOP();
       a = VPOP();
       if (a == b) {
-	VPUSH(RTL_TOP);
+        VPUSH(RTL_TOP);
       } else {
-	VPUSH(RTL_NIL);
+        VPUSH(RTL_NIL);
       } break;
 
     case RTL_OP_NEQ:
@@ -2100,9 +2100,9 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       b = VPOP();
       a = VPOP();
       if (a != b) {
-	VPUSH(RTL_TOP);
+        VPUSH(RTL_TOP);
       } else {
-	VPUSH(RTL_NIL);
+        VPUSH(RTL_NIL);
       } break;
       
 
@@ -2454,9 +2454,9 @@ rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
 }
 
 rtl_Word rtl_tupleSlice(rtl_Machine *M,
-			rtl_Word    tuple,
-			uint32_t    beg,
-			uint32_t    end)
+                        rtl_Word    tuple,
+                        uint32_t    beg,
+                        uint32_t    end)
 {
   size_t   i, inLen, outLen;
   rtl_Word out = RTL_NIL;
@@ -2471,13 +2471,13 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
   // TODO: Trigger faults here ...
   if (unlikely(inLen < end)) {
     rtl_triggerFault(M, "bad-slice",
-		     "Trying to slice past the end of a tuple.");
+                     "Trying to slice past the end of a tuple.");
     return RTL_NIL;
   }
     
   if (unlikely(end < beg)) {
     rtl_triggerFault(M, "bad-slice",
-		     "Trying to slice with end index < beginning index.");
+                     "Trying to slice with end index < beginning index.");
     return RTL_NIL;
   }
 
@@ -2572,9 +2572,9 @@ rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen)
 }
 
 rtl_Word __rtl_callWithArgs(rtl_Machine *M,
-			    rtl_Word    callable,
-			    rtl_Word    *args,
-			    size_t      argsLen)
+                            rtl_Word    callable,
+                            rtl_Word    *args,
+                            size_t      argsLen)
 {
   rtl_Word argsTuple = RTL_NIL,
            envTuple  = RTL_NIL;
@@ -2598,6 +2598,8 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
   case RTL_FUNCTION:
     envTuple = rtl_tuple(M, &argsTuple, 1);
     break;
+  default:
+    abort();
   }
 
   M->env = envTuple;

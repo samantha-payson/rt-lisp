@@ -159,7 +159,7 @@ void rtl_repl(rtl_Compiler *C)
   rtl_export(C, rtl_intern("std", "disassemble"));
 
   rtl_registerBuiltin(C, rtl_intern("std", "disassemble-macro"),
-		      rtl_repl_disassembleMacro);
+                      rtl_repl_disassembleMacro);
   rtl_export(C, rtl_intern("std", "disassemble-macro"));
 
   rtl_registerBuiltin(C, rtl_intern("std", "macroexpand"), rtl_repl_macroExpand);
@@ -178,11 +178,11 @@ void rtl_repl(rtl_Compiler *C)
       w = rtl_call(C->M, rtl_function(replFnID));
 
       if (!rtl_checkFault(C->M)) {
-	printf("\n=> ");
-	rtl_formatExpr(C->M, w);
-	printf("\n");
+        printf("\n=> ");
+        rtl_formatExpr(C->M, w);
+        printf("\n");
       } else {
-	printf("\n  \x1B[1mERROR!\x1B[0m\n");
+        printf("\n  \x1B[1mERROR!\x1B[0m\n");
       }
 
       rtl_newFuncVersion(C->M->codeBase, replFnID);
