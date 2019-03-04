@@ -103,7 +103,7 @@ uint32_t rtl_internUnresolvedID(char const *pkg, char const *name)
   for (usym = unresTable[idx]; usym; usym = usym->next)
   {
     if (((!pkg && !usym->pkg) || (pkg && usym->pkg && !strcmp(usym->pkg, pkg)))
-	&& !strcmp(name, usym->name))
+        && !strcmp(name, usym->name))
     {
       return usym->id;
     }
@@ -235,14 +235,14 @@ uint32_t resolvePkgID(rtl_NameSpace const *ns, UnresolvedSymbol const *usym)
     for (; NULL != ns; ns = ns->super) {
       switch (ns->type) {
       case RTL_NS_ALIAS_PACKAGE:
-	if (!strcmp(usym->pkg, ns->as.aliasPackage.aliasName)) {
-	  return ns->as.aliasPackage.pkg->id;
-	} else {
-	  continue;
-	}
+        if (!strcmp(usym->pkg, ns->as.aliasPackage.aliasName)) {
+          return ns->as.aliasPackage.pkg->id;
+        } else {
+          continue;
+        }
 
       default:
-	continue;
+        continue;
       }
     }
 
@@ -279,8 +279,8 @@ rtl_Package *rtl_resolvePackage(rtl_Compiler *C, uint32_t id)
 }
 
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
-			   rtl_NameSpace const *ns,
-			   uint32_t            unresID)
+                           rtl_NameSpace const *ns,
+                           uint32_t            unresID)
 {
   UnresolvedSymbol const *usym;
   rtl_NameSpace const    *seek;
@@ -296,28 +296,28 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
   // First check to see if this is an unqualified alias
   if (NULL == usym->pkg) {
     for (seek = ns;
-	 NULL != seek && seek->type != RTL_NS_IN_PACKAGE;
-	 seek = seek->super)
+         NULL != seek && seek->type != RTL_NS_IN_PACKAGE;
+         seek = seek->super)
     {
       switch (seek->type) {
       case RTL_NS_USE_PACKAGE:
-	pkg = seek->as.usePackage.pkg;
-	for (i = 0; i < pkg->symbolExportsLen; i++) {
-	  if (!strcmp(pkg->symbolExports[i].name, usym->name)) {
-	    return pkg->symbolExports[i].symbol;
-	  }
-	}
-	continue;
+        pkg = seek->as.usePackage.pkg;
+        for (i = 0; i < pkg->symbolExportsLen; i++) {
+          if (!strcmp(pkg->symbolExports[i].name, usym->name)) {
+            return pkg->symbolExports[i].symbol;
+          }
+        }
+        continue;
 
       case RTL_NS_ALIAS:
-	if (!strcmp(usym->name, seek->as.alias.aliasName)) {
-	  // This symbol refers to an alias, our work here is done.
-	  return seek->as.alias.symbol;
-	}
-	continue;
+        if (!strcmp(usym->name, seek->as.alias.aliasName)) {
+          // This symbol refers to an alias, our work here is done.
+          return seek->as.alias.symbol;
+        }
+        continue;
 
       default:
-	continue;
+        continue;
       }
     }
   }
@@ -327,25 +327,25 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
   pkgID = resolvePkgID(ns, usym);
   pkg   = rtl_resolvePackage(C, pkgID);
 
-  if (NULL == pkg) // Check for errors resolving package...
-    return RTL_NIL;
-
-  if (pkg != ns->currentPkg) {
+  if (NULL == pkg) {
+    printf("No such package as %s in %s:%s!", usym->pkg, usym->pkg, usym->name);
+    abort();
+  } else if (pkg != ns->currentPkg) {
     // pkg is not the current package, this means that the symbol was qualified
     // and the qualifier refers to a different package.
     //
     // Check to see if that package exports a symbol with the name we want ..
     for (i = 0; i < pkg->symbolExportsLen; i++) {
       if (!strcmp(pkg->symbolExports[i].name, usym->name)) {
-	// .. then return it if we find one ..
-	return pkg->symbolExports[i].symbol;
+        // .. then return it if we find one ..
+        return pkg->symbolExports[i].symbol;
       }
     }
 
     // .. or return an error if there is no exported symbol with that name.
-    C->error = __rtl_errSymbolNotExported(usym->name, pkg);
+    printf("Symbol referred to as %s:%s not exported from package %s!\n",
+           usym->pkg, usym->name, pkg->name);
     abort();
-    return RTL_NIL;
   } else {
     // pkg is the current package, just intern the symbol.
     return rtl_symbol(rtl_internSymbolID(pkgID, usym->name));
@@ -353,8 +353,8 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
 }
 
 rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
-			     rtl_NameSpace const *ns,
-			     uint32_t            unresID)
+                             rtl_NameSpace const *ns,
+                             uint32_t            unresID)
 {
   UnresolvedSymbol const *usym;
 
@@ -386,8 +386,8 @@ rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
     // Check to see if that package exports a symbol with the name we want ..
     for (i = 0; i < pkg->selectorExportsLen; i++) {
       if (!strcmp(pkg->selectorExports[i].name, usym->name)) {
-	// .. then return it if we find one ..
-	return pkg->selectorExports[i].selector;
+        // .. then return it if we find one ..
+        return pkg->selectorExports[i].selector;
       }
     }
 
@@ -457,14 +457,14 @@ void rtl_export(rtl_Compiler *C, rtl_Word w)
     // Check if this symbol has already been exported ..
     for (i = 0; i < pkg->symbolExportsLen; i++) {
       if (pkg->symbolExports[i].symbol == w)
-	// .. if so, just return.
-	return;
+        // .. if so, just return.
+        return;
     }
 
     if (pkg->symbolExportsCap == pkg->symbolExportsLen) {
       pkg->symbolExportsCap = pkg->symbolExportsCap == 0 ? 32 : 2*pkg->symbolExportsCap;
       pkg->symbolExports    = realloc(pkg->symbolExports,
-				      sizeof(rtl_PkgSymbolExport)*pkg->symbolExportsCap);
+                                      sizeof(rtl_PkgSymbolExport)*pkg->symbolExportsCap);
     }
 
     pkg->symbolExports[pkg->symbolExportsLen++] = (rtl_PkgSymbolExport) {
@@ -476,14 +476,14 @@ void rtl_export(rtl_Compiler *C, rtl_Word w)
     // Check if this selector has already been exported ..
     for (i = 0; i < pkg->selectorExportsLen; i++) {
       if (pkg->selectorExports[i].selector == w)
-	// .. if so, just return.
-	return;
+        // .. if so, just return.
+        return;
     }
 
     if (pkg->selectorExportsCap == pkg->selectorExportsLen) {
       pkg->selectorExportsCap = pkg->selectorExportsCap == 0 ? 32 : 2*pkg->selectorExportsCap;
       pkg->selectorExports    = realloc(pkg->selectorExports,
-					sizeof(rtl_PkgSelectorExport)*pkg->selectorExportsCap);
+                                        sizeof(rtl_PkgSelectorExport)*pkg->selectorExportsCap);
     }
 
     pkg->selectorExports[pkg->selectorExportsLen++] = (rtl_PkgSelectorExport) {
