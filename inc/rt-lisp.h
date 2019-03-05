@@ -220,6 +220,13 @@ struct rtl_Machine {
   size_t         wsStackLen;
   size_t         wsStackCap;
 
+  // Pointers to heap words which may point at younger generations.
+  //
+  // This is what's called a "rememberedSet" in the GC literature sometimes.
+  rtl_Word *backSet;
+  size_t    backSetLen;
+  size_t    backSetCap;
+
   bool fault;
 
   rtl_FaultHandler faultHandler;
@@ -374,12 +381,12 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
 			    rtl_Word    *args,
 			    size_t      argsLen);
 
-#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({			\
-      rtl_Word ___callArgs___[]  = { ARGS };				\
+#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({			       \
+      rtl_Word ___callArgs___[]  = { ARGS };				       \
       size_t   ___callArgsLen___ = (sizeof ___callArgs___) / sizeof(rtl_Word); \
-      									\
-      __rtl_callWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___); \
-    })									\
+      									       \
+      __rtl_callWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___);      \
+    })									       \
   // End of multi-line macro
 
 
@@ -431,5 +438,8 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap);
 uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str);
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
+
+// Overwrite the car of a cons cell on the heap.
+void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val);
 
 #endif // rt-lisp.h

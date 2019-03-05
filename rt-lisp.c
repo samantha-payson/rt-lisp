@@ -314,6 +314,28 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
   }
 }
 
+// Returns true if there is currently a mark for the word pointed at by ptr in
+// the bitmap for its generation.
+static
+bool wordIsMarked(rtl_Machine *M, rtl_Word ptr)
+{
+  rtl_Generation *gen;
+  int g;
+  uint32_t offs;
+
+  g = __rtl_ptrGen(ptr);
+
+  gen = M->heap.gen[g];
+
+  assert(gen);
+
+  offs = __rtl_ptrOffs(ptr);
+
+  return rtl_bmpGetBit(gen->marks, offs);
+}
+
+// Move a word as if it were a non-zero pointer, no matter its type. Used for
+// moving elements of the backSet ...
 static
 rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
 {
@@ -321,10 +343,6 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   rtl_WordType type;
   uint32_t oldOffs, newOffs;
   rtl_Generation *gen, *nextGen;
-
-  if (!rtl_isPtr(w) || rtl_isZeroValue(w)) {
-    return w;
-  }
 
   g = __rtl_ptrGen(w);
   if (g > highestGen) {
@@ -346,6 +364,16 @@ rtl_Word moveWord(rtl_Machine *M, int highestGen, rtl_Word w)
   return mkPtr(type, g + 1, newOffs);
 }
 
+static
+rtl_Word movePtr(rtl_Machine *M, int highestGen, rtl_Word w)
+{
+  if (!rtl_isPtr(w) || rtl_isZeroValue(w)) {
+    return w;
+  }
+
+  return moveWord(M, highestGen, w);
+}
+
 // Returns the number of the highest generation that was collected.
 static
 int collectGen(rtl_Machine *M, int g)
@@ -354,6 +382,8 @@ int collectGen(rtl_Machine *M, int g)
   rtl_Generation *gen, *youngerGen, *nextGen;
   int highest;
   rtl_Word **pp;
+  rtl_Word *ptr;
+  rtl_Word w;
 
   // Next generation needs to exist in order for us to collect. Maybe in the
   // future we could add the ability to compact the maximum generation in-place,
@@ -408,6 +438,13 @@ int collectGen(rtl_Machine *M, int g)
     }
   }
 
+  // .. any words pointed to from the backSet ..
+  for (i = 0; i < M->backSetLen; i++) {
+    ptr = __rtl_reifyPtr(M, M->backSet[i]);
+
+    markWord(M, gen, *ptr);
+  }
+
   // .. and any live words in younger generations.
   for (i = 0; i < g; i++) {
     youngerGen = M->heap.gen[i];
@@ -449,7 +486,7 @@ int collectGen(rtl_Machine *M, int g)
     k = rtl_bmpSelect(gen->marks, i);
 
     nextGen->words[nextGen->fillPtr++] = new 
-                                       = moveWord(M, highest, old = gen->words[k]);
+                                       = movePtr(M, highest, old = gen->words[k]);
 
   }
 
@@ -459,30 +496,58 @@ int collectGen(rtl_Machine *M, int g)
   // in the machine.
   if (g == 0) {
     // .. the current environment frame ..
-    M->env = moveWord(M, highest, M->env);
+    M->env = movePtr(M, highest, M->env);
 
     // .. the dynamic environment ..
-    M->dynamic = moveWord(M, highest, M->dynamic);
+    M->dynamic = movePtr(M, highest, M->dynamic);
 
     // .. any words on the value stack ..
     for (i = 0; i < M->vStackLen; i++) {
-      M->vStack[i] = moveWord(M, highest, M->vStack[i]);
+      M->vStack[i] = movePtr(M, highest, M->vStack[i]);
     }
 
     // .. any words on the value stack ..
     for (i = 0; i < M->dStackLen; i++) {
-      M->dStack[i] = moveWord(M, highest, M->dStack[i]);
+      M->dStack[i] = movePtr(M, highest, M->dStack[i]);
     }
 
     // .. any environment frames on the return stack ..
     for (i = 0; i < M->rStackLen; i++) {
-      M->rStack[i].env = moveWord(M, highest, M->rStack[i].env);
+      M->rStack[i].env = movePtr(M, highest, M->rStack[i].env);
     }
 
-    // .. any words in live working sets ..
+    // .. and any words in live working sets.
     for (i = 0; i < M->wsStackLen; i++) {
       for (pp = M->wsStack[i], j = 0; pp[j] != NULL; j++) {
-        *pp[j] = moveWord(M, highest, *pp[j]);
+        *pp[j] = movePtr(M, highest, *pp[j]);
+      }
+    }
+
+
+    // As for the backSet: first we need to move the backSet pointers
+    // themselves ..
+    for (i = j = 0; i < M->backSetLen; i++) {
+      w = M->backSet[i];
+
+      if (__rtl_ptrGen(w) > highest) {
+        // w's generation wasn't moved, copy it as is.
+        M->backSet[j++] = w;
+        ptr = __rtl_reifyPtr(M, w);
+
+        *ptr = movePtr(M, highest, *ptr);
+
+      } else if (wordIsMarked(M, w)) {
+        // w is from one of the moved generations, copy and move it.
+        w = moveWord(M, highest, w);
+        ptr = __rtl_reifyPtr(M, w);
+
+        // It's possible that w was moved into the same generation as its
+        // target, in which case it no longer needs to be managed from the
+        // backSet (intra-generation pointers work on their own).
+        if (__rtl_ptrGen(*ptr) < __rtl_ptrGen(w)) {
+          *ptr = movePtr(M, highest, *ptr); // Is this redundant?
+          M->backSet[j++] = w;
+        } 
       }
     }
   }
@@ -936,6 +1001,10 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
   M->wsStack    = NULL;
   M->wsStackLen = 0;
   M->wsStackCap = 0;
+
+  M->backSet    = malloc(32*sizeof(rtl_Word));
+  M->backSetLen = 0;
+  M->backSetCap = 32;
 
   M->codeBase = codeBase;
 
@@ -2607,4 +2676,86 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
   rtl_popWorkingSet(M);
 
   return rtl_call(M, callable);
+}
+
+static
+void addToBackSet(rtl_Machine *M, rtl_Word w)
+{
+  if (unlikely(M->backSetLen == M->backSetCap)) {
+    M->backSetCap = 2*M->backSetCap;
+    M->backSet    = realloc(M->backSet, M->backSetCap*sizeof(rtl_Word));
+  }
+
+  M->backSet[M->backSetLen++] = w;
+}
+
+void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
+{
+  rtl_Word *ptr;
+
+  uint32_t consGen, consOffs;
+
+  assert(rtl_isCons(cons));
+
+  ptr = __rtl_reifyPtr(M, cons);
+  ptr[0] = val;
+
+  consGen  = __rtl_ptrGen(cons);
+  consOffs = __rtl_ptrOffs(cons);
+
+  if (rtl_isPtr(val) && consGen > __rtl_ptrGen(val)) {
+    // val is younger than cons, add a pointer to the car to the backset.
+    addToBackSet(M, mkPtr(RTL_HEADER, consGen, consOffs));
+  }
+}
+
+void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
+{
+  rtl_Word *ptr;
+
+  uint32_t consGen, consOffs;
+
+  assert(rtl_isCons(cons));
+
+  ptr = __rtl_reifyPtr(M, cons);
+  ptr[1] = val;
+
+  consGen  = __rtl_ptrGen(cons);
+  consOffs = __rtl_ptrOffs(cons);
+
+  if (rtl_isPtr(val) && consGen > __rtl_ptrGen(val)) {
+    // val is younger than cons, add a pointer to the car to the backset.
+    addToBackSet(M, mkPtr(RTL_HEADER, consGen, consOffs + 1));
+  }
+}
+
+void rtl_writeTupleElem(rtl_Machine *M,
+                        rtl_Word    tuple,
+                        uint32_t    idx,
+                        rtl_Word    val)
+{
+  rtl_Word *ptr;
+  uint32_t tplGen, tplOffs;
+  size_t len;
+
+  assert(rtl_isCons(tuple));
+
+  ptr = __rtl_reifyPtr(M, tuple);
+  len = rtl_int28Value(ptr[0]);
+
+  if (len <= idx) {
+    rtl_triggerFault(M, "bad-write-index",
+                     "Trying to write to a tuple at an out-of-bounds index!");
+    return;
+  }
+
+  ptr[1 + idx] = val;
+
+  tplGen  = __rtl_ptrGen(tuple);
+  tplOffs = __rtl_ptrOffs(tuple);
+
+  if (rtl_isPtr(val) && tplGen > __rtl_ptrGen(val)) {
+    // val is younger than cons, add a pointer to the car to the backset.
+    addToBackSet(M, mkPtr(RTL_HEADER, tplGen, tplOffs + 1 + idx));
+  }
 }
