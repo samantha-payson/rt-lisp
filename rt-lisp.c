@@ -1456,23 +1456,23 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   M->pc    = func->as.lisp.code;
 
   while (!M->fault) {
-    /* printf("VSTACK:"); */
-    /* for (i = 0; i < M->vStackLen; i++) { */
-    /*   printf(" "); */
-    /*   rtl_formatExpr(M, M->vStack[i]); */
-    /* } */
-    /* printf("\n\n"); */
+    //  printf("VSTACK:");
+    //  for (i = 0; i < M->vStackLen; i++) {
+    //    printf(" ");
+    //    rtl_formatExpr(M, M->vStack[i]);
+    //  }
+    //  printf("\n\n");
 
-    /* printf("env: "); */
-    /* rtl_formatExpr(M, M->env); */
-    /* printf("\n"); */
-    /* printf("RSTACK:\n"); */
-    /* for (i = 0; i < M->rStackLen; i++) { */
-    /*   rtl_formatExpr(M, M->rStack[i].env); */
-    /*   printf(" "); */
-    /* } */
+    //  printf("env: ");
+    //  rtl_formatExpr(M, M->env);
+    //  printf("\n");
+    //  printf("RSTACK:\n");
+    //  for (i = 0; i < M->rStackLen; i++) {
+    //    rtl_formatExpr(M, M->rStack[i].env);
+    //    printf(" ");
+    //  }
 
-    /* printf("\n"); */
+    //  printf("\n");
 
     // rtl_disasm(M->codeBase, M->pc);
 
