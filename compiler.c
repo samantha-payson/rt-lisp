@@ -1620,6 +1620,8 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
     break;
 
   case RTL_INTRINSIC_SET_VAR:
+    x->as.setVar.value = __impl_transformIntrinsic(env, x->as.setVar.value);
+
     if ((!env || !lookupVar(env, x->as.setVar.name,
                             &x->as.setVar.frame,
                             &x->as.setVar.idx)))
