@@ -787,9 +787,7 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
 	 rtl_symbolName(func->name));
 
   while (code < end) {
-    printf("%s:%s#%-4X: ",
-	   rtl_symbolPackageName(func->name),
-	   rtl_symbolName(func->name),
+    printf("    @%04X",
 	   (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 
     code = rtl_disasm(M->codeBase, code);
@@ -915,14 +913,162 @@ void rtl_dumpHeap(rtl_Machine *M)
   }
 }
 
+
+static
+uint8_t *nextInstruction(uint8_t *bc)
+{
+  switch ((rtl_Opcode)*bc) {
+  case RTL_OP_NOP:
+  case RTL_OP_MAP:
+  case RTL_OP_INSERT:
+  case RTL_OP_LOOKUP:
+  case RTL_OP_IADD:
+  case RTL_OP_ISUB:
+  case RTL_OP_IMUL:
+  case RTL_OP_IDIV:
+  case RTL_OP_IMOD:
+  case RTL_OP_LT:
+  case RTL_OP_LEQ:
+  case RTL_OP_GT:
+  case RTL_OP_GEQ:
+  case RTL_OP_EQ:
+  case RTL_OP_NEQ:
+  case RTL_OP_ISO:
+  case RTL_OP_FADD:
+  case RTL_OP_FSUB:
+  case RTL_OP_FMUL:
+  case RTL_OP_FDIV:
+  case RTL_OP_SET_CAR:
+  case RTL_OP_SET_CDR:
+  case RTL_OP_SET_ELEM:
+  case RTL_OP_CONST_NIL:
+  case RTL_OP_CONST_TOP:
+  case RTL_OP_GENSYM:
+  case RTL_OP_CONS:
+  case RTL_OP_CAR:
+  case RTL_OP_CDR:
+  case RTL_OP_POP:
+  case RTL_OP_SWAP:
+  case RTL_OP_DUP:
+  case RTL_OP_IS_INT28:
+  case RTL_OP_IS_FIX14:
+  case RTL_OP_IS_SYMBOL:
+  case RTL_OP_IS_SELECTOR:
+  case RTL_OP_IS_MAP:
+  case RTL_OP_IS_CHAR:
+  case RTL_OP_IS_NIL:
+  case RTL_OP_IS_TOP:
+  case RTL_OP_NOT:
+  case RTL_OP_IS_CONS:
+  case RTL_OP_IS_TUPLE:
+  case RTL_OP_APPLY_LIST:
+  case RTL_OP_APPLY_TUPLE:
+  case RTL_OP_RETURN:
+  case RTL_OP_END_LABELS:
+  case RTL_OP_GET:
+  case RTL_OP_LEN:
+  case RTL_OP_PUSH_FIRST:
+  case RTL_OP_PUSH_LAST:
+  case RTL_OP_CONCAT:
+  case RTL_OP_SLICE:
+    return bc + 1;
+
+  case RTL_OP_CJMP8:
+  case RTL_OP_JMP8:
+    return bc + 2;
+
+  case RTL_OP_JMP16:
+  case RTL_OP_CJMP16:
+  case RTL_OP_CALL:
+  case RTL_OP_TAIL:
+  case RTL_OP_REST:
+  case RTL_OP_LABELS:
+  case RTL_OP_TUPLE:
+    return bc + 3;
+
+  case RTL_OP_CJMP32:
+  case RTL_OP_JMP32:
+  case RTL_OP_UNDEFINED_VAR:
+  case RTL_OP_VAR:
+  case RTL_OP_CLOSURE:
+  case RTL_OP_DYN_GET:
+  case RTL_OP_DYN_SET:
+  case RTL_OP_DYN_SAVE:
+  case RTL_OP_DYN_RESTORE:
+  case RTL_OP_SET_VAR:
+  case RTL_OP_CONST:
+    return bc + 5;
+
+  case RTL_OP_STATIC_CALL:
+  case RTL_OP_STATIC_TAIL:
+  case RTL_OP_UNDEFINED_CALL:
+  case RTL_OP_UNDEFINED_TAIL:
+    return bc + 7;
+
+  default:
+     printf("Missing case in nextInstruction!\n");
+     abort();
+  }
+}
+
+static
+uint8_t *prevInstruction(uint8_t *start, uint8_t *after)
+{
+  uint8_t *prev, *next;
+
+  prev = start;
+
+  assert(prev < after);
+
+  for (next = nextInstruction(prev); next < after; next = nextInstruction(prev))
+  {
+    prev = next;
+  }
+
+  return prev;
+}
+
 void rtl_stackTrace(rtl_Machine *M)
 {
-  size_t i;
+  size_t         i;
+  rtl_Function  *func;
+  uint32_t      fnID;
+  uint8_t       *pc;
+  uint8_t       *prev;
+
+  char fnName[1024];
 
   printf("Stack Trace (most recent at bottom):\n");
   for (i = 0; i < M->rStackLen; i++) {
-    printf("        %s:%s\n",
-	   rtl_symbolPackageName(M->rStack[i].fn),
-	   rtl_symbolName(M->rStack[i].fn));
+    func = rtl_reifyFunction(M->codeBase, M->rStack[i].fn);
+    fnID = rtl_functionID(M->rStack[i].fn);
+
+    snprintf(fnName, 1024, "%s:%s",
+             rtl_symbolPackageName(func->name),
+             rtl_symbolName(func->name));
+
+
+    printf("    %4zu: %-32s #%04u\n",
+           M->rStackLen - 1 - i,
+           fnName,
+           (unsigned int)fnID);
+
+    if (i + 1 < M->rStackLen) {
+      pc = M->rStack[i + 1].pc;
+    } else {
+      pc = M->pc;
+    }
+
+    if (!func->isBuiltin) {
+      prev = prevInstruction(func->as.lisp.code, pc);
+
+      printf("            @%04X", (unsigned int)(prev - func->as.lisp.code));
+      rtl_disasm(M->codeBase, prev);
+
+    } else {
+      printf("            .. builtin ..\n");
+    }
+
+    printf("\n");
   }
 }

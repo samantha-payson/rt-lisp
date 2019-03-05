@@ -1236,7 +1236,7 @@ char const *rtl_typeName(rtl_WordType type)
 # define CALL_TRACE_TAIL(FNAME)
 #endif
 
-#define RPUSH(FNAME) ({                                                 \
+#define RPUSH(FN) ({                                                    \
       if (unlikely(M->rStackLen == M->rStackCap)) {                     \
         M->rStackCap = M->rStackCap*2;                                  \
         M->rStack    = realloc(M->rStack,                               \
@@ -1246,16 +1246,16 @@ char const *rtl_typeName(rtl_WordType type)
       M->rStack[M->rStackLen++] = (rtl_RetAddr) {                       \
         .pc  = M->pc,                                                   \
         .env = M->env,                                                  \
-        .fn  = FNAME,                                                   \
+        .fn  = FN,                                                      \
       };                                                                \
       CALL_TRACE_ENTER()                                                \
     })                                                                  \
   // End of multi-line macro
 
-#define TAIL(FNAME) ({                          \
-      CALL_TRACE_TAIL(FNAME);                   \
-      M->rStack[M->rStackLen - 1].fn = FNAME;   \
-    })                                          \
+#define TAIL(FN) ({                           \
+      CALL_TRACE_TAIL(FN);                    \
+      M->rStack[M->rStackLen - 1].fn = FN;    \
+    })                                        \
   // End of multi-line macro
 
 #define VPOP() (M->vStack[--M->vStackLen])
@@ -1451,7 +1451,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   }
 
   M->pc = NULL;
-  RPUSH(func->name);
+  RPUSH(fn);
 
   M->pc    = func->as.lisp.code;
 
@@ -1936,8 +1936,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
           wptr = rtl_allocTuple(M, &b, 1);
           wptr[0] = a;
 
-          if (opcode == RTL_OP_CALL) RPUSH(func->name);
-          else TAIL(func->name);
+          if (opcode == RTL_OP_CALL) RPUSH(fn);
+          else TAIL(fn);
 
           M->env = b;
           M->pc = func->as.lisp.code;
@@ -1953,8 +1953,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
         func = rtl_reifyFunction(M->codeBase, f);
 
-        if (opcode == RTL_OP_CALL) RPUSH(func->name);
-        else TAIL(func->name);
+        if (opcode == RTL_OP_CALL) RPUSH(f);
+        else TAIL(f);
 
         assert(!func->isBuiltin);
 
@@ -1963,10 +1963,15 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
         break;
 
-      default:
-        printf(" error: Can't call object of type '%s'!\n",
-               rtl_typeNameOf(f));
-        goto interp_cleanup;
+      default: {
+          char msgBuf[512];
+          snprintf(msgBuf, 512, "Can't call object of type '%s'!\n",
+                   rtl_typeNameOf(f));
+
+          rtl_triggerFault(M, "uncallable", msgBuf);
+
+          goto interp_cleanup;
+        }
 
       } break;
 
@@ -1995,8 +2000,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
         wptr = rtl_allocTuple(M, &b, 1);
         wptr[0] = a;
 
-        if (opcode == RTL_OP_STATIC_CALL) RPUSH(func->name);
-        else TAIL(func->name);
+        if (opcode == RTL_OP_STATIC_CALL) RPUSH(f);
+        else TAIL(f);
 
         M->env = b;
         M->pc  = func->as.lisp.code;
@@ -2032,7 +2037,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
           wptr = rtl_allocTuple(M, &b, 1);
           wptr[0] = a;
 
-          RPUSH(func->name);
+          RPUSH(f);
 
           M->env = b;
           M->pc  = func->as.lisp.code;
@@ -2048,7 +2053,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
         func = rtl_reifyFunction(M->codeBase, f);
 
-        RPUSH(func->name);
+        RPUSH(f);
 
         assert(!func->isBuiltin);
 

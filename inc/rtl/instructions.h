@@ -18,9 +18,6 @@
 #endif
 
 typedef enum rtl_Opcode {
-  // Trigger Fault
-  RTL_OP_FAULT,
-
   // No-op
   RTL_OP_NOP,
 
@@ -136,5 +133,4 @@ typedef enum rtl_Opcode {
   RTL_OP_SET_CDR,
   RTL_OP_SET_ELEM,
 
-  ___RTL_OP_MAX___,
 } rtl_Opcode;

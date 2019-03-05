@@ -103,12 +103,20 @@ rtl_Word rtl_repl_macroExpand(rtl_Machine *M, rtl_Word const *args, size_t argsL
 static
 rtl_Word rtl_repl_disassemble(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
 {
+  rtl_Word fn;
+
   if (argsLen != 1) {
     printf("\n  usage: (disassemble <fn>)\n\n");
     return RTL_NIL;
   }
 
-  rtl_disasmFn(M, args[0]);
+  if (rtl_isInt28(args[0])) {
+    fn = rtl_function(rtl_int28Value(args[0]));
+  } else {
+    fn = args[0];
+  }
+
+  rtl_disasmFn(M, fn);
 
   return rtl_internSelector(NULL, "ok");
 }
