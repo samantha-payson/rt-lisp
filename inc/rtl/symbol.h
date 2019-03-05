@@ -26,6 +26,12 @@ char const *rtl_symbolPackageName(rtl_Word w);
 
 char const *rtl_unresolvedSymbolName(rtl_Word w);
 
+// Intern a symbol, with a given package and name. 
+rtl_Word rtl_intern(char const *pkg, char const *name);
+
+// Package may be NULL or "" for selectors w/ no package.
+rtl_Word rtl_internSelector(char const *pkg, char const *name);
+
 static inline
 uint32_t rtl_symbolID(rtl_Word w)
 {

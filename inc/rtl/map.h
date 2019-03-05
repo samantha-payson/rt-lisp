@@ -48,3 +48,15 @@ void rtl_visitMap(rtl_Machine      *M,
                   void             *accum,
                   rtl_MapVisitorFn fn,
                   rtl_Word         map);
+
+// Shorthand method for setting a selector-keyed field in a map.
+static inline
+rtl_Word rtl_recordSet(rtl_Machine *M,
+                       rtl_Word map,
+                       char const *selector,
+                       rtl_Word data)
+{
+  return rtl_mapInsert(M, map,
+                       rtl_internSelector(NULL, selector),
+                       data);
+}

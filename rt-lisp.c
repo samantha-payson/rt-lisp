@@ -1273,8 +1273,16 @@ char const *rtl_typeName(rtl_WordType type)
         a = VPOP();                                                     \
                                                                         \
         if (unlikely(unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b)))) { \
-          rtl_triggerFault(M, "type-mismatch",                          \
-                           "Binary operation expected two " TYPE_NAME "."); \
+          c = RTL_MAP;                                                  \
+          c = rtl_recordSet(M, c, "type",                               \
+                            rtl_internSelector(NULL, "type-mismatch")); \
+          c = rtl_recordSet(M, c, "message",                            \
+                            rtl_string(M, "Type mismatch for binop "    \
+                                       "instruction '" #INAME "', "     \
+                                       "expected both " TYPE_NAME));    \
+          c = rtl_recordSet(M, c, "lhs", a);                            \
+          c = rtl_recordSet(M, c, "rhs", b);                            \
+          __rtl_triggerFault(M, c);                                     \
           goto interp_cleanup;                                          \
         }                                                               \
                                                                         \
