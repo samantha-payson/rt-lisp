@@ -288,8 +288,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     if (rtl_isFunction(literal)) {
       func = rtl_reifyFunction(codeBase, literal);
       printf("         ;; %s:%s",
-	     rtl_symbolPackageName(func->name),
-	     rtl_symbolName(func->name));
+             rtl_symbolPackageName(func->name),
+             rtl_symbolName(func->name));
     }
     printf("\n");
 
@@ -443,9 +443,9 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     func = rtl_reifyFunction(codeBase, literal);
 
     printf("   static-call %s:%s %d\n",
-	   rtl_symbolPackageName(func->name),
-	   rtl_symbolName(func->name),
-	   (int)size);
+           rtl_symbolPackageName(func->name),
+           rtl_symbolName(func->name),
+           (int)size);
     return bc + 7;
 
   case RTL_OP_STATIC_TAIL:
@@ -460,9 +460,9 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     func = rtl_reifyFunction(codeBase, literal);
 
     printf("   static-tail %s:%s %d\n",
-	   rtl_symbolPackageName(func->name),
-	   rtl_symbolName(func->name),
-	   (int)size);
+           rtl_symbolPackageName(func->name),
+           rtl_symbolName(func->name),
+           (int)size);
     return bc + 7;
 
   case RTL_OP_APPLY_LIST:
@@ -480,8 +480,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   undef-call  %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 7;
 
   case RTL_OP_UNDEFINED_TAIL:
@@ -491,8 +491,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   undef-tail  %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 7;
 
   case RTL_OP_UNDEFINED_VAR:
@@ -502,8 +502,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   undef-var   %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_RETURN:
@@ -535,12 +535,12 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   closure     Function#%d",
-	   (int)rtl_functionID(literal));
+           (int)rtl_functionID(literal));
 
     func = rtl_reifyFunction(codeBase, literal);
     printf("         ;; %s:%s",
-	   rtl_symbolPackageName(func->name),
-	   rtl_symbolName(func->name));
+           rtl_symbolPackageName(func->name),
+           rtl_symbolName(func->name));
     printf("\n");
     return bc + 5;
 
@@ -593,8 +593,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   dyn-get     %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_DYN_SET:
@@ -604,8 +604,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   dyn-set     %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_DYN_SAVE:
@@ -615,8 +615,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   dyn-save    %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_DYN_RESTORE:
@@ -626,8 +626,8 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
             | (rtl_Word)bc[4] << 24 ;
 
     printf("   dyn-restore %s:%s\n",
-	   rtl_symbolPackageName(literal),
-	   rtl_symbolName(literal));
+           rtl_symbolPackageName(literal),
+           rtl_symbolName(literal));
     return bc + 5;
 
   case RTL_OP_MAP:
