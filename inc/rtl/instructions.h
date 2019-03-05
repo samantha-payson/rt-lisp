@@ -130,5 +130,11 @@ typedef enum rtl_Opcode {
   RTL_OP_NEQ,
   RTL_OP_ISO,
 
+  // Mutation
+  RTL_OP_SET_VAR,
+  RTL_OP_SET_CAR,
+  RTL_OP_SET_CDR,
+  RTL_OP_SET_ELEM,
+
   ___RTL_OP_MAX___,
 } rtl_Opcode;

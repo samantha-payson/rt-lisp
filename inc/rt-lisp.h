@@ -441,5 +441,10 @@ rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
 
 // Overwrite the car of a cons cell on the heap.
 void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val);
+void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val);
+void rtl_writeTupleElem(rtl_Machine *M,
+                        rtl_Word    tuple,
+                        uint32_t    idx,
+                        rtl_Word    val);
 
 #endif // rt-lisp.h

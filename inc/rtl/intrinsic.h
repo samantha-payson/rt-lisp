@@ -66,6 +66,10 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_TYPE_PRED,
   RTL_INTRINSIC_CONSTANT,
   RTL_INTRINSIC_GENSYM,
+  RTL_INTRINSIC_SET_VAR,
+  RTL_INTRINSIC_SET_CAR,
+  RTL_INTRINSIC_SET_CDR,
+  RTL_INTRINSIC_SET_ELEM,
 } rtl_IntrinsicType;
 
 typedef struct rtl_Intrinsic rtl_Intrinsic;
@@ -213,6 +217,20 @@ struct rtl_Intrinsic {
     struct {
       rtl_Intrinsic *test, *then, *_else;
     } _if;
+
+    struct {
+      rtl_Word name;
+      uint16_t frame, idx;
+      rtl_Intrinsic *value;
+    } setVar;
+
+    struct {
+      rtl_Intrinsic *cons, *value;
+    } setCar, setCdr;
+
+    struct {
+      rtl_Intrinsic *tuple, *index, *value;
+    } setElem;
 
     rtl_Word constant;
   } as;
@@ -763,6 +781,86 @@ rtl_Intrinsic *rtl_mkConstantIntrinsic(rtl_Word w)
     .type = RTL_INTRINSIC_CONSTANT,
     .as = {
       .constant = w,
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkSetVarIntrinsic(rtl_Word      name,
+                                     rtl_Intrinsic *value)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_SET_VAR,
+    .as = {
+      .setVar = {
+        .name = name,
+        .frame = 0,
+        .idx   = 0,
+        .value = value,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkSetCarIntrinsic(rtl_Intrinsic *cons,
+                                     rtl_Intrinsic *value)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_SET_CAR,
+    .as = {
+      .setCar = {
+        .cons  = cons,
+        .value = value,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkSetCdrIntrinsic(rtl_Intrinsic *cons,
+                                     rtl_Intrinsic *value)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_SET_CDR,
+    .as = {
+      .setCar = {
+        .cons  = cons,
+        .value = value,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkSetElemIntrinsic(rtl_Intrinsic *tuple,
+                                      rtl_Intrinsic *index,
+                                      rtl_Intrinsic *value)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_SET_ELEM,
+    .as = {
+      .setElem = {
+        .tuple = tuple,
+        .index = index,
+        .value = value,
+      },
     },
   };
 

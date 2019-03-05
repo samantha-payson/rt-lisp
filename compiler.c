@@ -276,6 +276,10 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(unresolvedp,  "unresolved?")                \
   M(topp,         "top?")                       \
   M(_if,          "if")                         \
+  M(setVar,       "set-var")                    \
+  M(setCar,       "set-car")                    \
+  M(setCdr,       "set-cdr")                    \
+  M(setElem,      "set-elem")                   \
   // End of multi-line macro
 
 #define DECLARE_INTRINSIC_WORD(CNAME, LISPNAME) CNAME,
@@ -1296,6 +1300,23 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       return rtl_mkApplyTupleIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
                                        rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
 
+    } else if (head == symCache.intrinsic.setVar) {
+      return rtl_mkSetVarIntrinsic(rtl_cadr(C->M, sxp),
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.setCar) {
+      return rtl_mkSetCarIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.setCdr) {
+      return rtl_mkSetCdrIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+
+    } else if (head == symCache.intrinsic.setElem) {
+      return rtl_mkSetElemIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
+                                    rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
+                                    rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+
     } else if (head == symCache.intrinsic.gensym) {
       assert(len == 1);
 
@@ -1597,6 +1618,34 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   case RTL_INTRINSIC_CONSTANT:
   case RTL_INTRINSIC_GENSYM:
     break;
+
+  case RTL_INTRINSIC_SET_VAR:
+    if ((!env || !lookupVar(env, x->as.setVar.name,
+                            &x->as.setVar.frame,
+                            &x->as.setVar.idx)))
+    {
+      printf("compile error: can't set undefined var %s:%s!\n",
+             rtl_symbolPackageName(x->as.setVar.name),
+             rtl_symbolName(x->as.setVar.name));
+      abort();
+    } break;
+
+  case RTL_INTRINSIC_SET_CAR:
+    x->as.setCar.cons  = __impl_transformIntrinsic(env, x->as.setCar.cons);
+    x->as.setCar.value = __impl_transformIntrinsic(env, x->as.setCar.value);
+    break;
+
+  case RTL_INTRINSIC_SET_CDR:
+    x->as.setCdr.cons  = __impl_transformIntrinsic(env, x->as.setCdr.cons);
+    x->as.setCdr.value = __impl_transformIntrinsic(env, x->as.setCdr.value);
+    break;
+
+  case RTL_INTRINSIC_SET_ELEM:
+    x->as.setElem.tuple = __impl_transformIntrinsic(env, x->as.setElem.tuple);
+    x->as.setElem.index = __impl_transformIntrinsic(env, x->as.setElem.index);
+    x->as.setElem.value = __impl_transformIntrinsic(env, x->as.setElem.value);
+    break;
+
   }
 
   return x;
@@ -1806,6 +1855,26 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
     rtl_tailCallPass(x->as._if.test);
     rtl_tailCallPass(x->as._if.then);
     rtl_tailCallPass(x->as._if._else);
+    break;
+
+  case RTL_INTRINSIC_SET_VAR:
+    rtl_tailCallPass(x->as.setVar.value);
+    break;
+
+  case RTL_INTRINSIC_SET_CAR:
+    rtl_tailCallPass(x->as.setCar.cons);
+    rtl_tailCallPass(x->as.setCar.value);
+    break;
+
+  case RTL_INTRINSIC_SET_CDR:
+    rtl_tailCallPass(x->as.setCdr.cons);
+    rtl_tailCallPass(x->as.setCdr.value);
+    break;
+
+  case RTL_INTRINSIC_SET_ELEM:
+    rtl_tailCallPass(x->as.setElem.tuple);
+    rtl_tailCallPass(x->as.setElem.index);
+    rtl_tailCallPass(x->as.setElem.value);
     break;
 
   case RTL_INTRINSIC_EXPORT:
@@ -2123,6 +2192,26 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     default:
       return x->codeSize = 5;
     }
+
+  case RTL_INTRINSIC_SET_VAR:
+    return x->codeSize = annotateCodeSize(M, x->as.setVar.value)
+                       + 5;
+
+  case RTL_INTRINSIC_SET_CAR:
+    return x->codeSize = annotateCodeSize(M, x->as.setCar.cons)
+                       + annotateCodeSize(M, x->as.setCar.value)
+                       + 1;
+
+  case RTL_INTRINSIC_SET_CDR:
+    return x->codeSize = annotateCodeSize(M, x->as.setCdr.cons)
+                       + annotateCodeSize(M, x->as.setCdr.value)
+                       + 1;
+
+  case RTL_INTRINSIC_SET_ELEM:
+    return x->codeSize = annotateCodeSize(M, x->as.setElem.tuple)
+                       + annotateCodeSize(M, x->as.setElem.index)
+                       + annotateCodeSize(M, x->as.setElem.value)
+                       + 1;
 
   default:
     abort(); // unreachable
@@ -2789,5 +2878,31 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
       rtl_emitWordToFunc(codeBase, fnID, x->as.constant);
 
     } break;
+
+  case RTL_INTRINSIC_SET_VAR:
+    rtl_emitIntrinsicCode(C, fnID, x->as.setVar.value);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_SET_VAR);
+    rtl_emitShortToFunc(codeBase, fnID, x->as.setVar.frame);
+    rtl_emitShortToFunc(codeBase, fnID, x->as.setVar.idx);
+    break;
+
+  case RTL_INTRINSIC_SET_CAR:
+    rtl_emitIntrinsicCode(C, fnID, x->as.setCar.cons);
+    rtl_emitIntrinsicCode(C, fnID, x->as.setCar.value);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_SET_CAR);
+    break;
+
+  case RTL_INTRINSIC_SET_CDR:
+    rtl_emitIntrinsicCode(C, fnID, x->as.setCdr.cons);
+    rtl_emitIntrinsicCode(C, fnID, x->as.setCdr.value);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_SET_CDR);
+    break;
+
+  case RTL_INTRINSIC_SET_ELEM:
+    rtl_emitIntrinsicCode(C, fnID, x->as.setElem.tuple);
+    rtl_emitIntrinsicCode(C, fnID, x->as.setElem.index);
+    rtl_emitIntrinsicCode(C, fnID, x->as.setElem.value);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_SET_ELEM);
+    break;
   }
 }

@@ -2173,7 +2173,48 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       } else {
         VPUSH(RTL_NIL);
       } break;
+
+    case RTL_OP_SET_VAR:
+      VSTACK_ASSERT_LEN(1);
       
+      M->pc = readShort(M->pc, &frame);
+      M->pc = readShort(M->pc, &idx);
+
+      a = VPEEK(0);
+
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      assert(frame < len);
+
+      rtl_writeTupleElem(M, rptr[frame], idx, a);
+      break;
+
+    case RTL_OP_SET_CAR:
+      b = VPOP();
+      a = VPOP();
+
+      rtl_writeCar(M, a, b);
+
+      VPUSH(b);
+      break;
+
+    case RTL_OP_SET_CDR:
+      b = VPOP();
+      a = VPOP();
+
+      rtl_writeCdr(M, a, b);
+
+      VPUSH(b);
+      break;
+
+    case RTL_OP_SET_ELEM:
+      c = VPOP();
+      b = VPOP();
+      a = VPOP();
+
+      rtl_writeTupleElem(M, a, b, c);
+
+      VPUSH(c);
+      break;
 
     default:
       printf("Unhandled instruction: opcode %d\n", (int)opcode);

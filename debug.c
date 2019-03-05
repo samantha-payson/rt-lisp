@@ -706,6 +706,28 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     printf("   fdiv\n");
     return bc + 1;
 
+  case RTL_OP_SET_VAR:
+    frame = (uint16_t)bc[1] << 0
+          | (uint16_t)bc[2] << 8;
+
+    idx = (uint16_t)bc[3] << 0
+        | (uint16_t)bc[4] << 8;
+
+    printf("   set-var     %d %d\n", (int)frame, (int)idx);
+    return bc + 5;
+
+  case RTL_OP_SET_CAR:
+    printf("   set-car\n");
+    return bc + 1;
+
+  case RTL_OP_SET_CDR:
+    printf("   set-cdr\n");
+    return bc + 1;
+
+  case RTL_OP_SET_ELEM:
+    printf("   set-elem\n");
+    return bc + 1;
+
   default:
     printf("  ??? ; opcode %d\n", (int)*bc);
     abort();
