@@ -241,6 +241,8 @@ struct rtl_Machine {
 // Initialize the machine M.
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase);
 
+void rtl_resetMachine(rtl_Machine *M);
+
 static inline
 size_t rtl_push(rtl_Machine *M, rtl_Word w)
 {
@@ -421,7 +423,16 @@ bool rtl_clearFault(rtl_Machine *M)
 {
   bool fault = M->fault;
 
-  M->fault = false;
+  if (fault) {
+    M->vStackLen = 0;
+    M->dStackLen = 0;
+    M->rStackLen = 0;
+
+    M->env = RTL_TUPLE;
+
+    M->fault = false;
+  }
+
   return fault;
 }
 

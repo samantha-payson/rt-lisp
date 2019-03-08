@@ -185,7 +185,7 @@ void rtl_repl(rtl_Compiler *C)
     if (!rtl_clearFault(C->M)) {
       w = rtl_call(C->M, rtl_function(replFnID));
 
-      if (!rtl_checkFault(C->M)) {
+      if (!rtl_clearFault(C->M)) {
         printf("\n=> ");
         rtl_formatExpr(C->M, w);
         printf("\n");

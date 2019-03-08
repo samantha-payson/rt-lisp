@@ -116,7 +116,7 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_FUNCTION:
-    printf("Function#%X", w >> 4);
+    printf("Function#%u", (unsigned int)(w >> 4));
     break;
 
   case RTL_CLOSURE:

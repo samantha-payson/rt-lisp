@@ -1021,6 +1021,17 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
              handleFault);
 }
 
+void rtl_resetMachine(rtl_Machine *M)
+{
+  M->vStackLen = M->dStackLen
+               = M->rStackLen
+               = 0;
+
+  M->env = RTL_TUPLE;
+
+  M->fault = M->yield = false;
+}
+
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 {
   rtl_Word w = RTL_NIL, *ptr;
@@ -1851,10 +1862,21 @@ void rtl_run(rtl_Machine *M)
       M->pc = readShort(M->pc, &idx);
 
       rptr = rtl_reifyTuple(M, M->env, &len);
-      assert(frame < len);
+      if (unlikely(frame >= len)) {
+        rtl_triggerFault(M, "invalid-var-frame",
+                         "Tried to reference a variable in an "
+                         "out-of-bounds frame.");
+        goto interp_cleanup;
+      }
 
       rptr = rtl_reifyTuple(M, rptr[frame], &len);
-      assert(idx < len);
+      if (unlikely(idx >= len)) {
+        rtl_triggerFault(M, "invalid-var-idx",
+                         "Tried to reference a variable with an "
+                         "out-of-bounds index.");
+        goto interp_cleanup;
+      }
+
 
       VPUSH(rptr[idx]);
       break;
