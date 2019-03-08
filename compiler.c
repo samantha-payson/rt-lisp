@@ -235,6 +235,7 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(var,          "var")                        \
   M(gensym,       "gensym")                     \
   M(call,         "call")                       \
+  M(yield,        "yield")                      \
   M(namedCall,    "named-call")                 \
   M(applyList,    "apply-list")                 \
   M(applyTuple,   "apply-tuple")                \
@@ -1317,6 +1318,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
                                     rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
                                     rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
 
+    } else if (head == symCache.intrinsic.yield) {
+      return rtl_mkYieldIntrinsic();
+
     } else if (head == symCache.intrinsic.gensym) {
       assert(len == 1);
 
@@ -1617,6 +1621,7 @@ rtl_Intrinsic *__impl_transformIntrinsic(Environment const *env, rtl_Intrinsic *
   case RTL_INTRINSIC_QUOTE:
   case RTL_INTRINSIC_CONSTANT:
   case RTL_INTRINSIC_GENSYM:
+  case RTL_INTRINSIC_YIELD:
     break;
 
   case RTL_INTRINSIC_SET_VAR:
@@ -1883,6 +1888,7 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
   case RTL_INTRINSIC_QUOTE:
   case RTL_INTRINSIC_CONSTANT:
   case RTL_INTRINSIC_GENSYM:
+  case RTL_INTRINSIC_YIELD:
     break;
   }
 }
@@ -2215,6 +2221,9 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
                        + annotateCodeSize(M, x->as.setElem.value)
                        + 1;
 
+  case RTL_INTRINSIC_YIELD:
+    return x->codeSize = 2;
+
   default:
     abort(); // unreachable
   }
@@ -2509,6 +2518,10 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     }
 
     rtl_registerCallSite(C, x->as.namedCall.name, rtl_function(fnID), offs);
+    break;
+
+  case RTL_INTRINSIC_YIELD:
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_YIELD);
     break;
 
   case RTL_INTRINSIC_APPLY_LIST:

@@ -1018,7 +1018,9 @@ uint8_t *prevInstruction(uint8_t *start, uint8_t *after)
 
   prev = start;
 
-  assert(prev < after);
+  if (prev >= after) {
+    return prev;
+  }
 
   for (next = nextInstruction(prev); next < after; next = nextInstruction(prev))
   {

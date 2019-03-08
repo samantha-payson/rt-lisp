@@ -1008,7 +1008,9 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   M->codeBase = codeBase;
 
-  M->fault = RTL_NIL;
+  M->fault = false;
+
+  M->yield = false;
 
   rtl_initCompiler(&C, M);
 
@@ -1403,6 +1405,48 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
 
 rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 {
+  rtl_Function    *func;
+  rtl_Word const  *rptr;
+  size_t          len;
+
+
+  func = rtl_reifyFunction(M->codeBase, fn);
+
+  if (func->isBuiltin) {
+    rptr = rtl_reifyTuple(M, M->env, &len);
+    if (len == 0) {
+      VPUSH(func->as.builtin.cFn(M, NULL, 0));
+    } else {
+      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
+
+      VPUSH(func->as.builtin.cFn(M, rptr, len));
+    }
+  } else {
+    M->pc = NULL;
+    RPUSH(fn);
+
+    M->pc = func->as.lisp.code;
+
+    rtl_run(M);
+
+  }
+
+  return M->vStackLen ? VPOP() : RTL_NIL;
+}
+
+void rtl_resume(rtl_Machine *M)
+{
+  if (M->yield) {
+    M->yield = false;
+    rtl_run(M);
+  } else {
+    rtl_triggerFault(M, "invalid-resume",
+                     "rtl_resume called on a machine that hadn't yielded.");
+  }
+}
+
+void rtl_run(rtl_Machine *M)
+{
   uint8_t opcode, u8;
 
   uint16_t frame, idx, size, u16;
@@ -1430,30 +1474,16 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
   uint8_t *savePC;
 
+  if (M->yield) {
+    rtl_triggerFault(M, "run-while-yielded",
+                     "Trying to run a machine which is currently yielded.");
+    return;
+  }
+
   // Ensure these words are involved in any garbage collection that may happen.
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
 
   assert(M->env != RTL_NIL);
-
-  func = rtl_reifyFunction(M->codeBase, fn);
-
-  if (func->isBuiltin) {
-    rptr = rtl_reifyTuple(M, M->env, &len);
-    if (len == 0) {
-      VPUSH(func->as.builtin.cFn(M, NULL, 0));
-    } else {
-      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
-
-      VPUSH(func->as.builtin.cFn(M, rptr, len));
-    }
-
-    goto interp_cleanup;
-  }
-
-  M->pc = NULL;
-  RPUSH(fn);
-
-  M->pc    = func->as.lisp.code;
 
   while (!M->fault) {
     //  printf("VSTACK:");
@@ -1936,8 +1966,8 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
           wptr = rtl_allocTuple(M, &b, 1);
           wptr[0] = a;
 
-          if (opcode == RTL_OP_CALL) RPUSH(fn);
-          else TAIL(fn);
+          if (opcode == RTL_OP_CALL) RPUSH(f);
+          else TAIL(f);
 
           M->env = b;
           M->pc = func->as.lisp.code;
@@ -2107,6 +2137,10 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
       break;
 
+    case RTL_OP_YIELD:
+      M->yield = true;
+      goto interp_cleanup;
+
     case RTL_OP_REST:
       M->pc = readShort(M->pc, &idx);
 
@@ -2237,10 +2271,6 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
  interp_cleanup:
   rtl_popWorkingSet(M);
-
-  M->env = RTL_TUPLE;
-
-  return M->vStackLen ? VPOP() : RTL_NIL;
 }
 
 rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
@@ -2700,11 +2730,13 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
                             size_t      argsLen)
 {
   rtl_Word argsTuple = RTL_NIL,
+           tmpTuple  = RTL_NIL,
            envTuple  = RTL_NIL;
 
   rtl_Word const *rptr;
 
   RTL_PUSH_WORKING_SET(M, &argsTuple, &envTuple);
+
 
   argsTuple = rtl_tuple(M, args, argsLen);
 
@@ -2719,8 +2751,10 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
     break;
 
   case RTL_FUNCTION:
-    envTuple = rtl_tuple(M, &argsTuple, 1);
+    tmpTuple = argsTuple;
+    envTuple = rtl_tuple(M, &tmpTuple, 1);
     break;
+
   default:
     abort();
   }

@@ -136,8 +136,8 @@ typedef struct rtl_RetAddr {
 typedef struct rtl_Machine rtl_Machine;
 
 typedef rtl_Word (*rtl_BuiltinFn)(rtl_Machine    *M,
-				  rtl_Word const *args,
-				  size_t         argsLen);
+                                  rtl_Word const *args,
+                                  size_t         argsLen);
 
 typedef struct rtl_Function {
   // The name of this function
@@ -226,7 +226,12 @@ struct rtl_Machine {
   size_t    backSetLen;
   size_t    backSetCap;
 
+  // True if the machine is currently experiencing an unhandled fault.
   bool fault;
+
+  // True if the machine has currently yielded. This will cause an error if it
+  // is started up from a non-rtl_resume entrypoint.
+  bool yield;
 
   rtl_FaultHandler faultHandler;
 
@@ -296,9 +301,9 @@ void  __rtl_popWorkingSet(rtl_Machine *M, char const *fName);
 
 
 
-#define RTL_PUSH_WORKING_SET(M, PTRS...)		\
-  rtl_Word *___rtl_workingSet___[] = { PTRS, NULL };	\
-  rtl_pushWorkingSet(M, ___rtl_workingSet___);		\
+#define RTL_PUSH_WORKING_SET(M, PTRS...)                \
+  rtl_Word *___rtl_workingSet___[] = { PTRS, NULL };    \
+  rtl_pushWorkingSet(M, ___rtl_workingSet___);          \
   // End of multi-line macro
 
 // Returns a pointer to a newly allocated block of nbr words. Writes a word of
@@ -370,22 +375,24 @@ bool rtl_isClosure(rtl_Word w) {
 
 // Returns word referring to the function.
 rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
-			     rtl_Word      name,
-			     rtl_BuiltinFn cFn);
+                             rtl_Word      name,
+                             rtl_BuiltinFn cFn);
 
 rtl_Word rtl_call(rtl_Machine *M, rtl_Word addr);
 
-rtl_Word __rtl_callWithArgs(rtl_Machine *M,
-			    rtl_Word    callable,
-			    rtl_Word    *args,
-			    size_t      argsLen);
+void rtl_run(rtl_Machine *M);
 
-#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({			       \
-      rtl_Word ___callArgs___[]  = { ARGS };				       \
+rtl_Word __rtl_callWithArgs(rtl_Machine *M,
+                            rtl_Word    callable,
+                            rtl_Word    *args,
+                            size_t      argsLen);
+
+#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({                              \
+      rtl_Word ___callArgs___[]  = { ARGS };                                   \
       size_t   ___callArgsLen___ = (sizeof ___callArgs___) / sizeof(rtl_Word); \
-      									       \
+                                                                               \
       __rtl_callWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___);      \
-    })									       \
+    })                                                                         \
   // End of multi-line macro
 
 
@@ -394,8 +401,8 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list);
 
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
-			   rtl_NameSpace const *ns,
-			   uint32_t            unresID);
+                           rtl_NameSpace const *ns,
+                           uint32_t            unresID);
 
 // Trigger a fault from C
 void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message);

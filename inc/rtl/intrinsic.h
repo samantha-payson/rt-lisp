@@ -39,6 +39,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_VAR,
   RTL_INTRINSIC_CALL,
   RTL_INTRINSIC_TAIL,
+  RTL_INTRINSIC_YIELD,
   RTL_INTRINSIC_NAMED_CALL,
   RTL_INTRINSIC_NAMED_TAIL,
   RTL_INTRINSIC_APPLY_TUPLE,
@@ -490,6 +491,18 @@ rtl_Intrinsic *rtl_mkCallIntrinsic(rtl_Intrinsic *fn,
         .argsLen = argsLen,
       },
     },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkYieldIntrinsic()
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_YIELD,
   };
 
   return intr;
