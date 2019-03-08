@@ -395,6 +395,12 @@
                 rest*)
       (intrinsic:idiv 1 first)))
 
+  (definline succ (x)
+    `(intrinsic:iadd ~x 1))
+
+  (definline pred (x)
+    `(intrinsic:isub ~x 1))
+
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
                        `(~g (gensym)))
@@ -655,7 +661,7 @@
 
     with-gensyms rlambda rlet length mapcar vmapcar fold vfold
 
-    + - * / %
+    + - * / % succ pred
 
     < > <= >= eq
 
