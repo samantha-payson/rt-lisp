@@ -623,8 +623,6 @@
              @body)
            @(mapcar cadr letarg*)))
 
-
-
   (defmacro with (var* . body)
     `(let ~(mapcar (lambda (var)
                      `(~var (intrinsic:dyn-get ~var)))
@@ -637,6 +635,9 @@
            (bind ~(cdr letarg*)
              @body))
       `(progn @body)))
+
+  (defmacro defvar (name value)
+    `(intrinsic:dyn-set ~name ~value))
 
   (export semiquote defmacro defun definline if progn when lambda export
 
@@ -669,4 +670,4 @@
 
     maptuple-1 mapt vmapt
 
-    with bind))
+    with bind defvar))

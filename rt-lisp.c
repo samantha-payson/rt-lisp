@@ -1677,14 +1677,14 @@ void rtl_run(rtl_Machine *M)
     case RTL_OP_DYN_GET:
       M->pc = readWord(M->pc, &literal);
 
-      VPUSH(rtl_mapLookup(M, M->dynamic, literal, RTL_NIL));
+      VPUSH(rtl_getVar(M, literal));
       break;
 
     case RTL_OP_DYN_SET:
       VSTACK_ASSERT_LEN(1);
       M->pc = readWord(M->pc, &literal);
 
-      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, VPOP());
+      rtl_setVar(M, literal, VPOP());
       break;
 
     case RTL_OP_DYN_SAVE:
@@ -2486,7 +2486,32 @@ void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word val)
 
 rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
 {
-  return rtl_mapLookup(M, M->dynamic, key, RTL_NIL);
+  rtl_Word const sentinel = rtl_internSelector("std", "var-lookup-sentinel");
+
+  rtl_Word w;
+
+  w = rtl_mapLookup(M, M->dynamic, key, sentinel);
+
+  if (unlikely(w == sentinel)) {
+    RTL_PUSH_WORKING_SET(M, &w);
+
+    w = RTL_MAP;
+    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "type"),
+                      rtl_internSelector(NULL, "undefined-dynamic-var"));
+    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "message"),
+                      rtl_string(M, "Tried to read from an undefined "
+                                    "dynamic variable."));
+    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "name"),
+                      key);
+
+    __rtl_triggerFault(M, w);
+
+    w = RTL_NIL;
+
+    rtl_popWorkingSet(M);
+  }
+
+  return w;
 }
 
 bool rtl_isString(rtl_Machine *M, rtl_Word w)
