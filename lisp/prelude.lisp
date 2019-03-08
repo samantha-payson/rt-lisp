@@ -286,29 +286,7 @@
                     `(intrinsic:export ~sym))
                   sym*)))
 
-  (export list and semiquote defmacro defun definline if progn when lambda export
 
-          car cdr
-
-          caar cadr cdar cddr
-
-          caaar caadr cadar caddr
-          cdaar cdadr cddar cdddr
-
-          caaaar caaadr caadar caaddr
-          cadaar cadadr caddar cadddr
-          cdaaar cdaadr cdadar cdaddr
-          cddaar cddadr cdddar cddddr
-
-          reverse
-
-          nil? not unless cons quote
-
-          all any)
-
-  (export nil? symbol? selector? int28? fix14? tuple? char? map? cons?
-          top?
-          not unless)
 
   (definline nil?      (x) `(intrinsic:nil?      ~x))
   (definline symbol?   (x) `(intrinsic:symbol?   ~x))
@@ -331,7 +309,7 @@
     `(when (not ~test)
        @body))
 
-  (export let cond gensym)
+
 
   (defmacro let (letarg* . body)
     `((lambda ~(mapcar-1 car letarg*)
@@ -346,24 +324,82 @@
                (progn @(cdar arm*))
              (cond @(cdr arm*))))))
 
-  (defun gensym ()
-    (intrinsic:gensym))
-
-  (export +)
+  (definline gensym ()
+    `(intrinsic:gensym))
 
   (defmacro + arg*
     (cond
       ((nil? arg*) 0)
-      ((nil? (cdr arg*)) (car arg*))
-      (T `(intrinsic:iadd ~(car arg*) (+ @(cdr arg*))))))
+      ((nil? (cdr arg*))
+        (car arg*))
+      (T 
+        `(+ (intrinsic:iadd ~(car arg*) ~(cadr arg*))
+            @(cddr arg*)))))
+
+  (defun + arg*
+    (fold-1 (lambda (x y)
+              (intrinsic:iadd x y))
+            0
+            arg*))
+
+  (defmacro - arg*
+    (cond
+      ((nil? arg*) 0)
+      ((nil? (cdr arg*))
+        `(intrinsic:isub 0 ~(car arg*)))
+      ((nil? (cddr arg*))
+        `(intrinsic:isub ~(car arg*) ~(cadr arg*)))
+      (T
+        `(- (intrinsic:isub ~(car arg*) ~(cadr arg*))
+            @(cddr arg*)))))
+  
+  (defun - (first . rest*)
+    (if rest*
+        (fold-1 (lambda (x y)
+                  (intrinsic:isub x y))
+                first
+                rest)
+      (intrinsic:isub 0 first)))
+
+  (defmacro * arg*
+    (cond
+      ((nil? arg*) 1)
+      ((nil? (cdr arg*))
+        (car arg*))
+      (T
+        `(* (intrinsic:imul ~(car arg*) ~(cadr arg*))
+            @(cddr arg*)))))
+
+  (defun * arg*
+    (fold-1 (lambda (x y)
+              (* x y))
+            1
+            arg*))
+
+  (defmacro / arg*
+    (cond
+      ((nil? arg*) 1)
+      ((nil? (cdr arg*))
+        `(intrinsic:idiv 1 ~(car arg*)))
+      ((nil? (cddr arg*))
+        `(intrinsic:idiv ~(car arg*) ~(cadr arg*)))
+      (T
+        `(/ (intrinsic:idiv ~(car arg*) ~(cadr arg*))
+            @(cddr arg*)))))
+
+  (defun / (first . rest*)
+    (if rest*
+        (fold-1 (lambda (x y)
+                  (intrinsic:idiv x y))
+                first
+                rest*)
+      (intrinsic:idiv 1 first)))
 
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
                        `(~g (gensym)))
                      g*)
        @body))
-
-  (export < > eq)
 
   (defmacro < (first . rest*)
     (cond
@@ -425,7 +461,7 @@
             (if (eq ~first ~tmp)
                 (eq ~tmp @(cdr rest*))))))))
 
-  (export with-gensyms rlambda rlet length mapcar vmapcar fold vfold)
+
 
   (defmacro rlambda (name arg* . body)
     `(intrinsic:labels ((~name ~arg* @body))
@@ -481,7 +517,7 @@
            ~(cadr init)
            @(mapcar cadr letarg*)))
 
-  (export in-package use-package alias-package)
+
 
   (defmacro in-package (name . body)
     `(intrinsic:in-package ~name
@@ -581,7 +617,7 @@
              @body)
            @(mapcar cadr letarg*)))
 
-  (export maptuple-1 mapt vmapt)
+
 
   (defmacro with (var* . body)
     `(let ~(mapcar (lambda (var)
@@ -596,4 +632,35 @@
              @body))
       `(progn @body)))
 
-  (export with bind))
+  (export semiquote defmacro defun definline if progn when lambda export
+
+    car cdr
+
+    caar cadr cdar cddr
+
+    caaar caadr cadar caddr
+    cdaar cdadr cddar cdddr
+
+    caaaar caaadr caadar caaddr
+    cadaar cadadr caddar cadddr
+      cdaaar cdaadr cdadar cdaddr
+    cddaar cddadr cdddar cddddr
+
+    reverse list
+
+    and not unless cons quote
+    nil? symbol? selector? int28? fix14? tuple? char? map? cons? top?
+
+    let cond gensym
+
+    with-gensyms rlambda rlet length mapcar vmapcar fold vfold
+
+    + - * / %
+
+    < > <= >= eq
+
+    in-package use-package alias-package
+
+    maptuple-1 mapt vmapt
+
+    with bind))
