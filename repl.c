@@ -19,7 +19,16 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 
   file = fopen(path, "r");
   if (!file) {
-    printf("  error: load: fopen: Can't open '%s'\n", path);
+    w = RTL_MAP;
+    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "type"),
+                      rtl_internSelector(NULL, "fopen-failed"));
+    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "message"),
+                      rtl_string(C->M, "Failed to open file"));
+    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "path"),
+                      rtl_string(C->M, path));
+
+    __rtl_triggerFault(C->M, w);
+    return;
   }
 
   scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
