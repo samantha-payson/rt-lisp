@@ -28,28 +28,29 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
                       rtl_string(C->M, path));
 
     __rtl_triggerFault(C->M, w);
-    return;
-  }
 
-  scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
+  } else {
+    scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
 
-  while (!feof(file)) {
-    w = rtl_read(C, file);
+    while (!feof(file)) {
+      w = rtl_read(C, file);
 
-    rtl_compile(C, ns, scratchFnID, w);
+      rtl_compile(C, ns, scratchFnID, w);
 
-    if (!rtl_clearFault(C->M)) {
       rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RETURN);
 
-      w = rtl_call(C->M, rtl_function(scratchFnID));
+      if (!rtl_clearFault(C->M)) {
+        C->M->env = RTL_TUPLE;
+        w = rtl_call(C->M, rtl_function(scratchFnID));
 
-      rtl_clearFault(C->M);
+        rtl_clearFault(C->M);
+      }
+
+      rtl_newFuncVersion(C->M->codeBase, scratchFnID);
     }
 
-    rtl_newFuncVersion(C->M->codeBase, scratchFnID);
+    fclose(file);
   }
-
-  fclose(file);
 
   rtl_popWorkingSet(C->M);
 }
@@ -192,6 +193,8 @@ void rtl_repl(rtl_Compiler *C)
     rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RETURN);
 
     if (!rtl_clearFault(C->M)) {
+      C->M->env = RTL_TUPLE;
+
       w = rtl_call(C->M, rtl_function(replFnID));
 
       if (!rtl_clearFault(C->M)) {

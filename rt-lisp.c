@@ -1427,11 +1427,13 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
     rptr = rtl_reifyTuple(M, M->env, &len);
     if (len == 0) {
       VPUSH(func->as.builtin.cFn(M, NULL, 0));
+
     } else {
       rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
-
       VPUSH(func->as.builtin.cFn(M, rptr, len));
+
     }
+
   } else {
     M->pc = NULL;
     RPUSH(fn);
