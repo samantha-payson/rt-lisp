@@ -42,7 +42,7 @@
                     (car arg*)
                     (cons (quote and) (cdr arg*)))
             (car arg*))
-          T))
+        T))
 
     (defun and arg*
       (fold-1 (lambda (a b)
@@ -61,33 +61,33 @@
                 T
               nil)))))
 
-    (defun build-semiquote-tail (x)
+    (defun build-bootstrap-semiquote-tail (x)
       (if (cons? x)
           (if (and (cons? (car x))
                    (eq (car (car x)) (quote std:splice)))
               (list (quote append2)
                     (car (cdr (car x)))
-                    (build-semiquote-tail (cdr x)))
+                    (build-bootstrap-semiquote-tail (cdr x)))
             (list (quote cons)
-                  (build-semiquote (car x))
-                  (build-semiquote-tail (cdr x))))
+                  (build-bootstrap-semiquote (car x))
+                  (build-bootstrap-semiquote-tail (cdr x))))
         (if (self-eval? x)
             x
           (list (quote quote) x))))
 
-    (defun build-semiquote (x)
+    (defun build-bootstrap-semiquote (x)
       (if (cons? x)
           (if (eq (car x) (quote std:escape))
               (car (cdr x))
             (list (quote cons)
-                  (build-semiquote (car x))
-                  (build-semiquote-tail (cdr x))))
+                  (build-bootstrap-semiquote (car x))
+                  (build-bootstrap-semiquote-tail (cdr x))))
         (if (self-eval? x)
             x
           (list (quote quote) x)))))
 
   (intrinsic:defmacro semiquote (x)
-    (build-semiquote x))
+    (build-bootstrap-semiquote x))
 
   (intrinsic:defmacro defmacro (name arg* . body)
     `(intrinsic:defmacro ~name ~arg*
@@ -309,8 +309,6 @@
     `(when (not ~test)
        @body))
 
-
-
   (defmacro let (letarg* . body)
     `((lambda ~(mapcar-1 car letarg*)
         @body)
@@ -467,7 +465,8 @@
             (if (eq ~first ~tmp)
                 (eq ~tmp @(cdr rest*))))))))
 
-
+  (definline zero? (x)
+    `(eq 0 ~x))
 
   (defmacro rlambda (name arg* . body)
     `(intrinsic:labels ((~name ~arg* @body))
@@ -639,6 +638,10 @@
   (defmacro defvar (name value)
     `(intrinsic:dyn-set ~name ~value))
 
+  (defun append arg*
+    (vfold (end nil) ((arg (reverse arg*)))
+      (append2 arg end)))
+
   (export semiquote defmacro defun definline if progn when lambda export
 
     car cdr
@@ -653,10 +656,13 @@
       cdaaar cdaadr cdadar cdaddr
     cddaar cddadr cdddar cddddr
 
-    reverse list
+    append reverse list
 
     and not unless cons quote
+
     nil? symbol? selector? int28? fix14? tuple? char? map? cons? top?
+
+    self-eval? atom?
 
     let cond gensym
 
@@ -664,7 +670,7 @@
 
     + - * / % succ pred
 
-    < > <= >= eq
+    < > <= >= eq zero?
 
     in-package use-package alias-package
 
