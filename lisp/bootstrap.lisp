@@ -606,11 +606,11 @@
           (rec (+ i 1))))))
 
   (defun mapt-n (fn tpl*)
-    (let ((len (apply-list min tpl*)))
+    (let ((len (intrinsic:apply-list min tpl*)))
       (rlet rec ((i 0))
         (when (< i len)
-               (apply-list fn (vmapcar ((tpl tpl*))
-                           (intrinsic:get tpl i)))
+               (intrinsic:apply-list fn (vmapcar ((tpl tpl*))
+                                          (intrinsic:get tpl i)))
           (rec (+ i 1))))))
 
   (defun mapt (fn . tpl*)
@@ -688,6 +688,6 @@
 
     maptuple-1 mapt vmapt
 
-    fold-map
+    fold-map list->tuple
 
     with bind defvar))

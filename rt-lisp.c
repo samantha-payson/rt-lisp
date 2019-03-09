@@ -1013,6 +1013,20 @@ rtl_Word rtl_std_foldMap(rtl_Machine     *M,
   return acc.init;
 }
 
+static
+rtl_Word rtl_std_listToTuple(rtl_Machine     *M,
+                             rtl_Word const  *args,
+                             size_t          argsLen)
+{
+  if (argsLen != 1) {
+    rtl_triggerFault(M, "arg-count",
+                     "std:list->tuple expects exactly 1 argument, a list.");
+    return rtl_internSelector("error", "arg-count");
+  }
+
+  return rtl_listToTuple(M, args[0]);
+}
+
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
   // Required to register the initial handleFault builtin.
@@ -1064,6 +1078,8 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   rtl_registerBuiltin(&C, rtl_intern("std", "fold-map"),
                       rtl_std_foldMap);
+  rtl_registerBuiltin(&C, rtl_intern("std", "list->tuple"),
+                      rtl_std_listToTuple);
 }
 
 void rtl_resetMachine(rtl_Machine *M)
