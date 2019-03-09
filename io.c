@@ -26,13 +26,13 @@ typedef struct rtl_io_File {
   (((uint32_t)x << 24) |      \
    ((uint32_t)x << 16) |      \
    ((uint32_t)x <<  8) |      \
-   ((uint32_t)x <<  0))	      \
+   ((uint32_t)x <<  0))       \
   // End of multi-line macro
 
 static
 rtl_Word rtl_io_open(rtl_Machine    *M,
-		     rtl_Word const *args,
-		     size_t         argsLen)
+                     rtl_Word const *args,
+                     size_t         argsLen)
 {
   rtl_io_File rif;
   rif.tag = MULTICHAR('F', 'I', 'L', 'E');
@@ -70,7 +70,7 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
     return rtl_native(M, &rif, sizeof(rtl_io_File));
   } else {
     fprintf(stderr, "\n   usage: (io:open <path> .read)\n"
-  	              "          (io:open <path> .write)\n\n");
+            "          (io:open <path> .write)\n\n");
     abort();
   }
 }
@@ -87,8 +87,8 @@ uint8_t utf8ByteCount(uint8_t firstByte) {
 
 static
 rtl_Word rtl_io_readChar(rtl_Machine    *M,
-			 rtl_Word const *args,
-			 size_t         argsLen)
+                         rtl_Word const *args,
+                         size_t         argsLen)
 {
   rtl_io_File rif;
   utf8_int32_t ch;
@@ -147,8 +147,8 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
 
 static
 rtl_Word rtl_io_writeChar(rtl_Machine    *M,
-			  rtl_Word const *args,
-			  size_t         argsLen)
+                          rtl_Word const *args,
+                          size_t         argsLen)
 {
   rtl_io_File  rif;
   uint8_t      utf8[4];
@@ -176,8 +176,8 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
 
 static
 rtl_Word rtl_io_writeString(rtl_Machine    *M,
-			    rtl_Word const *args,
-			    size_t         argsLen)
+                            rtl_Word const *args,
+                            size_t         argsLen)
 {
   rtl_io_File  rif;
   char         *utf8;
@@ -209,8 +209,8 @@ rtl_Word rtl_io_writeString(rtl_Machine    *M,
 
 static
 rtl_Word rtl_io_close(rtl_Machine    *M,
-		      rtl_Word const *args,
-		      size_t         argsLen)
+                      rtl_Word const *args,
+                      size_t         argsLen)
 {
   rtl_io_File rif;
 
