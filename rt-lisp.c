@@ -1310,6 +1310,14 @@ char const *rtl_typeName(rtl_WordType type)
     })                                                                  \
   // End of multi-line macro
 
+#define RPOP() ({                             \
+      M->rStackLen--;                         \
+                                              \
+      M->pc  = M->rStack[M->rStackLen].pc;    \
+      M->env = M->rStack[M->rStackLen].env;   \
+    })                                        \
+  // End of multi-line macro.
+
 #define TAIL(FN) ({                           \
       CALL_TRACE_TAIL(FN);                    \
       M->rStack[M->rStackLen - 1].fn = FN;    \
@@ -1529,8 +1537,6 @@ void rtl_run(rtl_Machine *M)
 
   rtl_Word const *rptr, *sptr;
   rtl_Word *wptr;
-
-  uint8_t *savePC;
 
   if (M->yield) {
     rtl_triggerFault(M, "run-while-yielded",
@@ -2024,12 +2030,12 @@ void rtl_run(rtl_Machine *M)
       case RTL_FUNCTION:
         func = rtl_reifyFunction(M->codeBase, f);
         if (func->isBuiltin) {
-          savePC = M->pc;
+          RPUSH(f);
 
           b = func->as.builtin.cFn(M, wptr, size);
           VPUSH(b);
 
-          M->pc = savePC;
+          RPOP();
         } else {
           
           wptr = rtl_allocTuple(M, &b, 1);
@@ -2089,12 +2095,12 @@ void rtl_run(rtl_Machine *M)
       func = rtl_reifyFunction(M->codeBase, f);
 
       if (func->isBuiltin) {
-        savePC = M->pc;
+        RPUSH(f);
 
         b = func->as.builtin.cFn(M, wptr, size);
         VPUSH(b);
 
-        M->pc = savePC;
+        RPOP();
       } else {
         wptr = rtl_allocTuple(M, &b, 1);
         wptr[0] = a;
@@ -2124,14 +2130,14 @@ void rtl_run(rtl_Machine *M)
       case RTL_FUNCTION:
         func = rtl_reifyFunction(M->codeBase, f);
         if (func->isBuiltin) {
-          savePC = M->pc;
+          RPUSH(f);
 
           rptr = rtl_reifyTuple(M, a, &len);
 
           b = func->as.builtin.cFn(M, rptr, len);
           VPUSH(b);
 
-          M->pc = savePC;
+          RPOP();
         } else {
           wptr = rtl_allocTuple(M, &b, 1);
           wptr[0] = a;
@@ -2195,10 +2201,7 @@ void rtl_run(rtl_Machine *M)
     case RTL_OP_RETURN:
       assert(M->rStackLen > 0);
 
-      M->rStackLen--;
-
-      M->pc  = M->rStack[M->rStackLen].pc;
-      M->env = M->rStack[M->rStackLen].env;
+      RPOP();
 
       CALL_TRACE_EXIT();
 
