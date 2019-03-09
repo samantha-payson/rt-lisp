@@ -88,7 +88,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
   ptr = strchr(buf, ':');
   if (ptr == NULL) {
     if (buf[0] == '.') {
-      return rtl_unresolvedSelector(rtl_internUnresolvedID(NULL, buf + 1));
+      return rtl_internSelector(NULL, buf + 1);
 
     } else {
       return rtl_unresolvedSymbol(rtl_internUnresolvedID(NULL, buf));
@@ -98,7 +98,7 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
   } else {
     *ptr = '\0';
     if (buf[0] == '.') {
-      return rtl_unresolvedSelector(rtl_internUnresolvedID(buf + 1, ptr + 1));
+      return rtl_internSelector(buf + 1, ptr + 1);
 
     } else {
       return rtl_unresolvedSymbol(rtl_internUnresolvedID(buf, ptr + 1));

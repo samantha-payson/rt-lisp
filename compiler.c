@@ -745,14 +745,18 @@ void rtl_compile(rtl_Compiler *C,
       abort();
 
     } else if (head == symCache.intrinsic.progn) {
-      for (tail = rtl_cdr(C->M, in);
-           tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
-      {
-        rtl_compile(C, ns, fnID, rtl_car(C->M, tail));
+      if (rtl_cdr(C->M, in) == RTL_NIL) {
+        rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONST_NIL);
+      } else {
+        for (tail = rtl_cdr(C->M, in);
+             tail != RTL_NIL;
+             tail = rtl_cdr(C->M, tail))
+        {
+          rtl_compile(C, ns, fnID, rtl_car(C->M, tail));
 
-        if (rtl_cdr(C->M, tail) != RTL_NIL) {
-          rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+          if (rtl_cdr(C->M, tail) != RTL_NIL) {
+            rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+          }
         }
       }
 

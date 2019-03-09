@@ -71,4 +71,19 @@
         (list (quote quote) x))))
 
   (defmacro semiquote (x)
-    (build-semiquote x 0)))
+    (build-semiquote x 0))
+
+  (defun expand-uses (use* body)
+    (if use*
+        `(use-package ~(car use*)
+           ~(expand-uses (cdr use*) body))
+      body))
+
+  (defmacro package (name arg# . body)
+    (let ((export* (intrinsic:lookup arg# .export))
+          (use*    (intrinsic:lookup arg# .use)))
+      `(in-package ~name
+         ~(expand-uses use* `(progn (export @export*)
+                                    @body)))))
+
+  (export package))
