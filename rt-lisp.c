@@ -971,6 +971,48 @@ rtl_Word rtl_std_handleFault(rtl_Machine    *M,
   return RTL_NIL;
 }
 
+struct foldMapAccum {
+  rtl_Word init, fn;
+};
+
+static
+void foldEntry(rtl_Machine  *M,
+               void         *vaccum,
+               rtl_Word     key,
+               rtl_Word     val)
+{
+  struct foldMapAccum *acc = (struct foldMapAccum *)vaccum;
+
+  acc->init = rtl_callWithArgs(M, acc->fn, acc->init, key, val);
+}
+
+rtl_Word rtl_std_foldMap(rtl_Machine     *M,
+                         rtl_Word const  *args,
+                         size_t          argsLen)
+{
+  struct foldMapAccum acc;
+
+  rtl_Word map;
+
+  if (argsLen != 3) {
+    rtl_triggerFault(M, "arg-count",
+                     "fold-map expects exactly 3 arguments.");
+    return RTL_NIL;
+  }
+
+  acc.fn   = args[0];
+  acc.init = args[1];
+  map      = args[2];
+
+  RTL_PUSH_WORKING_SET(M, &acc.fn, &acc.init, &map);
+
+  rtl_visitMap(M, &acc, foldEntry, map);
+
+  rtl_popWorkingSet(M);
+
+  return acc.init;
+}
+
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
   // Required to register the initial handleFault builtin.
@@ -1019,6 +1061,9 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   rtl_setVar(M, rtl_intern("std", "*error-handler*"),
              handleFault);
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "fold-map"),
+                      rtl_std_foldMap);
 }
 
 void rtl_resetMachine(rtl_Machine *M)
@@ -2804,8 +2849,15 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
     envTuple = rtl_tuple(M, &tmpTuple, 1);
     break;
 
-  default:
-    abort();
+  default: {
+      char msg[512];
+
+      snprintf(msg, 512, "Can't rtl_callWithArgs object of type %s.",
+               rtl_typeNameOf(callable));
+      rtl_triggerFault(M, "uncallable",
+                       msg);
+      return RTL_NIL;
+    }
   }
 
   M->env = envTuple;

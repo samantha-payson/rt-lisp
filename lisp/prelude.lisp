@@ -676,4 +676,6 @@
 
     maptuple-1 mapt vmapt
 
+    fold-map
+
     with bind defvar))
