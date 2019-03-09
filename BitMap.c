@@ -36,9 +36,9 @@ rtl_BitMap *rtl_newBitMap(size_t nbrBits)
   nbrRank   = (nbrBits + RANK_STRIDE   - 1) / RANK_STRIDE;
 
   bmp = malloc(sizeof(rtl_BitMap)
-	       + nbrSelect*sizeof(uint32_t)
-	       + nbrRank*sizeof(uint32_t)
-	       + nbrBlocks*sizeof(uint32_t));
+               + nbrSelect*sizeof(uint32_t)
+               + nbrRank*sizeof(uint32_t)
+               + nbrBlocks*sizeof(uint32_t));
 
   bmp->nbrBits   = nbrBits;
   bmp->nbrBlocks = nbrBlocks;
@@ -119,29 +119,29 @@ void rtl_bmpTabulate(rtl_BitMap *bmp)
     bmp->sampleRank[rankIdx] = accumulatedRank;
 
     for (i = 0, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i;
-	 i < RANK_STRIDE >> 5 && blockIdx < bmp->nbrBlocks;
-	 i++, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i)
+         i < RANK_STRIDE >> 5 && blockIdx < bmp->nbrBlocks;
+         i++, blockIdx = rankIdx*(RANK_STRIDE >> 5) + i)
     {
       word   = bmp->blocks[blockIdx];
       popcnt = __builtin_popcount(word);
 
       if (accumulatedRank + popcnt > nextSelect) {
-	// Since a selectSample just points at the 32-bit block CONTAINING the
-	// nᵗʰ bit, this correction gives the difference between the rank at the
-	// beginning of that block and the rank that we're searching for.
-	//
-	// This value is guaranteed to be less than 32.
-	selectCorrection = nextSelect - accumulatedRank;
+        // Since a selectSample just points at the 32-bit block CONTAINING the
+        // nᵗʰ bit, this correction gives the difference between the rank at the
+        // beginning of that block and the rank that we're searching for.
+        //
+        // This value is guaranteed to be less than 32.
+        selectCorrection = nextSelect - accumulatedRank;
 
-	// Store the block index in the top 27 bits (or 11 bits, or 3 bits,
-	// depending on bmp->sampleBits), and the correction in the bottom 5.
-	selectSample = (blockIdx << 5) | selectCorrection;
+        // Store the block index in the top 27 bits (or 11 bits, or 3 bits,
+        // depending on bmp->sampleBits), and the correction in the bottom 5.
+        selectSample = (blockIdx << 5) | selectCorrection;
 
-	bmp->sampleSelect[selectIdx] = selectSample;
+        bmp->sampleSelect[selectIdx] = selectSample;
 
-	// Update nextSelect and selectIdx ; now that this sample has been
-	// computed we'll be looking for the next one.
-	nextSelect = (++selectIdx) * SELECT_STRIDE + 1;
+        // Update nextSelect and selectIdx ; now that this sample has been
+        // computed we'll be looking for the next one.
+        nextSelect = (++selectIdx) * SELECT_STRIDE + 1;
       }
 
       accumulatedRank += popcnt;
@@ -164,11 +164,11 @@ void rtl_bmpClearAll(rtl_BitMap *bmp)
   nbrRank   = (bmp->nbrBits + RANK_STRIDE - 1) / RANK_STRIDE;
 
   memset(bmp->blocks,
-	 0,
-	 nbrRank*sizeof(uint32_t)
-	 + nbrSelect*sizeof(uint32_t)
-	 + bmp->nbrBlocks*sizeof(uint32_t));
-}
+         0,
+         nbrRank*sizeof(uint32_t)
+         + nbrSelect*sizeof(uint32_t)
+         + bmp->nbrBlocks*sizeof(uint32_t));
+  }
 
 void rtl_bmpRelease(rtl_BitMap *bmp)
 {
@@ -235,7 +235,7 @@ uint32_t rtl_bmpRank(rtl_BitMap *B, uint32_t k)
 
   mask = (1 << (k & 0x1F)) - 1;
   if (mask) { // Don't execute this if mask == 0, then B->blocks[i] might be
-	      // past the end of the array!
+              // past the end of the array!
     rank += __builtin_popcount(mask & B->blocks[i]);
   }
 

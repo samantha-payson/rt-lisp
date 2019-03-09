@@ -210,14 +210,14 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
     if (rtl_isString(M, w)) {
       printf("\"");
       for (i = 0; i < len; i++) {
-	formatChar(rtl_charValue(ptr[i]));
+        formatChar(rtl_charValue(ptr[i]));
       }
       printf("\"");
     } else {
       printf("[ ");
       for (i = 0; i < len; i++) {
-	rtl_formatExprIndented(M, ptr[i], indent + 1);
-	printf(" ");
+        rtl_formatExprIndented(M, ptr[i], indent + 1);
+        printf(" ");
       }
       printf("]");
     }
@@ -750,8 +750,8 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
     fnDef = rtl_lookupFn(M->codeBase, fn);
     if (!fnDef) {
       printf("  no such function: %s:%s\n",
-	     rtl_symbolPackageName(fn),
-	     rtl_symbolName(fn));
+             rtl_symbolPackageName(fn),
+             rtl_symbolName(fn));
     } else {
       rtl_disasmFn(M, fnDef->fn);
     } return;
@@ -773,8 +773,8 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
 
   if (func->isBuiltin) {
     printf("\n ---- Builtin Function %s:%s ----\n---------\n\n",
-	   rtl_symbolPackageName(func->name),
-	   rtl_symbolName(func->name));
+           rtl_symbolPackageName(func->name),
+           rtl_symbolName(func->name));
     return;
   }
 
@@ -783,12 +783,12 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
   start = code;
 
   printf("\n ---- Disassembly of Function %s:%s ----\n\n",
-	 rtl_symbolPackageName(func->name),
-	 rtl_symbolName(func->name));
+         rtl_symbolPackageName(func->name),
+         rtl_symbolName(func->name));
 
   while (code < end) {
     printf("    @%04X",
-	   (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
+           (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 
     code = rtl_disasm(M->codeBase, code);
   }
@@ -802,15 +802,15 @@ void rtl_disasmMacro(rtl_Machine *M, rtl_Word name)
 
   if (!rtl_isSymbol(name)) {
     printf("  error: Can't disassemble %s as macro\n",
-	   rtl_typeNameOf(name));
+           rtl_typeNameOf(name));
     return;
   }
 
   fnDef = rtl_lookupFn(M->codeBase, name);
   if (!fnDef) {
     printf("  no such macro: %s:%s\n",
-	   rtl_symbolPackageName(name),
-	   rtl_symbolName(name));
+           rtl_symbolPackageName(name),
+           rtl_symbolName(name));
   } else {
     rtl_disasmFn(M, fnDef->macro);
   } return;
@@ -832,17 +832,17 @@ bool rtl_debugCheckForCycles(rtl_Machine *M)
       w = gen->words[j];
 
       if (rtl_isCons(w)) {
-	offs   = __rtl_ptrOffs(w);
-	genNbr = __rtl_ptrGen(w);
+        offs   = __rtl_ptrOffs(w);
+        genNbr = __rtl_ptrGen(w);
 
-	if (genNbr < gen->nbr ||
-	    (genNbr == gen->nbr && offs >= j))
-	{
-	  printf("\n    CYCLE: %04Xg%d: ", (unsigned int)j, (int)i);
-	  rtl_formatExprShallow(w);
-	  printf("\n\n");
-	  return true;
-	}
+        if (genNbr < gen->nbr ||
+            (genNbr == gen->nbr && offs >= j))
+        {
+          printf("\n    CYCLE: %04Xg%d: ", (unsigned int)j, (int)i);
+          rtl_formatExprShallow(w);
+          printf("\n\n");
+          return true;
+        }
       }
     }
   }
@@ -869,8 +869,8 @@ void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w) {
       elemGen  = __rtl_ptrGen(rptr[i]);
 
       if (elemGen < gen || (elemGen == gen && elemOffs >= offs)) {
-	printf("   @ Index %d!\n", (int)i);
-	asm("int3");
+        printf("   @ Index %d!\n", (int)i);
+        asm("int3");
       }
     } break;
 
@@ -881,8 +881,8 @@ void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w) {
       elemGen  = __rtl_ptrGen(rptr[i]);
 
       if (elemGen < gen || (elemGen == gen && elemOffs >= offs)) {
-	printf("   @ Index %d!\n", (int)i);
-	asm("int3");
+        printf("   @ Index %d!\n", (int)i);
+        asm("int3");
       }
     } break;
 
@@ -901,7 +901,7 @@ void rtl_dumpHeap(rtl_Machine *M)
     if (!gen) break;
 
     printf("\n"
-	   "  -------- Gen %2d --------\n", gen->nbr);
+           "  -------- Gen %2d --------\n", gen->nbr);
 
     for (j = 0; j < gen->fillPtr; j++) {
       printf("   %04Xg%d: ", (unsigned int)j, gen->nbr);

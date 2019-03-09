@@ -41,9 +41,9 @@ rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b);
 // Allocate a tuple which contains the elements of the input tuple in the index
 // range [beg, end).
 rtl_Word rtl_tupleSlice(rtl_Machine *M,
-			rtl_Word    tuple,
-			uint32_t    beg,
-			uint32_t    end);
+                        rtl_Word    tuple,
+                        uint32_t    beg,
+                        uint32_t    end);
 
 // Allocate a new tuple and fill it with elemsLen words pointed to by elems.
 rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen);
