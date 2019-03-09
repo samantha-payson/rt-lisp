@@ -687,7 +687,7 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
     return bc + 1;
 
   case RTL_OP_ISO:
-    printf("   iso // unimplemented!\n");
+    printf("   iso\n");
     return bc + 1;
 
   case RTL_OP_FADD:

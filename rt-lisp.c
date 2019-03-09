@@ -1429,15 +1429,13 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       bI32 = (int32_t)b >> 4;
       return aI32 - bI32;
 
-    case RTL_FUNCTION:
-      aI32 = (int32_t)(a >> 4);
-      bI32 = (int32_t)(b >> 4);
-      return aI32 - bI32;
-
     case RTL_SYMBOL:
     case RTL_UNRESOLVED_SYMBOL:
-      aI32 = rtl_symbolID(a);
-      bI32 = rtl_symbolID(b);
+    case RTL_SELECTOR:
+    case RTL_FUNCTION:
+    case RTL_CHAR:
+      aI32 = (int32_t)(a >> 4);
+      bI32 = (int32_t)(b >> 4);
       return aI32 - bI32;
 
     case RTL_TUPLE:
@@ -1486,7 +1484,6 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
       VPUSH(func->as.builtin.cFn(M, rptr, len));
 
     }
-
   } else {
     M->pc = NULL;
     RPUSH(fn);
@@ -1494,7 +1491,6 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
     M->pc = func->as.lisp.code;
 
     rtl_run(M);
-
   }
 
   return M->vStackLen ? VPOP() : RTL_NIL;
@@ -1735,7 +1731,7 @@ void rtl_run(rtl_Machine *M)
       VSTACK_ASSERT_LEN(1);
       M->pc = readWord(M->pc, &literal);
 
-      rtl_setVar(M, literal, VPOP());
+      rtl_setVar(M, literal, VPEEK(0));
       break;
 
     case RTL_OP_DYN_SAVE:

@@ -13,26 +13,25 @@
 ;;;; You should have received a copy of the GNU Lesser General Public License
 ;;;; along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
 
-(in-package iter
- 
-  (std:export mcons cons cons?
+(package iter
+    { .export ( mcons cons cons?
 
-    car cdr
+                car cdr
 
-    caar cadr cdar cddr
+                caar cadr cdar cddr
 
-    caaar caadr cadar caddr
-    cdaar cdadr cddar cdddr
+                caaar caadr cadar caddr
+                cdaar cdadr cddar cdddr
 
-    caaaar caaadr caadar caaddr
-    cadaar cadadr caddar cadddr
-    cdaaar cdaadr cdadar cdaddr
-    cddaar cddadr cdddar cddddr
+                caaaar caaadr caadar caaddr
+                cadaar cadadr caddar cadddr
+                cdaaar cdaadr cdadar cdaddr
+                cddaar cddadr cdddar cddddr
 
-    from-list into-list
-    from-file
+                from-list into-list
+                from-file
 
-    take drop take-while drop-while)
+                take drop take-while drop-while ) }
 
   (std:defun cons? (x)
     (std:and (std:tuple? x)

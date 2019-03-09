@@ -465,6 +465,18 @@
             (if (eq ~first ~tmp)
                 (eq ~tmp @(cdr rest*))))))))
 
+  (defmacro iso (first . rest*)
+    (cond
+      ((nil? rest*)
+       T)
+      ((nil? (cdr rest*))
+       `(intrinsic:iso ~first ~(car rest*)))
+      (T
+       (with-gensyms (tmp)
+         `(let ((~tmp ~(car rest*)))
+            (if (eq ~first ~tmp)
+                (eq ~tmp @(cdr rest*))))))))
+
   (definline zero? (x)
     `(eq 0 ~x))
 
@@ -670,7 +682,7 @@
 
     + - * / % succ pred
 
-    < > <= >= eq zero?
+    < > <= >= eq iso zero?
 
     in-package use-package alias-package
 

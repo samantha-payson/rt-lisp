@@ -80,10 +80,23 @@
       body))
 
   (defmacro package (name arg# . body)
-    (let ((export* (intrinsic:lookup arg# .export))
-          (use*    (intrinsic:lookup arg# .use)))
+    (let ((export*  (intrinsic:lookup arg# .export))
+          (use*     (intrinsic:lookup arg# .use))
+          (require* (intrinsic:lookup arg# .require)))
       `(in-package ~name
          ~(expand-uses use* `(progn (export @export*)
                                     @body)))))
 
-  (export package))
+  (defvar *loaded* nil)
+
+  (defun require (path)
+    (with (*loaded*)
+      (unless (any (lambda (ld)
+                     (intrinsic:iso ld path))
+                   *loaded*)
+        (load path)
+        (intrinsic:dyn-set *loaded*
+                            (cons path
+                                  *loaded*)))))
+
+  (export package require))
