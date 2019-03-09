@@ -58,6 +58,13 @@
                                  (build-semiquote elem depth))
                                x)))
           (intrinsic:push-last tpl elem)))
+      ((map? x)
+        (fold-map (lambda (out k v)
+                    (intrinsic:insert out
+                      (build-semiquote k depth)
+                      (build-semiquote v depth)))
+                  {}
+                  x))
       ((self-eval? x)
         x)
       (T
