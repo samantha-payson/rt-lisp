@@ -16,6 +16,7 @@
 #include "rt-lisp.h"
 
 #include <stdio.h>
+#include <dirent.h>
 
 typedef struct rtl_io_File {
   uint32_t tag;
@@ -24,9 +25,9 @@ typedef struct rtl_io_File {
 
 #define MULTICHAR(x, y, z, w) \
   (((uint32_t)x << 24) |      \
-   ((uint32_t)x << 16) |      \
-   ((uint32_t)x <<  8) |      \
-   ((uint32_t)x <<  0))       \
+   ((uint32_t)y << 16) |      \
+   ((uint32_t)z <<  8) |      \
+   ((uint32_t)w <<  0))       \
   // End of multi-line macro
 
 static
@@ -70,7 +71,7 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
     return rtl_native(M, &rif, sizeof(rtl_io_File));
   } else {
     fprintf(stderr, "\n   usage: (io:open <path> .read)\n"
-            "          (io:open <path> .write)\n\n");
+                      "          (io:open <path> .write)\n\n");
     abort();
   }
 }
@@ -225,6 +226,169 @@ rtl_Word rtl_io_close(rtl_Machine    *M,
   return RTL_NIL;
 }
 
+typedef struct rtl_io_Dir {
+  uint32_t tag;
+  DIR      *d;
+} rtl_io_Dir;
+
+static
+rtl_Word rtl_io_openDir(rtl_Machine    *M,
+                        rtl_Word const *args,
+                        size_t         argsLen)
+{
+  rtl_io_Dir rid;
+
+  char   *path;
+  size_t pathLen;
+
+  if (argsLen != 1) {
+    rtl_triggerFault(M, "arg-count",
+                     "io:open-dir expects 1 argument, a path name.");
+    return RTL_NIL;
+  }
+
+  if (!rtl_isString(M, args[0])) {
+    rtl_triggerFault(M, "expected-string",
+                     "Passed non-string as path to io:open-dir.");
+    return RTL_NIL;
+  }
+
+  pathLen = rtl_stringSize(M, args[0]);
+  path    = malloc(pathLen + 1);
+
+  rtl_reifyString(M, args[0], path, pathLen + 1);
+
+  rid.tag = MULTICHAR('D', 'I', 'R', 0);
+  rid.d   = opendir(path);
+
+  return rtl_native(M, &rid, sizeof(rtl_io_Dir));
+}
+
+static
+rtl_Word rtl_io_readDir(rtl_Machine    *M,
+                        rtl_Word const *args,
+                        size_t         argsLen)
+{
+  rtl_io_Dir    rid;
+  struct dirent *ent;
+
+  rtl_Word out = RTL_MAP;
+
+  if (argsLen != 1) {
+    rtl_triggerFault(M, "arg-count",
+                     "io:read-dir expects 1 argument, a DIR object.");
+
+    return RTL_NIL;
+  }
+
+  if (!rtl_isNative(args[0])) {
+    rtl_triggerFault(M, "expected-native",
+                     "io:read-dir expects its first argument to be a "
+                     "native object.");
+
+    return RTL_NIL;
+  }
+
+  rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
+  if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
+    rtl_triggerFault(M, "expected-dir",
+                     "io:close-dir expects its first argument to be a "
+                     "DIR object.");
+  }
+
+  ent = readdir(rid.d);
+  if (ent == NULL) {
+    return RTL_NIL;
+  }
+
+  RTL_PUSH_WORKING_SET(M, &out);
+
+  out = rtl_recordSet(M, out, "name", rtl_string(M, ent->d_name));
+
+  switch (ent->d_type) {
+  case DT_BLK:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "block"));
+    break;
+
+  case DT_CHR:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "char"));
+    break;
+
+  case DT_DIR:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "directory"));
+    break;
+
+  case DT_FIFO:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "fifo"));
+    break;
+
+  case DT_LNK:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "sym-link"));
+    break;
+
+  case DT_REG:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "regular"));
+    break;
+
+  case DT_SOCK:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "socket"));
+    break;
+
+  case DT_UNKNOWN:
+  default:
+    out = rtl_recordSet(M, out, "type",
+                        rtl_internSelector("io", "unknown"));
+    break;
+  }
+
+  rtl_popWorkingSet(M);
+
+  return out;
+}
+
+static
+rtl_Word rtl_io_closeDir(rtl_Machine    *M,
+                         rtl_Word const *args,
+                         size_t         argsLen)
+{
+  rtl_io_Dir    rid;
+
+  if (argsLen != 1) {
+    rtl_triggerFault(M, "arg-count",
+                     "io:close-dir expects 1 argument, a DIR object.");
+
+    return RTL_NIL;
+  }
+
+  if (!rtl_isNative(args[0])) {
+    rtl_triggerFault(M, "expected-native",
+                     "io:close-dir expects its first argument to be a "
+                     "native object.");
+
+    return RTL_NIL;
+  }
+
+  rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
+  if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
+    rtl_triggerFault(M, "expected-dir",
+                     "io:close-dir expects its first argument to be a "
+                     "DIR object.");
+  }
+
+  if (closedir(rid.d)) {
+    return rtl_internSelector("error", "unknown");
+  }
+
+  return rtl_internSelector(NULL, "ok");
+}
+
 void rtl_io_installBuiltins(rtl_Compiler *C)
 {
   rtl_internPackage(C, "io");
@@ -245,4 +409,13 @@ void rtl_io_installBuiltins(rtl_Compiler *C)
 
   rtl_registerBuiltin(C, rtl_intern("io", "close"), rtl_io_close);
   rtl_export(C, rtl_intern("io", "close"));
+
+  rtl_registerBuiltin(C, rtl_intern("io", "open-dir"), rtl_io_openDir);
+  rtl_export(C, rtl_intern("io", "open-dir"));
+
+  rtl_registerBuiltin(C, rtl_intern("io", "read-dir"), rtl_io_readDir);
+  rtl_export(C, rtl_intern("io", "read-dir"));
+
+  rtl_registerBuiltin(C, rtl_intern("io", "close-dir"), rtl_io_closeDir);
+  rtl_export(C, rtl_intern("io", "close-dir"));
 }

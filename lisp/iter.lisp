@@ -30,6 +30,7 @@
 
                 from-list into-list
                 from-file
+                from-dir
 
                 take drop take-while drop-while ) }
 
@@ -114,6 +115,13 @@
         (if (eq c .io:EOF)
             nil
           (mcons c (from-file f))))))
+
+  (std:defun from-dir (stream)
+    (std:use-package std
+      (let ((d (io:read-dir stream)))
+        (if (nil? d)
+            nil
+          (mcons d (from-dir stream))))))
 
   (std:defun take (n itr)
     (std:when (std:< 0 n)
