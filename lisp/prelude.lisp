@@ -99,4 +99,16 @@
                             (cons path
                                   *loaded*)))))
 
-  (export package require))
+  (defmacro -> (obj . fn*)
+    (vfold (obj obj) ((fn fn*))
+      (if (cons? fn)
+          `(~(car fn) ~obj @(cdr fn))
+        `(~fn ~obj))))
+
+  (defmacro ->> (obj . fn*)
+    (vfold (obj obj) ((fn fn*))
+      (if (cons? fn)
+          `(@fn ~obj)
+        `(~fn ~obj))))
+
+  (export package require -> ->>))
