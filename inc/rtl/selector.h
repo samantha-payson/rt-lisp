@@ -24,11 +24,6 @@ static inline
 rtl_Word rtl_selector(uint32_t id) { return (id << 4) | RTL_SELECTOR; }
 
 static inline
-rtl_Word rtl_unresolvedSelector(uint32_t id) {
-  return (id << 4) | RTL_UNRESOLVED_SELECTOR;
-}
-
-static inline
 uint32_t rtl_selectorID(rtl_Word w) { return (w >> 4); }
 
 static inline

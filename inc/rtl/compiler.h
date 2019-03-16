@@ -145,7 +145,7 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in);
 
 rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp);
 
-rtl_Intrinsic *rtl_transformIntrinsic(rtl_Intrinsic *x);
+rtl_Intrinsic *rtl_transformIntrinsic(rtl_Compiler *C, rtl_Intrinsic *x);
 
 void rtl_emitIntrinsicCode(rtl_Compiler *C,
                            uint32_t fnID,

@@ -915,6 +915,12 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
 
 rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
 {
+  if (unlikely(!rtl_isMap(map))) {
+    rtl_triggerFault(M, "expected-map",
+                     "second argument of rtl_mapLookup must be a map!");
+    return def;
+  }
+
   return __rtl_mapLookup(M, map, key, def, 0);
 }
 
@@ -1096,6 +1102,9 @@ void rtl_resetMachine(rtl_Machine *M)
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 {
   rtl_Word w = RTL_NIL, *ptr;
+
+  if (unlikely(M->fault))
+    return RTL_NIL;
 
   RTL_PUSH_WORKING_SET(M, &w, &car, &cdr);
 
@@ -1523,80 +1532,243 @@ void rtl_resume(rtl_Machine *M)
   }
 }
 
+// A more streamlined implementation of rtl_run.
 void rtl_run(rtl_Machine *M)
 {
-  uint8_t opcode, u8;
+  rtl_OpEncoding enc;
 
-  uint16_t frame, idx, size, u16;
-  size_t   len;
-  ssize_t  i;
-  uint32_t gen, offs;
+  uint8_t     imm8;
 
-  rtl_Function *func;
+  uint16_t    imm16,
+              frame,
+              index;
 
-  uint32_t u32;
+  rtl_Word    immW;
 
-  rtl_Word literal;
+  uint32_t    gen,
+              offs;
 
-  // Some scratch space:
-  rtl_Word a = RTL_NIL,
-           b = RTL_NIL,
-           c = RTL_NIL,
-           d = RTL_NIL;
+  rtl_Opcode  opcode;
 
-  rtl_Word f = RTL_NIL,
-           g = RTL_NIL;
+  size_t      len,
+              i;
 
-  rtl_Word const *rptr, *sptr;
-  rtl_Word *wptr;
+  rtl_Word    a = RTL_NIL,
+              b = RTL_NIL,
+              c = RTL_NIL,
+              d = RTL_NIL,
+              e = RTL_NIL,
+              f = RTL_NIL;
 
-  if (M->yield) {
-    rtl_triggerFault(M, "run-while-yielded",
-                     "Trying to run a machine which is currently yielded.");
-    return;
-  }
 
-  // Ensure these words are involved in any garbage collection that may happen.
-  RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &f, &g);
+  rtl_Word const *rptr,
+                 *sptr;
 
-  assert(M->env != RTL_NIL);
+  rtl_Word       *wptr;
+
+  rtl_Function   *func;
+
+  RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &e, &f);
 
   while (!M->fault) {
-    //  printf("VSTACK:");
-    //  for (i = 0; i < M->vStackLen; i++) {
-    //    printf(" ");
-    //    rtl_formatExpr(M, M->vStack[i]);
-    //  }
-    //  printf("\n\n");
+    // printf("       VSTACK: ");
+    // for (i = 0; i < M->vStackLen; i++) {
+    //   printf(" ");
+    //   rtl_formatExprShallow(M->vStack[i]);
+    // }
+    // printf("\n");
+    // rtl_stackTrace(M);
+    // printf("\n\n");
 
-    //  printf("env: ");
-    //  rtl_formatExpr(M, M->env);
-    //  printf("\n");
-    //  printf("RSTACK:\n");
-    //  for (i = 0; i < M->rStackLen; i++) {
-    //    rtl_formatExpr(M, M->rStack[i].env);
-    //    printf(" ");
-    //  }
+    rtl_disasm(M->codeBase, M->pc);
 
-    //  printf("\n");
+    opcode = *M->pc++;
+    enc = (rtl_OpEncoding)(opcode >> 4);
 
-    // rtl_disasm(M->codeBase, M->pc);
+    // Stage 1: Decode the instruction
+    switch (enc) {
+    case RTL_OP_ENC_NULLARY_NOARG:
+    case RTL_OP_ENC_UNARY_NOARG:
+    case RTL_OP_ENC_BINARY_NOARG_A:
+    case RTL_OP_ENC_BINARY_NOARG_B:
+    case RTL_OP_ENC_TERNARY_NOARG:
+      break;
 
-    switch (opcode = *M->pc++) {
+    case RTL_OP_ENC_NULLARY_BYTE:
+    case RTL_OP_ENC_UNARY_BYTE:
+      imm8 = *M->pc++;
+      break;
+
+    case RTL_OP_ENC_NULLARY_SHORT:
+    case RTL_OP_ENC_UNARY_SHORT:
+    case RTL_OP_ENC_DYNAMIC_SHORT:
+    case RTL_OP_ENC_FUNCTION_SHORT:
+      M->pc = readShort(M->pc, &imm16);
+      break;
+
+    case RTL_OP_ENC_NULLARY_VAR:
+    case RTL_OP_ENC_UNARY_VAR:
+      M->pc = readShort(M->pc, &frame);
+      M->pc = readShort(M->pc, &index);
+      break;
+
+    case RTL_OP_ENC_NULLARY_WORD:
+    case RTL_OP_ENC_UNARY_WORD:
+      M->pc = readWord(M->pc, &immW);
+      break;
+
+    case RTL_OP_ENC_STATIC:
+      M->pc = readWord(M->pc, &immW);
+      M->pc = readShort(M->pc, &imm16);
+      break;
+    }
+
+    // Labels is a (weird and rare) special case.
+    if (unlikely(opcode == RTL_OP_LABELS)) {
+      if (M->vStackLen < imm16) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by labels instruction!");
+
+        continue;
+      }
+
+      sptr = M->vStack + M->vStackLen - imm16;
+
+      rtl_reifyTuple(M, M->env, &len);
+
+      wptr    = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+imm16 + 2*imm16);
+      wptr[0] = rtl_header(len + 1);
+
+      // Get rptr after we call rtl_allocGC, in case the buffer got moved.
+      rptr = rtl_reifyTuple(M, M->env, &len);
+
+      for (i = 0; i < imm16; i++) {
+        wptr[1+len+1 + 1+imm16 + i*2 + 0] = sptr[i];
+        wptr[1+len+1 + 1+imm16 + i*2 + 1] = a;
+      }
+
+      for (i = 0; i < len; i++) {
+        wptr[i + 1] = rptr[i];
+      }
+
+      gen  = __rtl_ptrGen(a);
+      offs = __rtl_ptrOffs(a);
+
+      wptr[1 + len] = mkPtr(RTL_TUPLE, gen, offs + 1+len+1);
+
+      wptr[1+len+1] = rtl_header(imm16);
+
+      for (i = 0; i < imm16; i++) {
+        wptr[1+len+1 + 1 + i] = mkPtr(RTL_CLOSURE,
+                                      gen,
+                                      offs + 1+len+1 + 1+imm16 + i*2);
+      }
+
+      VPOPK(imm16);
+
+      M->env = a;
+
+      continue;
+    }
+
+    // Stage 2: Load stack arguments into "registers", allocating tuples where
+    //          necessary.
+    switch (enc) {
+    case RTL_OP_ENC_NULLARY_NOARG:
+    case RTL_OP_ENC_NULLARY_BYTE:
+    case RTL_OP_ENC_NULLARY_SHORT:
+    case RTL_OP_ENC_NULLARY_VAR:
+    case RTL_OP_ENC_NULLARY_WORD:
+      break;
+
+    case RTL_OP_ENC_UNARY_NOARG:
+    case RTL_OP_ENC_UNARY_BYTE:
+    case RTL_OP_ENC_UNARY_SHORT:
+    case RTL_OP_ENC_UNARY_VAR:
+    case RTL_OP_ENC_UNARY_WORD:
+      if (unlikely(M->vStackLen < 1)) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by unary instruction!");
+        continue;
+      }
+
+      a = VPOP();
+      break;
+
+    case RTL_OP_ENC_BINARY_NOARG_A:
+    case RTL_OP_ENC_BINARY_NOARG_B:
+      if (unlikely(M->vStackLen < 2)) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by binary instruction!");
+        continue;
+      }
+
+      b = VPOP();
+      a = VPOP();
+      break;
+
+    case RTL_OP_ENC_TERNARY_NOARG:
+      if (unlikely(M->vStackLen < 3)) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by ternary instruction!");
+        continue;
+      }
+
+      c = VPOP();
+      b = VPOP();
+      a = VPOP();
+      break;
+
+    case RTL_OP_ENC_STATIC:
+      f = immW;
+
+      // fallthrough ...
+
+    case RTL_OP_ENC_DYNAMIC_SHORT:
+      if (unlikely(M->vStackLen < imm16)) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by dynamic instruction!");
+        continue;
+      }
+
+      wptr = rtl_allocTuple(M, &a, imm16);
+      memcpy(wptr, M->vStack + M->vStackLen - imm16, sizeof(rtl_Word)*imm16);
+      M->vStackLen -= imm16;
+      break;
+
+    case RTL_OP_ENC_FUNCTION_SHORT:
+      if (unlikely(M->vStackLen < (imm16 + 1))) {
+        rtl_triggerFault(M, "stack-underflow",
+                         "VStack underflowed by dynamic instruction!");
+        continue;
+      }
+
+      wptr = rtl_allocTuple(M, &a, imm16);
+      memcpy(wptr, M->vStack + M->vStackLen - imm16, sizeof(rtl_Word)*imm16);
+      VPOPK(imm16);
+
+      f = VPOP();
+      break;
+    }
+
+    // Stage 3: Execute instruction.
+    //
+    // For instructions which represent a function calls, this stage prepares
+    // the argument tuple and stores it in `a', and places the function (or
+    // closure, map, selector, tuple, etc..) object in `f'.
+    switch (opcode) {
     case RTL_OP_NOP:
       break;
 
-    case RTL_OP_CONST:
-      M->pc = readWord(M->pc, &literal);
-
-      VPUSH(literal);
+    case RTL_OP_MAP:
+      VPUSH(RTL_MAP);
       break;
 
-    case RTL_OP_CONST_NIL:
+    case RTL_OP_NIL:
       VPUSH(RTL_NIL);
       break;
 
-    case RTL_OP_CONST_TOP:
+    case RTL_OP_TOP:
       VPUSH(RTL_TOP);
       break;
 
@@ -1604,756 +1776,666 @@ void rtl_run(rtl_Machine *M)
       VPUSH(rtl_gensym());
       break;
 
-    case RTL_OP_CONS:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPEEK(0);
-      a = VPEEK(1);
-
-      c = rtl_cons(M, a, b);
-
-      VPOPK(2);
-        
-      VPUSH(c);
-      break;
-
-    case RTL_OP_CAR:
-      VSTACK_ASSERT_LEN(1);
-
-      // Don't need to SAVE_MACHINE() here, since reifyCons doesn't look at any
-      // of the un-saved fields of M.
-      rptr = rtl_reifyCons(M, VPOP());
-      if (unlikely(!rptr)) {
-        goto interp_cleanup;
-      }
-
-      VPUSH(rptr[0]);
-      break;
-
-    case RTL_OP_CDR:
-
-      VSTACK_ASSERT_LEN(1);
-
-      rptr = rtl_reifyCons(M, VPOP());
-      if (unlikely(!rptr)) {
-        goto interp_cleanup;
-      }
-
-      VPUSH(rptr[1]);
-      break;
-
-    case RTL_OP_TUPLE:
-      M->pc = readShort(M->pc, &size);
-
-      VSTACK_ASSERT_LEN(size);
-
-      wptr = rtl_allocTuple(M, &a, size);
-
-      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
-
-      VPOPK(size);
-
-      VPUSH(a);
-      break;
-
-    case RTL_OP_GET:
-      VSTACK_ASSERT_LEN(2);
-
-      i    = rtl_int28Value(VPOP());
-      rptr = rtl_reifyTuple(M, VPOP(), &len);
-
-      assert(i < (int)len);
-
-      VPUSH(rptr[i]);
-      break;
-
-    case RTL_OP_LEN:
-      VSTACK_ASSERT_LEN(1);
-
-      rtl_reifyTuple(M, VPOP(), &len);
-
-      VPUSH(rtl_int28(len));
-      break;
-
-    case RTL_OP_PUSH_FIRST:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP(); // elem
-      a = VPOP(); // tuple
-
-      VPUSH(rtl_tuplePushFirst(M, a, b));
-      break;
-
-    case RTL_OP_PUSH_LAST:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP(); // elem
-      a = VPOP(); // tuple
-
-      VPUSH(rtl_tuplePushLast(M, a, b));
-      break;
-
-    case RTL_OP_CONCAT:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP(); // second
-      a = VPOP(); // first
-
-      VPUSH(rtl_tupleConcat(M, a, b));
-      break;
-
-    case RTL_OP_SLICE:
-      VSTACK_ASSERT_LEN(3);
-
-      c = VPOP(); // end
-      b = VPOP(); // beg
-      a = VPOP(); // tuple
-
-      VPUSH(rtl_tupleSlice(M, a,
-                           rtl_int28Value(b),
-                           rtl_int28Value(c)));
-      break;
-
-    case RTL_OP_MAP:
-      VPUSH(rtl_emptyMap());
-      break;
-
-    case RTL_OP_INSERT:
-      VSTACK_ASSERT_LEN(3);
-
-      c = VPOP(); // Value
-      b = VPOP(); // Key
-      a = VPOP(); // Map
-
-      VPUSH(rtl_mapInsert(M, a, b, c));
-      break;
-
-    case RTL_OP_LOOKUP:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP(); // Key
-      a = VPOP(); // Map
-
-      VPUSH(rtl_mapLookup(M, a, b, RTL_NIL));
-      break;
-
-    case RTL_OP_DYN_GET:
-      M->pc = readWord(M->pc, &literal);
-
-      VPUSH(rtl_getVar(M, literal));
-      break;
-
-    case RTL_OP_DYN_SET:
-      VSTACK_ASSERT_LEN(1);
-      M->pc = readWord(M->pc, &literal);
-
-      rtl_setVar(M, literal, VPEEK(0));
-      break;
-
-    case RTL_OP_DYN_SAVE:
-      VSTACK_ASSERT_LEN(1);
-      M->pc = readWord(M->pc, &literal);
-
-      if (unlikely(M->dStackLen == M->dStackCap)) {
-        M->dStackCap = M->dStackCap == M->dStackCap * 2;
-        M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
-      }
-
-      // Save the old value
-      M->dStack[M->dStackLen++] = rtl_mapLookup(M, M->dynamic, literal, RTL_NIL);
-
-      // Set the new
-      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, VPOP());
-      break;
-
-    case RTL_OP_DYN_RESTORE:
-      M->pc = readWord(M->pc, &literal);
-
-      if (unlikely(M->dStackLen == 0)) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "DStack underflow in interpreter.");
-        goto interp_cleanup;
-      }
-
-      M->dynamic = rtl_mapInsert(M, M->dynamic, literal, M->dStack[--M->dStackLen]);
-      break;
-
-    case RTL_OP_POP:
-      VSTACK_ASSERT_LEN(1);
-
-      VPOPK(1);
-      break;
-
-    case RTL_OP_SWAP:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP();
-      a = VPOP();
-
-      VPUSH(b);
-      VPUSH(a);
-      break;
-
-    case RTL_OP_DUP:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPEEK(0);
-
-      VPUSH(a);
-      break;
-
-    case RTL_OP_IS_INT28:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isInt28(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_FIX14:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isFix14(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_SYMBOL:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_SELECTOR:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isSelector(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    // `nil?' and `not' are actually the same function.
-    case RTL_OP_IS_NIL:
-    case RTL_OP_NOT:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isNil(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_CONS:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isCons(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_MAP:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isMap(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_CHAR:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isChar(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_TUPLE:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_IS_TOP:
-      VSTACK_ASSERT_LEN(1);
-
-      a = VPOP();
-      VPUSH(rtl_isTop(a) ? RTL_TOP : RTL_NIL);
-      break;
-
-    case RTL_OP_CJMP8:
-      VSTACK_ASSERT_LEN(1);
-
-      u8 = *(M->pc++);
-
-      if (rtl_isNil(VPOP())) break;
-
-      M->pc += (int8_t)u8;
-      break;
-
-    case RTL_OP_CJMP16:
-      VSTACK_ASSERT_LEN(1);
-
-      M->pc = readShort(M->pc, &u16);
-
-      if (rtl_isNil(VPOP())) break;
-
-      M->pc += (int16_t)u16;
-      break;
-
-    case RTL_OP_CJMP32:
-      VSTACK_ASSERT_LEN(1);
-
-      M->pc = readWord(M->pc, &u32);
-
-      if (rtl_isNil(VPOP())) break;
-
-      M->pc += (int32_t)u32;
-      break;
-
-    case RTL_OP_JMP8:
-      u8     = *(M->pc++);
-
-      M->pc += (int8_t)u8;
-      break;
-
-    case RTL_OP_JMP16:
-      M->pc  = readShort(M->pc, &u16);
-
-      M->pc += (int16_t)u16;
-      break;
-
-    case RTL_OP_JMP32:
-      M->pc  = readWord(M->pc, &u32);
-
-      M->pc += (int32_t)u32;
-      break;
-
-    case RTL_OP_VAR:
-      M->pc = readShort(M->pc, &frame);
-      M->pc = readShort(M->pc, &idx);
-
-      rptr = rtl_reifyTuple(M, M->env, &len);
-      if (unlikely(frame >= len)) {
-        rtl_triggerFault(M, "invalid-var-frame",
-                         "Tried to reference a variable in an "
-                         "out-of-bounds frame.");
-        goto interp_cleanup;
-      }
-
-      rptr = rtl_reifyTuple(M, rptr[frame], &len);
-      if (unlikely(idx >= len)) {
-        rtl_triggerFault(M, "invalid-var-idx",
-                         "Tried to reference a variable with an "
-                         "out-of-bounds index.");
-        goto interp_cleanup;
-      }
-
-
-      VPUSH(rptr[idx]);
-      break;
-
-    case RTL_OP_CLOSURE:
-      M->pc = readWord(M->pc, &literal);
-
-      wptr = rtl_allocGC(M, RTL_CLOSURE, &f, 2);
-
-      wptr[0] = literal;
-      wptr[1] = M->env;
-
-      VPUSH(f);
-      break;
-
-    case RTL_OP_LABELS:
-      M->pc = readShort(M->pc, &size);
-
-      VSTACK_ASSERT_LEN(size);
-
-      // IMPORTANT: In order to allow circular references between these closures
-      //            and the labels' env frame, we need to allocate ALL memory in
-      //            one big block to ensure there are no pointers to lower GC
-      //            gens from higher gens.
-      //
-      // TODO: This means the biggest labels statement allowed is whatever fits
-      //       gen0, which I think means like 300 functions max per labels
-      //       statement.
-
-      sptr = M->vStack + M->vStackLen - size;
-
-      rtl_reifyTuple(M, M->env, &len);
-
-      wptr = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+size + 2*size);
-      wptr[0] = rtl_header(len + 1);
-
-      // Reify again, incase rptr was invalidated by a collection.
-      rptr = rtl_reifyTuple(M, M->env, &len);
-
-      // Here we build all of the closures.
-      for (i = 0; i < size; i++) {
-        wptr[1+len+1 + 1+size + i*2 + 0] = sptr[i];
-        wptr[1+len+1 + 1+size + i*2 + 1] = a;
-      }
-
-      // Then build the env tuple
-      for (i = 0; i < len; i++) { // First copy the existing frames.
-        wptr[1 + i] = rptr[i];
-      }
-
-      gen  = __rtl_ptrGen(a);
-      offs = __rtl_ptrOffs(a);
-
-      // Then add a pointer to the new frame
-      wptr[1 + len] = mkPtr(RTL_TUPLE,
-                            gen,
-                            offs + 1+len+1);
-
-      wptr[1+len+1] = rtl_header(size);
-
-      // Finally, populate the new frame
-      for (i = 0; i < size; i++) {
-        wptr[1+len+1 + 1 + i] = mkPtr(RTL_CLOSURE,
-                                      gen,
-                                      offs + 1+len+1 + 1+size + i*2);
-      }
-
-      VPOPK(size);
-
-      M->env = a;
-      break;
-
-    case RTL_OP_END_LABELS:
-      rptr = rtl_reifyTuple(M, M->env, &len);
-      wptr = rtl_allocTuple(M, &a, len - 1);
-      rptr = rtl_reifyTuple(M, M->env, &len); // Reify again in-case rptr was
-                                              // invalidated by a collection.
-
-      memcpy(wptr, rptr, sizeof(rtl_Word)*(len - 1));
-
-      M->env = a;
-      break;
-
-    case RTL_OP_TAIL:
-    case RTL_OP_CALL:
-      M->pc = readShort(M->pc, &size);
-
-      VSTACK_ASSERT_LEN(1+ size);
-
-      wptr = rtl_allocTuple(M, &a, size);
-
-      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
-      VPOPK(size);
-
-      f = VPOP();
-
-      switch (rtl_typeOf(f)) {
-      case RTL_FUNCTION:
-        func = rtl_reifyFunction(M->codeBase, f);
-        if (func->isBuiltin) {
-          RPUSH(f);
-
-          b = func->as.builtin.cFn(M, wptr, size);
-          VPUSH(b);
-
-          RPOP();
-        } else {
-          
-          wptr = rtl_allocTuple(M, &b, 1);
-          wptr[0] = a;
-
-          if (opcode == RTL_OP_CALL) RPUSH(f);
-          else TAIL(f);
-
-          M->env = b;
-          M->pc = func->as.lisp.code;
-        } break;
-
-      case RTL_CLOSURE:
-        rptr = __rtl_reifyPtr(M, f);
-
-        f = rptr[0];
-        b = rptr[1];
-
-        c = rtl_tuplePushLast(M, b, a);
-
-        func = rtl_reifyFunction(M->codeBase, f);
-
-        if (opcode == RTL_OP_CALL) RPUSH(f);
-        else TAIL(f);
-
-        assert(!func->isBuiltin);
-
-        M->env = c;
-        M->pc  = func->as.lisp.code;
-
-        break;
-
-      default: {
-          char msgBuf[512];
-          snprintf(msgBuf, 512, "Can't call object of type '%s'!\n",
-                   rtl_typeNameOf(f));
-
-          rtl_triggerFault(M, "uncallable", msgBuf);
-
-          goto interp_cleanup;
-        }
-
-      } break;
-
-    case RTL_OP_STATIC_TAIL:
-    case RTL_OP_STATIC_CALL:
-      M->pc = readWord(M->pc, &f);
-      M->pc = readShort(M->pc, &size);
-
-      VSTACK_ASSERT_LEN(size);
-
-      wptr = rtl_allocTuple(M, &a, size);
-
-      memcpy(wptr, M->vStack + M->vStackLen - size, sizeof(rtl_Word)*size);
-      VPOPK(size);
-
-      func = rtl_reifyFunction(M->codeBase, f);
-
-      if (func->isBuiltin) {
-        RPUSH(f);
-
-        b = func->as.builtin.cFn(M, wptr, size);
-        VPUSH(b);
-
-        RPOP();
-      } else {
-        wptr = rtl_allocTuple(M, &b, 1);
-        wptr[0] = a;
-
-        if (opcode == RTL_OP_STATIC_CALL) RPUSH(f);
-        else TAIL(f);
-
-        M->env = b;
-        M->pc  = func->as.lisp.code;
-      } break;
-
-    case RTL_OP_APPLY_LIST:
-      VSTACK_ASSERT_LEN(2);
-      a = rtl_listToTuple(M, VPOP());
-
-      VPUSH(a);
-
-      // fallthrough ..
-
-    case RTL_OP_APPLY_TUPLE:
-      VSTACK_ASSERT_LEN(2);
-
-      a = VPOP();
-      f = VPOP();
-
-      switch (rtl_typeOf(f)) {
-      case RTL_FUNCTION:
-        func = rtl_reifyFunction(M->codeBase, f);
-        if (func->isBuiltin) {
-          RPUSH(f);
-
-          rptr = rtl_reifyTuple(M, a, &len);
-
-          b = func->as.builtin.cFn(M, rptr, len);
-          VPUSH(b);
-
-          RPOP();
-        } else {
-          wptr = rtl_allocTuple(M, &b, 1);
-          wptr[0] = a;
-
-          RPUSH(f);
-
-          M->env = b;
-          M->pc  = func->as.lisp.code;
-        } break;
-
-      case RTL_CLOSURE:
-        rptr = __rtl_reifyPtr(M, f);
-
-        f = rptr[0];
-        b = rptr[1];
-
-        c = rtl_tuplePushLast(M, b, a);
-
-        func = rtl_reifyFunction(M->codeBase, f);
-
-        RPUSH(f);
-
-        assert(!func->isBuiltin);
-
-        M->env = c;
-        M->pc  = func->as.lisp.code;
-        break;
-
-      default:
-        printf(" error: Can't call object of type '%s'!\n",
-               rtl_typeNameOf(f));
-        goto interp_cleanup;
-
-      } break;
-
-    case RTL_OP_UNDEFINED_CALL:
-    case RTL_OP_UNDEFINED_TAIL:
-      M->pc = readWord(M->pc, &literal);
-
-      printf("Tried to call undefined function %s:%s\n",
-             rtl_symbolPackageName(literal),
-             rtl_symbolName(literal));
-
-      rtl_triggerFault(M, "undefined-variable",
-                       "Tried to reference undefined variable");
-      break;
-
-    case RTL_OP_UNDEFINED_VAR:
-      M->pc = readWord(M->pc, &literal);
-
-      printf("Referenced undefined variable %s:%s\n",
-             rtl_symbolPackageName(literal),
-             rtl_symbolName(literal));
-
-      rtl_triggerFault(M, "undefined-variable",
-                       "Tried to reference undefined variable");
-
-
-      break;
-
-    case RTL_OP_RETURN:
+    case RTL_OP_RET:
       assert(M->rStackLen > 0);
 
       RPOP();
-
       CALL_TRACE_EXIT();
 
-      if (M->pc == NULL) goto interp_cleanup;
+      if (M->pc == NULL) goto cleanup;
 
       break;
 
-    case RTL_OP_YIELD:
-      M->yield = true;
-      goto interp_cleanup;
+    case RTL_OP_END_LABELS:
+      M->env = rtl_tuplePopLast(M, M->env);
+      break;
 
-    case RTL_OP_REST:
-      M->pc = readShort(M->pc, &idx);
+    case RTL_OP_CAR:
+      VPUSH(rtl_car(M, a));
+      break;
 
-      rptr = rtl_reifyTuple(M, M->env, &len);
-      d    = rptr[len - 1];
+    case RTL_OP_CDR:
+      VPUSH(rtl_cdr(M, a));
+      break;
 
-      // TODO: rptr might become invalid if rtl_allocTuple causes GC, below.
-      rtl_reifyTuple(M, d, &len);
-      assert(0 <= idx && idx <= len);
+    case RTL_OP_POP:
+      break;
 
-      a = RTL_NIL;
-      for (i = (ssize_t)len - 1; i >= idx; i--) {
-        rptr = rtl_reifyTuple(M, d, &len);     // Reload
-        a    = rtl_cons(M, rptr[i], a);
+    case RTL_OP_DUP:
+      VPUSH(a);
+      VPUSH(a);
+      break;
+
+    case RTL_OP_INT28P:
+      VPUSH(rtl_isInt28(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_FIX14P:
+      VPUSH(rtl_isFix14(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_SYMBOLP:
+      VPUSH(rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_SELECTORP:
+      VPUSH(rtl_isSelector(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_MAPP:
+      VPUSH(rtl_isMap(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_CHARP:
+      VPUSH(rtl_isChar(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_NILP:
+    case RTL_OP_NOT:
+      VPUSH(rtl_isNil(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_TOPP:
+      VPUSH(rtl_isTop(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_CONSP:
+      VPUSH(rtl_isCons(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_TUPLEP:
+      VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_LEN:
+      VPUSH(rtl_int28(rtl_tupleLen(M, a)));
+      break;
+
+    case RTL_OP_IADD:
+      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "iadd instruction expects two int28 arguments.");
+        continue;
       }
 
-      wptr = rtl_allocTuple(M, &b, idx + 1);
-      rptr = rtl_reifyTuple(M, d, &len);       // Reload
-      memcpy(wptr, rptr, sizeof(rtl_Word)*idx);
-      wptr[idx] = a;
-
-      rtl_reifyTuple(M, M->env, &len);
-      wptr = rtl_allocTuple(M, &c, len);
-      rptr = rtl_reifyTuple(M, M->env, &len);  // Reload
-      memcpy(wptr, rptr, sizeof(rtl_Word)*len);
-      wptr[len - 1] = b;
-
-      M->env = c;
+      VPUSH(rtl_int28(rtl_int28Value(a) + rtl_int28Value(b)));
       break;
 
+    case RTL_OP_ISUB:
+      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "isub instruction expects two int28 arguments.");
+        continue;
+      }
 
-    // Generate code for binary operations using the BINARY_OP macro.
-    BINARY_OP(IADD, +, rtl_isInt28, "int28",
-              rtl_int28, rtl_int28Value);
-    BINARY_OP(ISUB, -, rtl_isInt28, "int28",
-              rtl_int28, rtl_int28Value);
-    BINARY_OP(IMUL, *, rtl_isInt28, "int28",
-              rtl_int28, rtl_int28Value);
-    BINARY_OP(IDIV, /, rtl_isInt28, "int28",
-              rtl_int28, rtl_int28Value);
-    BINARY_OP(IMOD, %, rtl_isInt28, "int28",
-              rtl_int28, rtl_int28Value);
+      VPUSH(rtl_int28(rtl_int28Value(a) - rtl_int28Value(b)));
+      break;
 
-    BINARY_OP(FADD, +, rtl_isFix14, "fix14",
-              rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FSUB, -, rtl_isFix14, "fix14",
-              rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FMUL, *, rtl_isFix14, "fix14",
-              rtl_fix14, rtl_fix14Value);
-    BINARY_OP(FDIV, /, rtl_isFix14, "fix14",
-              rtl_fix14, rtl_fix14Value);
+    case RTL_OP_IMUL:
+      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "imul instruction expects two int28 arguments.");
+        continue;
+      }
 
-    CMP_OP(LT,  <  0);
-    CMP_OP(LEQ, <= 0);
-    CMP_OP(GT,  >  0);
-    CMP_OP(GEQ, >= 0);
-    CMP_OP(ISO, == 0);
+      VPUSH(rtl_int28(rtl_int28Value(a) * rtl_int28Value(b)));
+      break;
+
+    case RTL_OP_IDIV:
+      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "idiv instruction expects two int28 arguments.");
+        continue;
+      }
+
+      VPUSH(rtl_int28(rtl_int28Value(a) / rtl_int28Value(b)));
+      break;
+
+    case RTL_OP_IMOD:
+      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "imod instruction expects two int28 arguments.");
+        continue;
+      }
+
+      VPUSH(rtl_int28(rtl_int28Value(a) % rtl_int28Value(b)));
+      break;
+
+    case RTL_OP_LT:
+      VPUSH(rtl_cmp(M, a, b) <  0 ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_LEQ:
+      VPUSH(rtl_cmp(M, a, b) <= 0 ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_GT:
+      VPUSH(rtl_cmp(M, a, b) >  0 ? RTL_TOP : RTL_NIL);
+      break;
+
+    case RTL_OP_GEQ:
+      VPUSH(rtl_cmp(M, a, b) >= 0 ? RTL_TOP : RTL_NIL);
+      break;
 
     case RTL_OP_EQ:
-      VSTACK_ASSERT_LEN(2);
-
-      b = VPOP();
-      a = VPOP();
-      if (a == b) {
-        VPUSH(RTL_TOP);
-      } else {
-        VPUSH(RTL_NIL);
-      } break;
+      VPUSH(a == b ? RTL_TOP : RTL_NIL);
+      break;
 
     case RTL_OP_NEQ:
-      VSTACK_ASSERT_LEN(2);
+      VPUSH(a != b ? RTL_TOP : RTL_NIL);
+      break;
 
-      b = VPOP();
-      a = VPOP();
-      if (a != b) {
-        VPUSH(RTL_TOP);
-      } else {
-        VPUSH(RTL_NIL);
-      } break;
+    case RTL_OP_ISO:
+      VPUSH(rtl_cmp(M, a, b) == 0 ? RTL_TOP : RTL_NIL);
+      break;
 
-    case RTL_OP_SET_VAR:
-      VSTACK_ASSERT_LEN(1);
-      
-      M->pc = readShort(M->pc, &frame);
-      M->pc = readShort(M->pc, &idx);
+    case RTL_OP_FADD:
+      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
+        rtl_triggerFault(M, "expected-fix14",
+                         "fadd instruction expects two fix14 arguments.");
+        continue;
+      }
 
-      a = VPEEK(0);
+      VPUSH(rtl_fix14(rtl_fix14Value(a) + rtl_fix14Value(b)));
+      break;
 
-      rptr = rtl_reifyTuple(M, M->env, &len);
-      assert(frame < len);
+    case RTL_OP_FSUB:
+      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
+        rtl_triggerFault(M, "expected-fix14",
+                         "fsub instruction expects two fix14 arguments.");
+        continue;
+      }
 
-      rtl_writeTupleElem(M, rptr[frame], idx, a);
+      VPUSH(rtl_fix14(rtl_fix14Value(a) - rtl_fix14Value(b)));
+      break;
+
+    case RTL_OP_FMUL:
+      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
+        rtl_triggerFault(M, "expected-fix14",
+                         "fmul instruction expects two fix14 arguments.");
+        continue;
+      }
+
+      VPUSH(rtl_fix14(rtl_fix14Value(a) * rtl_fix14Value(b)));
+      break;
+
+    case RTL_OP_FDIV:
+      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
+        rtl_triggerFault(M, "expected-fix14",
+                         "fdiv instruction expects two fix14 arguments.");
+        continue;
+      }
+
+      VPUSH(rtl_fix14(rtl_fix14Value(a) / rtl_fix14Value(b)));
       break;
 
     case RTL_OP_SET_CAR:
-      b = VPOP();
-      a = VPOP();
-
       rtl_writeCar(M, a, b);
 
       VPUSH(b);
       break;
 
     case RTL_OP_SET_CDR:
-      b = VPOP();
-      a = VPOP();
-
       rtl_writeCdr(M, a, b);
 
       VPUSH(b);
       break;
 
-    case RTL_OP_SET_ELEM:
-      c = VPOP();
-      b = VPOP();
-      a = VPOP();
-
-      rtl_writeTupleElem(M, a, b, c);
+    case RTL_OP_CONS:
+      c = rtl_cons(M, a, b);
 
       VPUSH(c);
       break;
 
-    default:
-      printf("Unhandled instruction: opcode %d\n", (int)opcode);
-      goto interp_cleanup;
+    case RTL_OP_SWAP:
+      VPUSH(b);
+      VPUSH(a);
+      break;
+
+    case RTL_OP_PUSH_FIRST:
+      c = rtl_tuplePushFirst(M, a, b);
+
+      VPUSH(c);
+      break;
+
+    case RTL_OP_PUSH_LAST:
+      c = rtl_tuplePushLast(M, a, b);
+
+      VPUSH(c);
+      break;
+
+    case RTL_OP_CONCAT:
+      c = rtl_tupleConcat(M, a, b);
+
+      VPUSH(c);
+      break;
+
+    case RTL_OP_GET:
+      if (unlikely(!rtl_isTuple(a))) {
+        rtl_triggerFault(M, "expected-tuple",
+                         "get instruction expects an tuple as its first argument");
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerFault(M, "expected-int",
+                         "get instruction expects an int28 as its second argument");
+        continue;
+
+      }
+
+      rptr = rtl_reifyTuple(M, a, &len);
+      if (unlikely(unlikely(rtl_int28Value(b) >= len) || unlikely(rtl_int28Value(b) < 0))) {
+        rtl_triggerFault(M, "out-of-bounds",
+                         "tuple index out of bounds in get instruction.");
+        continue;
+
+      }
+
+      VPUSH(rptr[rtl_int28Value(b)]);
+      break;
+
+
+    case RTL_OP_INSERT:
+      d = rtl_mapInsert(M, a, b, c);
+
+      VPUSH(d);
+      break;
+
+    case RTL_OP_LOOKUP:
+      VPUSH(rtl_mapLookup(M, a, b, c));
+      break;
+
+    case RTL_OP_SET_ELEM:
+      if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerFault(M, "expected-int",
+                         "Second argument to set-elem instruction must be an int28.");
+        continue;
+      }
+
+      rtl_writeTupleElem(M, a, rtl_int28Value(b), c);
+
+      VPUSH(c);
+      break;
+
+    case RTL_OP_SLICE:
+      if (unlikely(unlikely(!rtl_isInt28(b)) || unlikely(!rtl_isInt28(c)))) {
+        rtl_triggerFault(M, "expected-int",
+                         "beg and end arguments to slice instruction must "
+                         "both be int28s.");
+        continue;
+      }
+
+      d = rtl_tupleSlice(M, a, rtl_int28Value(b), rtl_int28Value(c));
+
+      VPUSH(d);
+      break;
+
+    case RTL_OP_JMP8:
+      M->pc += (int8_t)imm8;
+      break;
+
+    case RTL_OP_CJMP8:
+      if (!rtl_isNil(a))
+        M->pc += (int8_t)imm8;
+
+      break;
+
+    case RTL_OP_SYMBOL8:
+      VPUSH(rtl_symbol(imm8));
+      break;
+
+    case RTL_OP_SELECTOR8:
+      VPUSH(rtl_selector(imm8));
+      break;
+
+    case RTL_OP_INT8:
+      VPUSH(rtl_int28(imm8));
+      break;
+
+    case RTL_OP_FIX8:
+      VPUSH((imm8 << 4) | RTL_FIX14);
+      break;
+
+    case RTL_OP_CHAR8:
+      VPUSH(rtl_char(imm8));
+      break;
+
+    case RTL_OP_FN8:
+      VPUSH(rtl_function(imm8));
+      break;
+
+    case RTL_OP_UNRES8:
+      VPUSH(rtl_unresolvedSymbol(imm8));
+      break;
+
+    case RTL_OP_CLOSURE8:
+      wptr = rtl_allocGC(M, RTL_CLOSURE, &f, 2);
+
+      wptr[0] = rtl_function(imm8);
+      wptr[1] = M->env;
+
+      VPUSH(f);
+      break;
+
+    case RTL_OP_JMP16:
+      M->pc += (int16_t)imm16;
+      break;
+
+    case RTL_OP_CJMP16:
+      if (!rtl_isNil(a))
+        M->pc += (int16_t)imm16;
+
+      break;
+
+    case RTL_OP_SYMBOL16:
+      VPUSH(rtl_symbol(imm16));
+      break;
+
+    case RTL_OP_SELECTOR16:
+      VPUSH(rtl_selector(imm16));
+      break;
+
+    case RTL_OP_INT16:
+      VPUSH(rtl_int28(imm16));
+      break;
+
+    case RTL_OP_FIX16:
+      VPUSH((imm16 << 4) | RTL_FIX14);
+      break;
+
+    case RTL_OP_CHAR16:
+      VPUSH(rtl_char(imm16));
+      break;
+
+    case RTL_OP_FN16:
+      VPUSH(rtl_function(imm16));
+      break;
+
+    case RTL_OP_UNRES16:
+      VPUSH(rtl_unresolvedSymbol(imm16));
+      break;
+
+    case RTL_OP_CLOSURE16:
+      wptr = rtl_allocGC(M, RTL_CLOSURE, &f, 2);
+
+      wptr[0] = rtl_function(imm16);
+      wptr[1] = M->env;
+
+      VPUSH(f);
+      break;
+
+    case RTL_OP_REST:
+      // Load the current args tuple into a
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      a    = rptr[len - 1];
+
+      rtl_reifyTuple(M, a, &len);
+
+      // Cons up the end of that tuple into a list.
+      b = RTL_NIL;
+      for (i = len; i > imm16; i--) {
+        // Reload rptr on each iteration, in-case GC has moved the tuple.
+        rptr = rtl_reifyTuple(M, a, &len);
+
+        b = rtl_cons(M, rptr[i - 1], b);
+      }
+
+      // Allocate a new args tuple with the first elements of the old one and
+      // our new list element.
+      wptr = rtl_allocTuple(M, &c, imm16 + 1);
+      rptr = rtl_reifyTuple(M, a, &len); // Reload again ...
+
+      memcpy(wptr, rptr, sizeof(rtl_Word)*imm16);
+      wptr[imm16] = b;
+
+      // Finally create a new env tuple with our new args tuple at the end.
+      rtl_reifyTuple(M, M->env, &len);
+      wptr = rtl_allocTuple(M, &d, len);
+      rptr = rtl_reifyTuple(M, M->env, &len); // Reload again ...
+
+      memcpy(wptr, rptr, sizeof(rtl_Word)*(len - 1));
+      wptr[len - 1] = c;
+
+      M->env = d;
+      break;
+
+
+    case RTL_OP_APPLY_LIST:
+      b = rtl_listToTuple(M, b);
+
+      // fallthrough ...
+
+    case RTL_OP_APPLY_TUPLE:
+      f = a;
+      a = b;
+
+      // fallthrough ...
+
+    case RTL_OP_CALL:
+    case RTL_OP_TAIL:
+    case RTL_OP_STATIC_CALL:
+    case RTL_OP_STATIC_TAIL:
+      switch (rtl_typeOf(f)) {
+      case RTL_SELECTOR:
+        rptr = rtl_reifyTuple(M, a, &len);
+        if (unlikely(len != 1)) {
+          rtl_triggerFault(M, "arg-count",
+                           "selector expects a single argument when called as function.");
+          continue;
+        }
+
+        VPUSH(rtl_mapLookup(M, rptr[0], f, RTL_NIL));
+        break;
+
+      case RTL_TUPLE:
+        rptr = rtl_reifyTuple(M, a, &len);
+        if (unlikely(len != 1)) {
+          rtl_triggerFault(M, "arg-count",
+                           "tuple expects a single argument when called as a function.");
+          continue;
+
+        } else if (unlikely(!rtl_isInt28(rptr[0]))) {
+          rtl_triggerFault(M, "expected-int",
+                           "tuple expects a single int28 argument when called as a "
+                           "function.");
+          continue;
+
+        }
+
+        a = rptr[0];
+        rptr = rtl_reifyTuple(M, f, &len);
+        if (unlikely(unlikely(rtl_int28Value(a) >= len) || unlikely(rtl_int28Value(a) < 0))) {
+          rtl_triggerFault(M, "out-of-bounds",
+                           "tuple index out of bounds when calling tuple as function.");
+          continue;
+
+        }
+
+        VPUSH(rptr[rtl_int28Value(a)]);
+        break;
+
+      case RTL_MAP:
+        rptr = rtl_reifyTuple(M, a, &len);
+        if (unlikely(len != 1)) {
+          rtl_triggerFault(M, "arg-count",
+                           "tuple expects a single argument when called as a function.");
+          continue;
+
+        }
+
+        VPUSH(rtl_mapLookup(M, f, rptr[0], RTL_NIL));
+        break;
+
+      case RTL_CLOSURE:
+        rptr = __rtl_reifyPtr(M, f);
+        f    = rptr[0];
+        b    = rptr[1];
+
+        if (opcode != RTL_OP_TAIL && opcode != RTL_OP_STATIC_TAIL) {
+          RPUSH(f);
+        } else {
+          TAIL(f);
+        }
+
+        func   = rtl_reifyFunction(M->codeBase, f);
+        M->pc  = func->as.lisp.code;
+        M->env = rtl_tuplePushLast(M, b, a);
+        break;
+
+      case RTL_FUNCTION:
+        func = rtl_reifyFunction(M->codeBase, f);
+        if (func->isBuiltin) {
+          RPUSH(f);
+
+          rptr = rtl_reifyTuple(M, a, &len);
+          b    = func->as.builtin.cFn(M, rptr, len);
+          VPUSH(b);
+
+          RPOP();
+        } else {
+          if (opcode != RTL_OP_TAIL && opcode != RTL_OP_STATIC_TAIL) {
+            RPUSH(f);
+          } else {
+            TAIL(f);
+          }
+  
+          M->pc = func->as.lisp.code;
+          wptr  = rtl_allocTuple(M, &b, 1);
+
+          wptr[0] = a;
+          M->env  = b;
+        }
+        break;
+
+      default:
+        rtl_triggerFault(M, "not-callable",
+                         "Trying to call an uncallable object...");
+        continue;
+
+      } break;
+
+    case RTL_OP_LABELS:
+      abort(); // RTL_OP_LABELS is handled specially above.
+      break;
+
+    case RTL_OP_TUPLE:
+      VPUSH(a);
+      break;
+
+    case RTL_OP_VAR:
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      if (unlikely(frame >= len)) {
+        rtl_triggerFault(M, "out-of-bounds",
+                         "var instruction references out-of-bounds frame.");
+        continue;
+      }
+
+      rptr = rtl_reifyTuple(M, rptr[frame], &len);
+      if (unlikely(index >= len)) {
+        rtl_triggerFault(M, "arg-count",
+                         "var instruction references out-of-bounds argument index; "
+                         "function probably expected more arguments.");
+        continue;
+      }
+
+      VPUSH(rptr[index]);
+      break;
+
+    case RTL_OP_SET_VAR:
+      rptr = rtl_reifyTuple(M, M->env, &len);
+      if (unlikely(frame >= len)) {
+        rtl_triggerFault(M, "out-of-bounds",
+                         "set-var instruction references out-of-bounds frame.");
+        continue;
+      }
+
+      rtl_writeTupleElem(M, rptr[frame], index, a);
+
+      VPUSH(a);
+      break;
+
+    case RTL_OP_JMP32:
+      M->pc += (int32_t)immW;
+      break;
+
+    case RTL_OP_CJMP32:
+      if (!rtl_isNil(a))
+        M->pc += (int32_t)immW;
+
+      break;
+
+    case RTL_OP_CONST32:
+      VPUSH(immW);
+      break;
+
+    case RTL_OP_CLOSURE32:
+      wptr = rtl_allocGC(M, RTL_CLOSURE, &f, 2);
+
+      wptr[0] = rtl_function(immW);
+      wptr[1] = M->env;
+
+      VPUSH(f);
+      break;
+
+    case RTL_OP_GET_DYN:
+      VPUSH(rtl_getVar(M, immW));
+      break;
+
+    case RTL_OP_RESTORE_DYN:
+      assert(M->dStackLen > 0);
+
+      rtl_setVar(M, immW, M->dStack[--M->dStackLen]);
+      break;
+
+    case RTL_OP_SAVE_DYN:
+      if (unlikely(M->dStackLen == M->dStackCap)) {
+        M->dStackCap = M->dStackCap == M->dStackCap * 2;
+        M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
+      }
+
+      M->dStack[M->dStackLen++] = rtl_getVar(M, immW);
+      rtl_setVar(M, immW, a);
+
+      VPUSH(a);
+      break;
+
+    case RTL_OP_SET_DYN:
+      rtl_setVar(M, immW, a);
+      VPUSH(a);
+      break;
+
+    case RTL_OP_UNDEF_VAR:
+      c = RTL_MAP;
+      c = rtl_recordSet(M, c, "type",
+                        rtl_internSelector(NULL, "undefined-var"));
+
+      c = rtl_recordSet(M, c, "message",
+                        rtl_string(M, "Tried to reference an undefined global variable."));
+
+      c = rtl_recordSet(M, c, "name", immW);
+
+      __rtl_triggerFault(M, c);
+      continue;
+
+
+    case RTL_OP_UNDEF_CALL:
+    case RTL_OP_UNDEF_TAIL:
+      c = RTL_MAP;
+      c = rtl_recordSet(M, c, "type",
+                        rtl_internSelector(NULL, "undefined-function"));
+
+      c = rtl_recordSet(M, c, "message",
+                        rtl_string(M, "Tried to call an undefined function."));
+
+      c = rtl_recordSet(M, c, "name", f);
+
+      __rtl_triggerFault(M, c);
+      continue;
+
     }
   }
 
- interp_cleanup:
+ cleanup:
   rtl_popWorkingSet(M);
 }
 
@@ -2720,8 +2802,10 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
                         uint32_t    beg,
                         uint32_t    end)
 {
-  size_t   i, inLen, outLen;
-  rtl_Word out = RTL_NIL;
+  size_t    inLen,
+            outLen;
+
+  rtl_Word  out = RTL_NIL;
 
   rtl_Word const *rptr;
   rtl_Word       *wptr;
@@ -2748,8 +2832,9 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
   wptr = rtl_allocTuple(M, &out, outLen);
   rptr = rtl_reifyTuple(M, tuple, &inLen);
 
-  for (i = 0; i < outLen; i++)
-    wptr[i] = rptr[beg + i];
+  memcpy(wptr, rptr + beg, sizeof(rtl_Word)*outLen);
+
+  rtl_popWorkingSet(M);
 
   return out;
 }
@@ -2899,7 +2984,11 @@ void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
 
   uint32_t consGen, consOffs;
 
-  assert(rtl_isCons(cons));
+  if (!rtl_isCons(cons)) {
+    rtl_triggerFault(M, "expected-cons",
+                     "First argument of rtl_writeCar must be a cons.");
+    return;
+  }
 
   ptr = __rtl_reifyPtr(M, cons);
   ptr[0] = val;
@@ -2919,7 +3008,11 @@ void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
 
   uint32_t consGen, consOffs;
 
-  assert(rtl_isCons(cons));
+  if (!rtl_isCons(cons)) {
+    rtl_triggerFault(M, "expected-cons",
+                     "First argument of rtl_writeCdr must be a cons.");
+    return;
+  }
 
   ptr = __rtl_reifyPtr(M, cons);
   ptr[1] = val;
@@ -2942,7 +3035,11 @@ void rtl_writeTupleElem(rtl_Machine *M,
   uint32_t tplGen, tplOffs;
   size_t len;
 
-  assert(rtl_isCons(tuple));
+  if (!rtl_isTuple(tuple)) {
+    rtl_triggerFault(M, "expected-tuple",
+                     "First argument of rtl_writeTupleElem must be a tuple.");
+    return;
+  }
 
   ptr = __rtl_reifyPtr(M, tuple);
   len = rtl_int28Value(ptr[0]);

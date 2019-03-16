@@ -15,36 +15,30 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "rt-lisp.h"
 
-// This macro is just a helper, designed to be expanded in the middle of a
-// uint8_t[] literal.
-#define I28(N)                                  \
-  (RTL_INT28 | ((N & 0xF) << 4)),               \
-    ((N & 0xFF0) << 4),                         \
-    ((N & 0xFF000) << 4),                       \
-    ((N & 0xFF00000) << 4)                      \
+rtl_Machine M;
 
-rtl_Word builtinHello(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
+void ctrlC(int sig)
 {
-  assert(argsLen == 0);
+  rtl_triggerFault(&M, "interrupt",
+                   "An interrupt was signalled by the user.");
 
-  printf("hello, world!\n");
-
-  return RTL_NIL;
+  signal(SIGINT, ctrlC);
 }
 
 int main() {
   rtl_CodeBase  codeBase;
-
-  rtl_Machine   M;
 
   rtl_Compiler  C;
 
   rtl_initCodeBase(&codeBase);
   rtl_initMachine(&M, &codeBase);
   rtl_initCompiler(&C, &M);
+
+  signal(SIGINT, ctrlC);
 
   rtl_io_installBuiltins(&C);
 

@@ -47,3 +47,25 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
 
 // Allocate a new tuple and fill it with elemsLen words pointed to by elems.
 rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen);
+
+static inline
+size_t rtl_tupleLen(rtl_Machine *M, rtl_Word tuple)
+{
+  size_t len;
+
+  rtl_reifyTuple(M, tuple, &len);
+
+  return len;
+}
+
+static inline
+rtl_Word rtl_tuplePopLast(rtl_Machine *M, rtl_Word tuple)
+{
+  return rtl_tupleSlice(M, tuple, 0, rtl_tupleLen(M, tuple) - 1);
+}
+
+static inline
+rtl_Word rtl_tuplePopFirst(rtl_Machine *M, rtl_Word tuple)
+{
+  return rtl_tupleSlice(M, tuple, 1, rtl_tupleLen(M, tuple));
+}

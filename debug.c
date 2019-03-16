@@ -77,10 +77,6 @@ void rtl_formatExprShallow(rtl_Word w)
     printf("unres:%s", rtl_unresolvedSymbolName(w));
     break;
 
-  case RTL_UNRESOLVED_SELECTOR:
-    printf("<unres-sel>");
-    break;
-
   case RTL_SELECTOR:
     pkgName = rtl_selectorPackageName(w);
     if (pkgName[0] != '\0') {
@@ -98,8 +94,11 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_TUPLE:
-    printf("Tuple#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
-    break;
+    if (rtl_isZeroValue(w)) {
+      printf("[]");
+    } else {
+      printf("Tuple#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
+    } break;
 
   case RTL_CHAR:
     printf("'");
@@ -108,15 +107,18 @@ void rtl_formatExprShallow(rtl_Word w)
     break;
 
   case RTL_MAP:
-    printf("Map#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
-    break;
+    if (rtl_isZeroValue(w)) {
+      printf("{}");
+    } else {
+      printf("Map#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
+    } break;
 
   case RTL_CONS:
     printf("Cons#%Xg%d", __rtl_ptrOffs(w), __rtl_ptrGen(w));
     break;
 
   case RTL_FUNCTION:
-    printf("Function#%u", (unsigned int)(w >> 4));
+    printf("Fn#%u", (unsigned int)(w >> 4));
     break;
 
   case RTL_CLOSURE:
@@ -261,477 +263,272 @@ void rtl_formatExpr(rtl_Machine *M, rtl_Word w)
   rtl_formatExprIndented(M, w, 0);
 }
 
-uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *bc)
+#define RTL_EMIT_INSTRUCTION_NAME(ENUM, NAME, _ENC, _IDX) \
+  [RTL_OP_ ## ENUM] = NAME,
+
+static const char *instructionNames[] = {
+  RTL_MAP_OPCODES(RTL_EMIT_INSTRUCTION_NAME)
+};
+
+#undef RTL_EMIT_INSTRUCTION_NAME
+
+static
+uint8_t *readWord(uint8_t *pc, rtl_Word *out)
 {
-  rtl_Word     literal;
+  *out = (rtl_Word)pc[0] << 0
+       | (rtl_Word)pc[1] << 8
+       | (rtl_Word)pc[2] << 16
+       | (rtl_Word)pc[3] << 24 ;
 
-  uint16_t     frame,
-               idx,
-               size;
+  return pc + 4;
+}
 
-  rtl_Function *func;
+static
+uint8_t *readShort(uint8_t *pc, uint16_t *out)
+{
+  *out = (rtl_Word)pc[0] << 0
+       | (rtl_Word)pc[1] << 8 ;
 
-  switch (*bc) {
-  case RTL_OP_NOP:
-    printf("   nop\n");
-    return bc + 1;
+  return pc + 2;
+}
 
-  case RTL_OP_CONST:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
+uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *pc)
+{
+  rtl_Word        immW;
 
-    printf("   const       ");
-    rtl_formatExprShallow(literal);
+  uint16_t        frame,
+                  idx,
+                  imm16;
 
-    if (rtl_isFunction(literal)) {
-      func = rtl_reifyFunction(codeBase, literal);
-      printf("         ;; %s:%s",
-             rtl_symbolPackageName(func->name),
-             rtl_symbolName(func->name));
-    }
+  uint8_t         imm8;
+
+  rtl_OpEncoding  enc;
+
+  rtl_Opcode      opcode;
+
+  rtl_Function    *func;
+
+  char nameBuf[1024];
+
+  opcode = *pc++;
+  enc = (rtl_OpEncoding)(opcode >> 4);
+
+  printf("   %-14s", instructionNames[opcode]);
+
+  switch (enc) {
+  case RTL_OP_ENC_NULLARY_NOARG:
+  case RTL_OP_ENC_UNARY_NOARG:
+  case RTL_OP_ENC_BINARY_NOARG_A:
+  case RTL_OP_ENC_BINARY_NOARG_B:
+  case RTL_OP_ENC_TERNARY_NOARG:
     printf("\n");
-
-    return bc + 5;
-
-  case RTL_OP_CONST_NIL:
-    printf("   nil\n");
-    return bc + 1;
-
-  case RTL_OP_CONST_TOP:
-    printf("   top\n");
-    return bc + 1;
-
-  case RTL_OP_GENSYM:
-    printf("   gensym\n");
-    return bc + 1;
-
-  case RTL_OP_CONS:
-    printf("   cons\n");
-    return bc + 1;
-
-  case RTL_OP_CAR:
-    printf("   car\n");
-    return bc + 1;
-
-  case RTL_OP_CDR:
-    printf("   cdr\n");
-    return bc + 1;
-
-  case RTL_OP_POP:
-    printf("   pop\n");
-    return bc + 1;
-
-  case RTL_OP_SWAP:
-    printf("   swap\n");
-    return bc + 1;
-
-  case RTL_OP_DUP:
-    printf("   dup\n");
-    return bc + 1;
-
-  case RTL_OP_IS_INT28:
-    printf("   int28?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_FIX14:
-    printf("   fix14?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_SYMBOL:
-    printf("   symbol?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_SELECTOR:
-    printf("   selector?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_MAP:
-    printf("   selector?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_CHAR:
-    printf("   char?\n");
-    return bc + 1;
-
-    // `nil?' and `not' are actually the same function.
-  case RTL_OP_IS_NIL:
-    printf("   nil?\n");
-    return bc + 1;
-
-    // `nil?' and `not' are actually the same function.
-  case RTL_OP_IS_TOP:
-    printf("   top?\n");
-    return bc + 1;
-
-  case RTL_OP_NOT:
-    printf("   not\n");
-    return bc + 1;
-
-  case RTL_OP_IS_CONS:
-    printf("   cons?\n");
-    return bc + 1;
-
-  case RTL_OP_IS_TUPLE:
-    printf("   tuple?\n");
-    return bc + 1;
-
-  case RTL_OP_CJMP8:
-    printf("   cjmp8       %+-3d\n", (int8_t)bc[1]);
-    return bc + 2;
-
-  case RTL_OP_CJMP16:
-    literal = (uint32_t)bc[1] << 0
-            | (uint32_t)bc[2] << 8 ;
-
-    printf("   cjmp16      %+-3d\n", (int16_t)literal);
-    return bc + 3;
-
-  case RTL_OP_CJMP32:
-    literal = (uint32_t)bc[1] << 0
-            | (uint32_t)bc[2] << 8
-            | (uint32_t)bc[3] << 16
-            | (uint32_t)bc[4] << 24 ;
-
-    printf("   cjmp32      %+-3d\n", (int32_t)literal);
-    return bc + 5;
-
-  case RTL_OP_JMP8:
-    printf("   jmp8        %+-3d\n", (int8_t)bc[1]);
-    return bc + 2;
-
-  case RTL_OP_JMP16:
-    literal = (uint32_t)bc[1] << 0
-            | (uint32_t)bc[2] << 8 ;
-
-    printf("   jmp16       %+-3d\n", (int16_t)literal);
-    return bc + 3;
-
-  case RTL_OP_JMP32:
-    literal = (uint32_t)bc[1] << 0
-            | (uint32_t)bc[2] << 8
-            | (uint32_t)bc[3] << 16
-            | (uint32_t)bc[4] << 24 ;
-
-    printf("   jmp32       %+-3d\n", (int32_t)literal);
-    return bc + 5;
-
-  case RTL_OP_CALL:
-    size = (uint16_t)bc[1] << 0
-         | (uint16_t)bc[2] << 8;
-
-    printf("   call        %d\n", (int)size);
-    return bc + 3;
-
-  case RTL_OP_TAIL:
-    size = (uint16_t)bc[1] << 0
-         | (uint16_t)bc[2] << 8;
-
-    printf("   tail        %d\n", (int)size);
-    return bc + 3;
-
-  case RTL_OP_STATIC_CALL:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    size = (uint16_t)bc[5] << 0
-         | (uint16_t)bc[6] << 8;
-
-    func = rtl_reifyFunction(codeBase, literal);
-
-    printf("   static-call %s:%s %d\n",
-           rtl_symbolPackageName(func->name),
-           rtl_symbolName(func->name),
-           (int)size);
-    return bc + 7;
-
-  case RTL_OP_STATIC_TAIL:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    size = (uint16_t)bc[5] << 0
-         | (uint16_t)bc[6] << 8;
-
-    func = rtl_reifyFunction(codeBase, literal);
-
-    printf("   static-tail %s:%s %d\n",
-           rtl_symbolPackageName(func->name),
-           rtl_symbolName(func->name),
-           (int)size);
-    return bc + 7;
-
-  case RTL_OP_APPLY_LIST:
-    printf("   apply-list\n");
-    return bc + 1;
-
-  case RTL_OP_APPLY_TUPLE:
-    printf("   apply-tuple\n");
-    return bc + 1;
-
-  case RTL_OP_UNDEFINED_CALL:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   undef-call  %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 7;
-
-  case RTL_OP_UNDEFINED_TAIL:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   undef-tail  %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 7;
-
-  case RTL_OP_UNDEFINED_VAR:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   undef-var   %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 5;
-
-  case RTL_OP_RETURN:
-    printf("   return\n");
-    return bc + 1;
-
-  case RTL_OP_REST:
-    size = (uint16_t)bc[1] << 0
-         | (uint16_t)bc[2] << 8;
-
-    printf("   rest        %d\n", (int)size);
-
-    return bc + 3;
-
-  case RTL_OP_VAR:
-    frame = (uint16_t)bc[1] << 0
-          | (uint16_t)bc[2] << 8;
-
-    idx = (uint16_t)bc[3] << 0
-        | (uint16_t)bc[4] << 8;
-
-    printf("   var         %d %d\n", (int)frame, (int)idx);
-    return bc + 5;
-
-  case RTL_OP_CLOSURE:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   closure     Function#%d",
-           (int)rtl_functionID(literal));
-
-    func = rtl_reifyFunction(codeBase, literal);
-    printf("         ;; %s:%s",
-           rtl_symbolPackageName(func->name),
-           rtl_symbolName(func->name));
-    printf("\n");
-    return bc + 5;
-
-  case RTL_OP_LABELS:
-    size = (uint16_t)bc[1] << 0
-         | (uint16_t)bc[2] << 8;
-
-    printf("   labels      %d\n", (int)size);
-    return bc + 3;
-
-  case RTL_OP_END_LABELS:
-    printf("   end-labels\n");
-    return bc + 1;
-
-  case RTL_OP_TUPLE:
-    size = (uint16_t)bc[1] << 0
-         | (uint16_t)bc[2] << 8;
-
-    printf("   tuple       %d\n", (int)size);
-    return bc + 3;
-
-  case RTL_OP_GET:
-    printf("   get\n");
-    return bc + 1;
-
-  case RTL_OP_LEN:
-    printf("   len\n");
-    return bc + 1;
-
-  case RTL_OP_PUSH_FIRST:
-    printf("   push-first\n");
-    return bc + 1;
-
-  case RTL_OP_PUSH_LAST:
-    printf("   push-last\n");
-    return bc + 1;
-
-  case RTL_OP_CONCAT:
-    printf("   concat\n");
-    return bc + 1;
-
-  case RTL_OP_SLICE:
-    printf("   slice\n");
-    return bc + 1;
-
-  case RTL_OP_DYN_GET:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   dyn-get     %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 5;
-
-  case RTL_OP_DYN_SET:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   dyn-set     %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 5;
-
-  case RTL_OP_DYN_SAVE:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   dyn-save    %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 5;
-
-  case RTL_OP_DYN_RESTORE:
-    literal = (rtl_Word)bc[1] << 0
-            | (rtl_Word)bc[2] << 8
-            | (rtl_Word)bc[3] << 16
-            | (rtl_Word)bc[4] << 24 ;
-
-    printf("   dyn-restore %s:%s\n",
-           rtl_symbolPackageName(literal),
-           rtl_symbolName(literal));
-    return bc + 5;
-
-  case RTL_OP_MAP:
-    printf("   map\n");
-    return bc + 1;
-
-  case RTL_OP_INSERT:
-    printf("   insert\n");
-    return bc + 1;
-
-  case RTL_OP_LOOKUP:
-    printf("   lookup\n");
-    return bc + 1;
-
-  case RTL_OP_IADD:
-    printf("   iadd\n");
-    return bc + 1;
-
-  case RTL_OP_ISUB:
-    printf("   isub\n");
-    return bc + 1;
-
-  case RTL_OP_IMUL:
-    printf("   imul\n");
-    return bc + 1;
-
-  case RTL_OP_IDIV:
-    printf("   idiv\n");
-    return bc + 1;
-
-  case RTL_OP_IMOD:
-    printf("   imod\n");
-    return bc + 1;
-
-  case RTL_OP_LT:
-    printf("   lt\n");
-    return bc + 1;
-
-  case RTL_OP_LEQ:
-    printf("   leq\n");
-    return bc + 1;
-
-  case RTL_OP_GT:
-    printf("   gt\n");
-    return bc + 1;
-
-  case RTL_OP_GEQ:
-    printf("   geq\n");
-    return bc + 1;
-
-  case RTL_OP_EQ:
-    printf("   eq\n");
-    return bc + 1;
-
-  case RTL_OP_NEQ:
-    printf("   neq\n");
-    return bc + 1;
-
-  case RTL_OP_ISO:
-    printf("   iso\n");
-    return bc + 1;
-
-  case RTL_OP_FADD:
-    printf("   fadd\n");
-    return bc + 1;
-
-  case RTL_OP_FSUB:
-    printf("   fsub\n");
-    return bc + 1;
-
-  case RTL_OP_FMUL:
-    printf("   fmul\n");
-    return bc + 1;
-
-  case RTL_OP_FDIV:
-    printf("   fdiv\n");
-    return bc + 1;
-
-  case RTL_OP_SET_VAR:
-    frame = (uint16_t)bc[1] << 0
-          | (uint16_t)bc[2] << 8;
-
-    idx = (uint16_t)bc[3] << 0
-        | (uint16_t)bc[4] << 8;
-
-    printf("   set-var     %d %d\n", (int)frame, (int)idx);
-    return bc + 5;
-
-  case RTL_OP_SET_CAR:
-    printf("   set-car\n");
-    return bc + 1;
-
-  case RTL_OP_SET_CDR:
-    printf("   set-cdr\n");
-    return bc + 1;
-
-  case RTL_OP_SET_ELEM:
-    printf("   set-elem\n");
-    return bc + 1;
-
-  default:
-    printf("  ??? ; opcode %d\n", (int)*bc);
-    abort();
+    break;
+
+  case RTL_OP_ENC_NULLARY_BYTE:
+  case RTL_OP_ENC_UNARY_BYTE:
+    imm8 = *pc++;
+
+    switch (opcode) {
+    case RTL_OP_JMP8:
+    case RTL_OP_CJMP8:
+      printf("  %+d\n", (int)(int8_t)imm8);
+      break;
+
+    case RTL_OP_SYMBOL8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_symbol(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_SELECTOR8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_selector(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_INT8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_int28(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_FIX8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_fix14(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_CHAR8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_char(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_UNRES8:
+      printf("  ");
+      rtl_formatExprShallow(rtl_unresolvedSymbol(imm8));
+      printf("\n");
+      break;
+
+    case RTL_OP_CLOSURE8:
+    case RTL_OP_FN8:
+      func = rtl_reifyFunction(codeBase, rtl_function(imm8));
+      snprintf(nameBuf, 1024, "%s:%s",
+               rtl_symbolPackageName(func->name),
+               rtl_symbolName(func->name));
+
+      printf("  %-32s  ; Function Nbr %d\n", nameBuf, (int)imm8);
+      break;
+
+    default:
+      abort(); // unreachable ... ?
+
+    } break;
+
+  case RTL_OP_ENC_NULLARY_SHORT:
+  case RTL_OP_ENC_UNARY_SHORT:
+  case RTL_OP_ENC_DYNAMIC_SHORT:
+  case RTL_OP_ENC_FUNCTION_SHORT:
+    pc = readShort(pc, &imm16);
+
+    switch (opcode) {
+    case RTL_OP_JMP16:
+    case RTL_OP_CJMP16:
+      printf("  %+d\n", (int)(int16_t)imm16);
+      break;
+
+    case RTL_OP_SYMBOL16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_symbol(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_SELECTOR16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_selector(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_INT16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_int28(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_FIX16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_fix14(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_CHAR16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_char(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_UNRES16:
+      printf("  ");
+      rtl_formatExprShallow(rtl_unresolvedSymbol(imm16));
+      printf("\n");
+      break;
+
+    case RTL_OP_CLOSURE16:
+    case RTL_OP_FN16:
+      func = rtl_reifyFunction(codeBase, rtl_function(imm16));
+      snprintf(nameBuf, 1024, "%s:%s",
+               rtl_symbolPackageName(func->name),
+               rtl_symbolName(func->name));
+
+      printf("  %-32s  ; Function Nbr %d\n", nameBuf, (int)imm16);
+      break;
+
+    default:
+      printf("  %d\n", (int)imm16);
+      break;
+
+    } break;
+
+  case RTL_OP_ENC_NULLARY_VAR:
+  case RTL_OP_ENC_UNARY_VAR:
+    pc = readShort(pc, &frame);
+    pc = readShort(pc, &idx);
+
+    printf("  %-3d %-3d\n", (int)frame, (int)idx);
+    break;
+
+  case RTL_OP_ENC_NULLARY_WORD:
+  case RTL_OP_ENC_UNARY_WORD:
+    pc = readWord(pc, &immW);
+
+    switch (opcode) {
+    case RTL_OP_JMP32:
+    case RTL_OP_CJMP32:
+      printf("  %+d\n", (int)(int32_t)immW);
+      break;
+
+
+    case RTL_OP_CONST32:
+      printf("  ");
+      rtl_formatExprShallow(immW);
+      printf("\n");
+      break;
+
+    case RTL_OP_CLOSURE32:
+      func = rtl_reifyFunction(codeBase, rtl_function(immW));
+      snprintf(nameBuf, 1024, "%s:%s",
+               rtl_symbolPackageName(func->name),
+               rtl_symbolName(func->name));
+
+      printf("  %-32s  ; Function Nbr %d\n", nameBuf, (int)immW);
+      break;
+
+    case RTL_OP_GET_DYN:
+    case RTL_OP_RESTORE_DYN:
+    case RTL_OP_UNDEF_VAR:
+    case RTL_OP_SAVE_DYN:
+    case RTL_OP_SET_DYN:
+      printf("  %s:%s\n",
+             rtl_symbolPackageName(immW),
+             rtl_symbolName(immW));
+      break;
+
+    default:
+      abort(); // unreachable ... ?
+
+    } break;
+
+  case RTL_OP_ENC_STATIC:
+    pc = readWord(pc, &immW);
+    pc = readShort(pc, &imm16);
+
+    switch (opcode) {
+    case RTL_OP_STATIC_CALL:
+    case RTL_OP_STATIC_TAIL:
+      func = rtl_reifyFunction(codeBase, immW);
+      snprintf(nameBuf, 1024, "%s:%s",
+               rtl_symbolPackageName(func->name),
+               rtl_symbolName(func->name));
+
+      printf("  %-24s %-4d  ; Function Nbr %d\n", nameBuf,
+             (int)imm16,
+             (int)rtl_functionID(immW));
+      break;
+
+    case RTL_OP_UNDEF_CALL:
+    case RTL_OP_UNDEF_TAIL:
+      printf("  %s:%s\n",
+             rtl_symbolPackageName(immW),
+             rtl_symbolName(immW));
+      break;
+
+    default:
+      abort(); // unreachable ... ?
+    } 
+    break;
   }
+
+  return pc;
 }
 
 void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
@@ -787,7 +584,7 @@ void rtl_disasmFn(rtl_Machine *M, rtl_Word fn)
          rtl_symbolName(func->name));
 
   while (code < end) {
-    printf("    @%04X",
+    printf("    @%04u",
            (unsigned int)((uintptr_t)(code - start) & 0xFFFF));
 
     code = rtl_disasm(M->codeBase, code);
@@ -913,101 +710,39 @@ void rtl_dumpHeap(rtl_Machine *M)
   }
 }
 
-
 static
-uint8_t *nextInstruction(uint8_t *bc)
+uint8_t *nextInstruction(uint8_t *pc)
 {
-  switch ((rtl_Opcode)*bc) {
-  case RTL_OP_NOP:
-  case RTL_OP_MAP:
-  case RTL_OP_INSERT:
-  case RTL_OP_LOOKUP:
-  case RTL_OP_IADD:
-  case RTL_OP_ISUB:
-  case RTL_OP_IMUL:
-  case RTL_OP_IDIV:
-  case RTL_OP_IMOD:
-  case RTL_OP_LT:
-  case RTL_OP_LEQ:
-  case RTL_OP_GT:
-  case RTL_OP_GEQ:
-  case RTL_OP_EQ:
-  case RTL_OP_NEQ:
-  case RTL_OP_ISO:
-  case RTL_OP_FADD:
-  case RTL_OP_FSUB:
-  case RTL_OP_FMUL:
-  case RTL_OP_FDIV:
-  case RTL_OP_SET_CAR:
-  case RTL_OP_SET_CDR:
-  case RTL_OP_SET_ELEM:
-  case RTL_OP_CONST_NIL:
-  case RTL_OP_CONST_TOP:
-  case RTL_OP_GENSYM:
-  case RTL_OP_CONS:
-  case RTL_OP_CAR:
-  case RTL_OP_CDR:
-  case RTL_OP_POP:
-  case RTL_OP_SWAP:
-  case RTL_OP_DUP:
-  case RTL_OP_IS_INT28:
-  case RTL_OP_IS_FIX14:
-  case RTL_OP_IS_SYMBOL:
-  case RTL_OP_IS_SELECTOR:
-  case RTL_OP_IS_MAP:
-  case RTL_OP_IS_CHAR:
-  case RTL_OP_IS_NIL:
-  case RTL_OP_IS_TOP:
-  case RTL_OP_NOT:
-  case RTL_OP_IS_CONS:
-  case RTL_OP_IS_TUPLE:
-  case RTL_OP_APPLY_LIST:
-  case RTL_OP_APPLY_TUPLE:
-  case RTL_OP_RETURN:
-  case RTL_OP_END_LABELS:
-  case RTL_OP_GET:
-  case RTL_OP_LEN:
-  case RTL_OP_PUSH_FIRST:
-  case RTL_OP_PUSH_LAST:
-  case RTL_OP_CONCAT:
-  case RTL_OP_SLICE:
-    return bc + 1;
+  switch (*pc >> 4) {
+  case RTL_OP_ENC_NULLARY_NOARG:
+  case RTL_OP_ENC_UNARY_NOARG:
+  case RTL_OP_ENC_BINARY_NOARG_A:
+  case RTL_OP_ENC_BINARY_NOARG_B:
+  case RTL_OP_ENC_TERNARY_NOARG:
+    return pc + 1;
 
-  case RTL_OP_CJMP8:
-  case RTL_OP_JMP8:
-    return bc + 2;
+  case RTL_OP_ENC_NULLARY_BYTE:
+  case RTL_OP_ENC_UNARY_BYTE:
+    return pc + 2;
+    break;
 
-  case RTL_OP_JMP16:
-  case RTL_OP_CJMP16:
-  case RTL_OP_CALL:
-  case RTL_OP_TAIL:
-  case RTL_OP_REST:
-  case RTL_OP_LABELS:
-  case RTL_OP_TUPLE:
-    return bc + 3;
+  case RTL_OP_ENC_NULLARY_SHORT:
+  case RTL_OP_ENC_UNARY_SHORT:
+  case RTL_OP_ENC_DYNAMIC_SHORT:
+  case RTL_OP_ENC_FUNCTION_SHORT:
+    return pc + 3;
 
-  case RTL_OP_CJMP32:
-  case RTL_OP_JMP32:
-  case RTL_OP_UNDEFINED_VAR:
-  case RTL_OP_VAR:
-  case RTL_OP_CLOSURE:
-  case RTL_OP_DYN_GET:
-  case RTL_OP_DYN_SET:
-  case RTL_OP_DYN_SAVE:
-  case RTL_OP_DYN_RESTORE:
-  case RTL_OP_SET_VAR:
-  case RTL_OP_CONST:
-    return bc + 5;
+  case RTL_OP_ENC_NULLARY_VAR:
+  case RTL_OP_ENC_UNARY_VAR:
+  case RTL_OP_ENC_NULLARY_WORD:
+  case RTL_OP_ENC_UNARY_WORD:
+    return pc + 5;
 
-  case RTL_OP_STATIC_CALL:
-  case RTL_OP_STATIC_TAIL:
-  case RTL_OP_UNDEFINED_CALL:
-  case RTL_OP_UNDEFINED_TAIL:
-    return bc + 7;
+  case RTL_OP_ENC_STATIC:
+    return pc + 7;
 
   default:
-     printf("Missing case in nextInstruction!\n");
-     abort();
+    abort(); // unreachable ... ?
   }
 }
 

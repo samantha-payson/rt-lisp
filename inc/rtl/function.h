@@ -37,6 +37,16 @@ rtl_Function *rtl_reifyFunction(rtl_CodeBase *cb, rtl_Word w)
 }
 
 static inline
+void rtl_setFunctionName(rtl_CodeBase *cb, rtl_Word fn, rtl_Word name)
+{
+  rtl_Function *func;
+
+  func = rtl_reifyFunction(cb, fn);
+
+  func->name = name;
+}
+
+static inline
 rtl_Word rtl_function(uint32_t fnID)
 {
   return (fnID << 4) | RTL_FUNCTION;

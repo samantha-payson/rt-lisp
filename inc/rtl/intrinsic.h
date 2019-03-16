@@ -136,6 +136,7 @@ struct rtl_Intrinsic {
     struct {
       rtl_Intrinsic *map;
       rtl_Intrinsic *key;
+      rtl_Intrinsic *def;
     } lookup;
 
     struct {
@@ -173,6 +174,8 @@ struct rtl_Intrinsic {
       uint16_t argNamesLen;
 
       bool     hasRestArg;
+
+      uint32_t fnID;
 
       rtl_Intrinsic **body;
       size_t        bodyLen;
@@ -346,7 +349,8 @@ rtl_Intrinsic *rtl_mkInsertIntrinsic(rtl_Intrinsic *map,
 
 static inline
 rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
-                                     rtl_Intrinsic *key)
+                                     rtl_Intrinsic *key,
+                                     rtl_Intrinsic *def)
 {
   rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
 
@@ -356,6 +360,7 @@ rtl_Intrinsic *rtl_mkLookupIntrinsic(rtl_Intrinsic *map,
       .lookup = {
         .map = map,
         .key = key,
+        .def = def,
       },
     },
   };

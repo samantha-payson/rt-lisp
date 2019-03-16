@@ -43,8 +43,8 @@ typedef enum rtl_WordType {
   RTL_SELECTOR = 2,
   RTL_INT28    = 3,
   RTL_FIX14    = 4,
-  RTL_TUPLE    = 5,
-  RTL_CHAR     = 6,
+  RTL_CHAR     = 5,
+  RTL_TUPLE    = 6,
   RTL_MAP      = 7,
   RTL_CONS     = 8,
 
@@ -66,8 +66,7 @@ typedef enum rtl_WordType {
   // Used to represent arbitrary binary data, useful for encoding native types.
   RTL_NATIVE = 12,
 
-  RTL_UNRESOLVED_SYMBOL   = 13,
-  RTL_UNRESOLVED_SELECTOR = 14,
+  RTL_UNRESOLVED_SYMBOL = 13,
 
   RTL_TOP = 15,
 

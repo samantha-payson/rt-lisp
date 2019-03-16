@@ -37,7 +37,7 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 
       rtl_compile(C, ns, scratchFnID, w);
 
-      rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RETURN);
+      rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RET);
 
       if (!rtl_clearFault(C->M)) {
         C->M->env = RTL_TUPLE;
@@ -191,7 +191,7 @@ void rtl_repl(rtl_Compiler *C)
 
     rtl_compile(C, &useNS, replFnID, w);
 
-    rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RETURN);
+    rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RET);
 
     if (!rtl_clearFault(C->M)) {
       C->M->env = RTL_TUPLE;
