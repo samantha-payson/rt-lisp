@@ -32,7 +32,9 @@
                 from-file
                 from-dir
 
-                take drop take-while drop-while ) }
+                take drop take-while drop-while
+
+                mapcar-1 mapcar-2 mapcar-3 mapcar-4 mapcar) }
 
   (std:defun cons? (x)
     (std:and (std:tuple? x)
@@ -141,4 +143,44 @@
   (std:defun drop-while (fn itr)
     (std:if (fn (car itr))
         (drop-while fn (cdr itr))
-      itr)))
+      itr))
+
+  (std:defun mapcar-1 (fn itr)
+    (std:when itr
+      (cons (fn (car itr))
+            (mapcar-1 fn (cdr itr)))))
+
+  (std:defun mapcar-2 (fn itr0 itr1)
+    (std:when (std:and itr0 itr1)
+      (cons (fn (car itr0) (car itr1))
+            (mapcar-1 fn (cdr itr0) (cdr itr1)))))
+
+  (std:defun mapcar-3 (fn itr0 itr1 itr2)
+    (std:when (std:and itr0 itr1 itr2)
+      (cons (fn (car itr0) (car itr1) (car itr2))
+            (mapcar-1 fn (cdr itr0) (cdr itr1) (cdr itr2)))))
+
+  (std:defun mapcar-4 (fn itr0 itr1 itr2 itr3)
+    (std:when (std:and itr0 itr1 itr2 itr3)
+      (cons (fn (car itr0) (car itr1) (car itr2) (car itr3))
+            (mapcar-1 fn (cdr itr0) (cdr itr1) (cdr itr2) (cdr itr3)))))
+
+  (std:defun mapcar-n (fn itr*)
+    (std:unless (std:any? nil? itr*)
+      (cons (intrinsic:apply-list fn (std:mapcar car itr*))
+            (mapcar-n fn (std:mapcar cdr itr*)))))
+
+  (std:defun mapcar (fn . itr*)
+    (mapcar-n fn itr*))
+
+  (std:defmacro mapcar (fn . itr*)
+    (std:use-package std
+      (cond
+        ((eq (length itr*) 1)
+         `(iter:mapcar-1 ~fn @itr*))
+        ((eq (length itr*) 2)
+         `(iter:mapcar-2 ~fn @itr*))
+        ((eq (length itr*) 3)
+         `(iter:mapcar-3 ~fn @itr*))
+        ((eq (length itr*) 4)
+         `(iter:mapcar-4 ~fn @itr*))))))

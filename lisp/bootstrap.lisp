@@ -670,7 +670,9 @@
 
     append reverse list
 
-    and not unless cons quote
+    and any? not unless
+
+    cons quote
 
     nil? symbol? selector? int28? fix14? tuple? char? map? cons? top?
 
