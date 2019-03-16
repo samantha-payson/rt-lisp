@@ -1580,7 +1580,7 @@ void rtl_run(rtl_Machine *M)
     // rtl_stackTrace(M);
     // printf("\n\n");
 
-    rtl_disasm(M->codeBase, M->pc);
+    // rtl_disasm(M->codeBase, M->pc);
 
     opcode = *M->pc++;
     enc = (rtl_OpEncoding)(opcode >> 4);

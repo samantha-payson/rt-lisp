@@ -775,10 +775,6 @@ void rtl_compile(rtl_Compiler *C,
     break;
   }
 
-  printf("Generating intrinsics for: ");
-  rtl_formatExpr(C->M, out);
-  printf("\n\n");
-
   ir = rtl_exprToIntrinsic(C, out);
   ir = rtl_transformIntrinsic(C, ir);
 

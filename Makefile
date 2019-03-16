@@ -1,9 +1,10 @@
 CC     = gcc
-CFLAGS = -Wall -Werror -Iinc -g -O0 -march=native \
+CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
   -Wno-error=unused-function \
   -Wno-error=unused-variable \
+  -Wno-error=maybe-uninitialized \
+  -D NDEBUG \
 #  -D RTL_TRACE_WORKING_SETS \
-#  -D NDEBUG \
 #  -D RTL_TRACE_FN_CALLS \
 #  -D RTL_BITMAP_SANITY_CHECKS \
 
