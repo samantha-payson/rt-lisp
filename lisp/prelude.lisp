@@ -111,4 +111,53 @@
           `(@fn ~obj)
         `(~fn ~obj))))
 
-  (export package require -> ->>))
+  (defun filter (fn ls)
+    (rlet rec ((rev nil)
+               (ls  ls))
+      (cond
+        ((nil? ls)
+          (reverse rev))
+        ((fn (car ls))
+          (rec (cons (car ls) rev)
+               (cdr ls)))
+        (T
+          (rec rev (cdr ls))))))
+
+  (defmacro vfilter (name+arg . body)
+    `(filter (lambda (~(car name+arg))
+               @body)
+       ~(cadr name+arg)))
+
+  (defun last (ls)
+    (cond
+      ((nil? ls)
+        nil)
+      ((nil? (cdr ls))
+        ls)
+      (T (last (cdr ls)))))
+
+  (defun butlast (ls)
+    (rlet rec ((rev nil)
+               (ls  ls))
+      (cond
+        ((nil? ls)
+          nil)
+        ((nil? (cdr ls))
+          (reverse rev))
+        (T (rec (cons (car ls) rev)
+                (cdr ls))))))
+
+  (defmacro xfilter (name . body+arg)
+    `(filter (lambda (~name)
+               @(butlast body+arg))
+             @(last body+arg)))
+
+  (defmacro xmapcar (name . body+arg)
+    `(mapcar (lambda (~name)
+               @(butlast body+arg))
+             @(last body+arg)))
+
+  (export package require -> ->>
+          last butlast
+          filter vfilter xfilter
+          xmapcar))

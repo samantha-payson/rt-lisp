@@ -34,7 +34,9 @@
 
                 take drop take-while drop-while
 
-                mapcar-1 mapcar-2 mapcar-3 mapcar-4 mapcar) }
+                mapcar-1 mapcar-2 mapcar-3 mapcar-4
+		mapcar vmapcar xmapcar
+                filter vfilter xfilter ) }
 
   (std:defun cons? (x)
     (std:and (std:tuple? x)
@@ -183,4 +185,32 @@
         ((eq (length itr*) 3)
          `(iter:mapcar-3 ~fn @itr*))
         ((eq (length itr*) 4)
-         `(iter:mapcar-4 ~fn @itr*))))))
+         `(iter:mapcar-4 ~fn @itr*)))))
+
+  (std:defmacro vmapcar (arg* . body)
+    `(mapcar (std:lambda ~(std:mapcar std:car arg*)
+               @body)
+             @(std:mapcar std:cadr arg*)))
+
+  (std:defmacro xmapcar (name . body+arg)
+    `(mapcar (std:lambda (~name)
+	       ~(std:butlast body+arg))
+	     @(std:last body+arg)))
+
+  (std:defmacro xfilter (name . body+arg)
+    `(filter (std:lambda (~name)
+	       ~(std:butlast body+arg))
+	     @(std:last body+arg)))
+
+  (std:defun filter (fn itr)
+    (std:if (std:nil? itr)
+        nil
+      (std:let ((x (car itr)))
+        (std:if (fn x)
+            (cons x (filter fn (cdr itr)))
+          (filter fn (cdr itr))))))
+
+  (std:defmacro vfilter (var+itr . body)
+    `(filter (std:lambda (~(std:car var+itr))
+               @body)
+             ~(std:cadr var+itr))))
