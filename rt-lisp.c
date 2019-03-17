@@ -152,8 +152,7 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   }
 
   if (!rtl_isTuple(tpl)) {
-    rtl_triggerFault(M, "expected-tuple",
-                     "Passed non-tuple to rtl_reifyTuple!");
+    rtl_triggerWrongType(M, RTL_TUPLE, tpl);
 
     *len = 0;
     return NULL;
@@ -175,8 +174,7 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
 rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
-    rtl_triggerFault(M, "expected-cons",
-                     "Passed non-cons to rtl_reifyCons!");
+    rtl_triggerWrongType(M, RTL_CONS, cons);
 
     return NULL;
   }
@@ -916,8 +914,7 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
 rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
 {
   if (unlikely(!rtl_isMap(map))) {
-    rtl_triggerFault(M, "expected-map",
-                     "second argument of rtl_mapLookup must be a map!");
+    rtl_triggerWrongType(M, RTL_MAP, map);
     return def;
   }
 
@@ -1355,47 +1352,6 @@ char const *rtl_typeName(rtl_WordType type)
 
 #define VPEEK(N) (M->vStack[M->vStackLen - ((N) + 1)])
 
-// This is the decode/dispatch template for all hard-coded binary operators.
-#define BINARY_OP(INAME, OP, TYPE_TEST, TYPE_NAME, TYPE_MK, TYPE_VAL)   \
-      case RTL_OP_##INAME:                                              \
-        VSTACK_ASSERT_LEN(2);                                           \
-                                                                        \
-        b = VPOP();                                                     \
-        a = VPOP();                                                     \
-                                                                        \
-        if (unlikely(unlikely(!TYPE_TEST(a)) || unlikely(!TYPE_TEST(b)))) { \
-          c = RTL_MAP;                                                  \
-          c = rtl_recordSet(M, c, "type",                               \
-                            rtl_internSelector(NULL, "type-mismatch")); \
-          c = rtl_recordSet(M, c, "message",                            \
-                            rtl_string(M, "Type mismatch for binop "    \
-                                       "instruction '" #INAME "', "     \
-                                       "expected both " TYPE_NAME));    \
-          c = rtl_recordSet(M, c, "lhs", a);                            \
-          c = rtl_recordSet(M, c, "rhs", b);                            \
-          __rtl_triggerFault(M, c);                                     \
-          goto interp_cleanup;                                          \
-        }                                                               \
-                                                                        \
-        VPUSH(TYPE_MK(TYPE_VAL(a) OP TYPE_VAL(b)));                     \
-        break;                                                          \
-  // end of multi-line macro
-
-#define CMP_OP(INAME, NUMERIC_CMP)              \
-      case RTL_OP_##INAME:                      \
-        VSTACK_ASSERT_LEN(2);                   \
-                                                \
-        b = VPOP();                             \
-        a = VPOP();                             \
-                                                \
-        if (rtl_cmp(M, a, b) NUMERIC_CMP) {     \
-          VPUSH(RTL_TOP);                       \
-        } else {                                \
-          VPUSH(RTL_NIL);                       \
-        }                                       \
-        break;                                  \
-  // end of multiline macro
-
 static
 uint8_t *readWord(uint8_t *pc, rtl_Word *out)
 {
@@ -1532,6 +1488,98 @@ void rtl_resume(rtl_Machine *M)
   }
 }
 
+
+void rtl_triggerUncallable(rtl_Machine *M, rtl_Word obj)
+{
+  rtl_Word w = RTL_MAP;
+
+  RTL_PUSH_WORKING_SET(M, &w);
+
+  w = rtl_recordSet(M, w, "type",
+                    rtl_internSelector(NULL, "uncallable"));
+
+  w = rtl_recordSet(M, w, "message",
+                    rtl_string(M, "Tried to call an object which isn't callable."));
+
+  w = rtl_recordSet(M, w, "object", obj);
+
+  __rtl_triggerFault(M, w);
+}
+
+void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
+{
+  rtl_Word w = RTL_MAP;
+
+  char const *faultType;
+
+  char message[256];
+
+  RTL_PUSH_WORKING_SET(M, &w);
+
+  w = rtl_recordSet(M, w, "object", obj);
+
+  switch (type) {
+  case RTL_NIL:
+    faultType = "expected-nil";
+    break;
+
+  case RTL_SYMBOL:
+    faultType = "expected-symbol";
+    break;
+
+  case RTL_SELECTOR:
+    faultType = "expected-selector";
+    break;
+
+  case RTL_INT28:
+    faultType = "expected-int28";
+    break;
+
+  case RTL_FIX14:
+    faultType = "expected-fix14";
+    break;
+
+  case RTL_CHAR:
+    faultType = "expected-char";
+    break;
+
+  case RTL_TUPLE:
+    faultType = "expected-tuple";
+    break;
+
+  case RTL_MAP:
+    faultType = "expected-map";
+    break;
+
+  case RTL_CONS:
+    faultType = "expected-cons";
+    break;
+
+  case RTL_NATIVE:
+    faultType = "expected-native";
+    break;
+
+  case RTL_TOP:
+    faultType = "expected-top";
+    break;
+
+  default:
+    faultType = "wrong-type";
+    break;
+  }
+
+  snprintf(message, 256, "Wrong argument type, expected '%s', got '%s'.",
+           rtl_typeName(type),
+           rtl_typeNameOf(obj));
+
+  w = rtl_recordSet(M, w, "type", rtl_internSelector(NULL, faultType));
+  w = rtl_recordSet(M, w, "message", rtl_string(M, message));
+
+  __rtl_triggerFault(M, w);
+
+  rtl_popWorkingSet(M);
+}
+
 // A more streamlined implementation of rtl_run.
 void rtl_run(rtl_Machine *M)
 {
@@ -1583,7 +1631,7 @@ void rtl_run(rtl_Machine *M)
     // rtl_disasm(M->codeBase, M->pc);
 
     opcode = *M->pc++;
-    enc = (rtl_OpEncoding)(opcode >> 4);
+    enc    = (rtl_OpEncoding)(opcode >> 4);
 
     // Stage 1: Decode the instruction
     switch (enc) {
@@ -1852,9 +1900,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_IADD:
-      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "iadd instruction expects two int28 arguments.");
+      if (unlikely(!rtl_isInt28(a))) {
+        rtl_triggerWrongType(M, RTL_INT28, a);
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
       }
 
@@ -1862,9 +1913,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_ISUB:
-      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "isub instruction expects two int28 arguments.");
+      if (unlikely(!rtl_isInt28(a))) {
+        rtl_triggerWrongType(M, RTL_INT28, a);
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
       }
 
@@ -1872,9 +1926,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_IMUL:
-      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "imul instruction expects two int28 arguments.");
+      if (unlikely(!rtl_isInt28(a))) {
+        rtl_triggerWrongType(M, RTL_INT28, a);
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
       }
 
@@ -1882,9 +1939,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_IDIV:
-      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "idiv instruction expects two int28 arguments.");
+      if (unlikely(!rtl_isInt28(a))) {
+        rtl_triggerWrongType(M, RTL_INT28, a);
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
       }
 
@@ -1892,10 +1952,14 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_IMOD:
-      if (unlikely(unlikely(!rtl_isInt28(a)) || unlikely(!rtl_isInt28(b)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "imod instruction expects two int28 arguments.");
+      if (unlikely(!rtl_isInt28(a))) {
+        rtl_triggerWrongType(M, RTL_INT28, a);
         continue;
+
+      } else if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
+        continue;
+
       }
 
       VPUSH(rtl_int28(rtl_int28Value(a) % rtl_int28Value(b)));
@@ -1930,9 +1994,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_FADD:
-      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
-        rtl_triggerFault(M, "expected-fix14",
-                         "fadd instruction expects two fix14 arguments.");
+      if (unlikely(!rtl_isFix14(a))) {
+        rtl_triggerWrongType(M, RTL_FIX14, a);
+        continue;
+
+      } else if (unlikely(!rtl_isFix14(b))) {
+        rtl_triggerWrongType(M, RTL_FIX14, b);
         continue;
       }
 
@@ -1940,9 +2007,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_FSUB:
-      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
-        rtl_triggerFault(M, "expected-fix14",
-                         "fsub instruction expects two fix14 arguments.");
+      if (unlikely(!rtl_isFix14(a))) {
+        rtl_triggerWrongType(M, RTL_FIX14, a);
+        continue;
+
+      } else if (unlikely(!rtl_isFix14(b))) {
+        rtl_triggerWrongType(M, RTL_FIX14, b);
         continue;
       }
 
@@ -1950,9 +2020,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_FMUL:
-      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
-        rtl_triggerFault(M, "expected-fix14",
-                         "fmul instruction expects two fix14 arguments.");
+      if (unlikely(!rtl_isFix14(a))) {
+        rtl_triggerWrongType(M, RTL_FIX14, a);
+        continue;
+
+      } else if (unlikely(!rtl_isFix14(b))) {
+        rtl_triggerWrongType(M, RTL_FIX14, b);
         continue;
       }
 
@@ -1960,9 +2033,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_FDIV:
-      if (unlikely(unlikely(!rtl_isFix14(a)) || unlikely(!rtl_isFix14(b)))) {
-        rtl_triggerFault(M, "expected-fix14",
-                         "fdiv instruction expects two fix14 arguments.");
+      if (unlikely(!rtl_isFix14(a))) {
+        rtl_triggerWrongType(M, RTL_FIX14, a);
+        continue;
+
+      } else if (unlikely(!rtl_isFix14(b))) {
+        rtl_triggerWrongType(M, RTL_FIX14, b);
         continue;
       }
 
@@ -2012,15 +2088,12 @@ void rtl_run(rtl_Machine *M)
 
     case RTL_OP_GET:
       if (unlikely(!rtl_isTuple(a))) {
-        rtl_triggerFault(M, "expected-tuple",
-                         "get instruction expects an tuple as its first argument");
+        rtl_triggerWrongType(M, RTL_TUPLE, a);
         continue;
 
       } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerFault(M, "expected-int",
-                         "get instruction expects an int28 as its second argument");
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
-
       }
 
       rptr = rtl_reifyTuple(M, a, &len);
@@ -2047,8 +2120,7 @@ void rtl_run(rtl_Machine *M)
 
     case RTL_OP_SET_ELEM:
       if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerFault(M, "expected-int",
-                         "Second argument to set-elem instruction must be an int28.");
+        rtl_triggerWrongType(M, RTL_INT28, b);
         continue;
       }
 
@@ -2058,10 +2130,12 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_SLICE:
-      if (unlikely(unlikely(!rtl_isInt28(b)) || unlikely(!rtl_isInt28(c)))) {
-        rtl_triggerFault(M, "expected-int",
-                         "beg and end arguments to slice instruction must "
-                         "both be int28s.");
+      if (unlikely(!rtl_isInt28(b))) {
+        rtl_triggerWrongType(M, RTL_INT28, b);
+        continue;
+
+      } else if (unlikely(!rtl_isInt28(c))) {
+        rtl_triggerWrongType(M, RTL_INT28, c);
         continue;
       }
 
@@ -2235,11 +2309,8 @@ void rtl_run(rtl_Machine *M)
           continue;
 
         } else if (unlikely(!rtl_isInt28(rptr[0]))) {
-          rtl_triggerFault(M, "expected-int",
-                           "tuple expects a single int28 argument when called as a "
-                           "function.");
+          rtl_triggerWrongType(M, RTL_INT28, rptr[0]);
           continue;
-
         }
 
         a = rptr[0];
@@ -2308,8 +2379,7 @@ void rtl_run(rtl_Machine *M)
         break;
 
       default:
-        rtl_triggerFault(M, "not-callable",
-                         "Trying to call an uncallable object...");
+        rtl_triggerUncallable(M, f);
         continue;
 
       } break;
@@ -2985,8 +3055,7 @@ void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   uint32_t consGen, consOffs;
 
   if (!rtl_isCons(cons)) {
-    rtl_triggerFault(M, "expected-cons",
-                     "First argument of rtl_writeCar must be a cons.");
+    rtl_triggerWrongType(M, RTL_CONS, cons);
     return;
   }
 
@@ -3009,8 +3078,7 @@ void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   uint32_t consGen, consOffs;
 
   if (!rtl_isCons(cons)) {
-    rtl_triggerFault(M, "expected-cons",
-                     "First argument of rtl_writeCdr must be a cons.");
+    rtl_triggerWrongType(M, RTL_CONS, cons);
     return;
   }
 
@@ -3036,8 +3104,7 @@ void rtl_writeTupleElem(rtl_Machine *M,
   size_t len;
 
   if (!rtl_isTuple(tuple)) {
-    rtl_triggerFault(M, "expected-tuple",
-                     "First argument of rtl_writeTupleElem must be a tuple.");
+    rtl_triggerWrongType(M, RTL_TUPLE, tuple);
     return;
   }
 

@@ -411,6 +411,9 @@ void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message);
 // Internal method for triggering a fault, called by rtl_triggerFault.
 void __rtl_triggerFault(rtl_Machine *M, rtl_Word data);
 
+// Trigger a fault for an incorrectly typed argument.
+void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj);
+
 static inline
 bool rtl_checkFault(rtl_Machine *M)
 {
