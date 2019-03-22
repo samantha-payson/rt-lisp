@@ -79,17 +79,80 @@
            ~(expand-uses (cdr use*) body))
       body))
 
+  (defun mapc-1 (fn ls)
+    (rlet rec ((a ls))
+      (when a
+        (fn (car a))
+        (rec (cdr a))))
+    ls)
+
+  (defun mapc-2 (fn ls0 ls1)
+    (rlet rec ((a ls0)
+               (b ls1))
+      (when (and a b)
+        (fn (car a) (car b))
+                 (rec (cdr a) (cdr b))))
+    ls1) ; Return rightmost list for easy use with ->>.
+         ; Is this a good idea?
+
+  (defun mapc-3 (fn ls0 ls1 ls2)
+    (rlet rec ((a ls0)
+               (b ls1)
+               (c ls2))
+      (when (and a b c)
+        (fn (car a) (car b) (car c))
+        (rec (cdr a) (cdr b) (cdr c))))
+    ls2)
+
+  (defun mapc-4 (fn ls0 ls1 ls2 ls3)
+    (rlet rec ((a ls0)
+               (b ls1)
+               (c ls2)
+               (d ls3))
+      (when (and a b c d)
+        (fn (car a) (car b) (car c) (car d))
+        (rec (cdr a) (cdr b) (cdr c) (cdr d))))
+    ls3)
+
+  (defun mapc-n (fn ls*)
+    (rlet rec ((ls* ls*))
+      (unless (any nil? ls*)
+        (apply-list fn (mapcar car ls*))
+        (rec (mapcar cdr ls*))))
+    (car (last ls*)))
+
+  (defun mapc (fn . ls*)
+    (mapc-n fn ls*))
+
+  (defmacro mapc (fn . ls*)
+    (cond
+      ((eq (length ls*) 1)
+        `(mapc-1 ~fn @ls*))
+      ((eq (length ls*) 2)
+        `(mapc-2 ~fn @ls*))
+      ((eq (length ls*) 3)
+        `(mapc-3 ~fn @ls*))
+      ((eq (length ls*) 4)
+        `(mapc-4 ~fn @ls*))
+      (T
+        `(mapc-n ~fn (list @ls*)))))
+
+  (defmacro vmapc (letarg* . body)
+    `(mapc (lambda ~(mapcar car letarg*)
+             @body)
+           @(mapcar cadr letarg*)))
+
   (defmacro package (name arg# . body)
     (let ((export*  (intrinsic:lookup arg# .export))
-          (use*     (intrinsic:lookup arg# .use))
-          (require* (intrinsic:lookup arg# .require)))
-      `(in-package ~name
-         ~(expand-uses use* `(progn (export @export*)
-                                    @body)))))
+          (use*     (intrinsic:lookup arg# .use)))
+      `(progn
+         (in-package ~name
+           ~(expand-uses use* `(progn (export @export*)
+                                      @body))))))
 
   (defvar *loaded* nil)
 
-  (defun require (path)
+  (defun require-1 (path)
     (with (*loaded*)
       (unless (any (lambda (ld)
                      (intrinsic:iso ld path))
@@ -98,6 +161,12 @@
         (intrinsic:dyn-set *loaded*
                             (cons path
                                   *loaded*)))))
+
+  (defun require path*
+    (vmapc ((path path*))
+      (require-1 path))
+    (with (*loaded*)
+      *loaded*))
 
   (defmacro -> (obj . fn*)
     (vfold (obj obj) ((fn fn*))
@@ -160,4 +229,5 @@
   (export package require -> ->>
           last butlast
           filter vfilter xfilter
+          mapc-1 mapc-2 mapc-3 mapc-4 mapc vmapc
           xmapcar))

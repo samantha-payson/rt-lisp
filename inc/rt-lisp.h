@@ -14,13 +14,13 @@
 // along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
 
 #ifndef _RTL_RT_LISP_H_
-#define _RTL_RT_LISP_H_
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define _RTL_INSIDE_RT_LISP_H_
 
@@ -189,9 +189,40 @@ typedef struct rtl_CodeBase {
 
 void rtl_initCodeBase(rtl_CodeBase *codeBase);
 
-typedef void (*rtl_FaultHandler)(rtl_Machine *M, rtl_Word data);
-
 typedef rtl_Word **rtl_WorkingSet;
+
+typedef struct rtl_UnwindHandler {
+  // A unary function that should be called when this handler is resolved.
+  //
+  // If this is called as a result of an exception, the exception object will
+  // be passed as the functions argument. Otherwise nil will be passed.
+  //
+  // If the function fails to handle an exception, it should return nil. It may
+  // return any other value if it succeeds.
+  //
+  // As a special case, this value will be nil if this unwind point represents
+  // a return to the C stack.
+  rtl_Word  fn;
+
+  // The top of the return stack when unwinding to this point.
+  size_t    rStackIdx;
+
+  // This is where execution should resume after successfully handling an
+  // exception.
+  uint8_t   *resumePC;
+} rtl_UnwindHandler;
+
+typedef struct rtl_Exception {
+  rtl_Word    data;
+
+  size_t      stackLen;
+
+  // This is the stack at the point where the exception was thrown. 
+  //
+  // NOTE: The env field of these rtl_RetAddr's is NOT updated when garbage
+  //       collection occurs and hence it is UNDEFINED BEHAVIOUR to access them.
+  rtl_RetAddr stack[];
+} rtl_Exception;
 
 struct rtl_Machine {
   rtl_Heap heap;
@@ -202,21 +233,35 @@ struct rtl_Machine {
 
   uint8_t *pc;
 
+  // Saved dynamic variables.
+  //
+  // Used by the save-dyn and restore-dyn instructions.
   rtl_Word *dStack;
   size_t   dStackLen;
   size_t   dStackCap;
 
+  // Value stack
+  //
+  // The main stack used for data manipulation.
   rtl_Word *vStack;
   size_t   vStackLen;
   size_t   vStackCap;
 
+  // Return stack
   rtl_RetAddr *rStack;
   size_t      rStackLen;
   size_t      rStackCap;
 
+  // Working set stack // // Keeps track of words stored on the C stack, so the
+  // GC can update them properly on collection.
   rtl_WorkingSet *wsStack;
   size_t         wsStackLen;
   size_t         wsStackCap;
+
+  // Unwind Handler stack
+  rtl_UnwindHandler *uwStack;
+  size_t            uwStackLen;
+  size_t            uwStackCap;
 
   // Pointers to heap words which may point at younger generations.
   //
@@ -225,22 +270,28 @@ struct rtl_Machine {
   size_t    backSetLen;
   size_t    backSetCap;
 
-  // True if the machine is currently experiencing an unhandled fault.
-  bool fault;
+  // The exception currently being handled by this machine. This will be NULL if
+  // there is no pending exception.
+  rtl_Exception *exception;
 
   // True if the machine has currently yielded. This will cause an error if it
   // is started up from a non-rtl_resume entrypoint.
   bool yield;
 
-  rtl_FaultHandler faultHandler;
-
   rtl_CodeBase *codeBase;
 };
+
+#define RTL_LIKELY(x)       __builtin_expect(!!(x),1)
+#define RTL_UNLIKELY(x)     __builtin_expect((x),0)
+
+#define RTL_UNWIND(M) if (RTL_UNLIKELY((M)->exception != NULL))
 
 // Initialize the machine M.
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase);
 
 void rtl_resetMachine(rtl_Machine *M);
+
+void rtl_throw(rtl_Machine *M, rtl_Word data);
 
 static inline
 size_t rtl_push(rtl_Machine *M, rtl_Word w)
@@ -248,6 +299,11 @@ size_t rtl_push(rtl_Machine *M, rtl_Word w)
   size_t pos;
 
   pos = M->vStackLen;
+
+  if (RTL_UNLIKELY(M->vStackLen == M->vStackCap)) {
+    M->vStackCap = 2*M->vStackCap;
+    M->vStack = realloc(M->vStack, sizeof(rtl_Word)*M->vStackCap);
+  }
 
   M->vStack[M->vStackLen++] = w;
 
@@ -405,37 +461,29 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
                            rtl_NameSpace const *ns,
                            uint32_t            unresID);
 
-// Trigger a fault from C
-void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message);
+// Throw an exception which just consists of a message.
+void rtl_throwMsg(rtl_Machine *M, char const *type, char const *message);
 
-// Internal method for triggering a fault, called by rtl_triggerFault.
-void __rtl_triggerFault(rtl_Machine *M, rtl_Word data);
-
-// Trigger a fault for an incorrectly typed argument.
-void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj);
+// Throw an exception for an incorrectly typed argument.
+void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj);
 
 static inline
-bool rtl_checkFault(rtl_Machine *M)
+bool rtl_clearException(rtl_Machine *M)
 {
-  return M->fault;
-}
+  bool wasExn = M->exception != NULL;
 
-static inline
-bool rtl_clearFault(rtl_Machine *M)
-{
-  bool fault = M->fault;
-
-  if (fault) {
+  if (wasExn) {
     M->vStackLen = 0;
     M->dStackLen = 0;
     M->rStackLen = 0;
 
     M->env = RTL_TUPLE;
 
-    M->fault = false;
+    free(M->exception);
+    M->exception = NULL;
   }
 
-  return fault;
+  return wasExn;
 }
 
 rtl_Word rtl_read(rtl_Compiler *C, FILE *f);

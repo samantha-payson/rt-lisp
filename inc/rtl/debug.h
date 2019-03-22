@@ -73,4 +73,5 @@ void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w);
 # define rtl_debugCheckAlloc(M, W) ((void)0)
 #endif
 
-void rtl_stackTrace(rtl_Machine *M);
+void rtl_printException(rtl_Machine *M, rtl_Exception *exception);
+void rtl_printStackTrace(rtl_Machine *M);

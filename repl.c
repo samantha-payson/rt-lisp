@@ -1,3 +1,18 @@
+// This file is part of RT Lisp.
+//
+// RT Lisp is free software: you can redistribute it and/or modify it under the
+// terms of the GNU Lesser General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option) any
+// later version.
+//
+// RT Lisp is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+// A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
+// details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
+
 #include <stdio.h>
 #include <string.h>
 
@@ -27,7 +42,7 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
     w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "path"),
                       rtl_string(C->M, path));
 
-    __rtl_triggerFault(C->M, w);
+    rtl_throw(C->M, w);
 
   } else {
     scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
@@ -39,11 +54,13 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 
       rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RET);
 
-      if (!rtl_clearFault(C->M)) {
+      if (!rtl_clearException(C->M)) {
         C->M->env = RTL_TUPLE;
         w = rtl_call(C->M, rtl_function(scratchFnID));
-
-        rtl_clearFault(C->M);
+        RTL_UNWIND (C->M) {
+          rtl_printException(C->M, C->M->exception);
+          rtl_clearException(C->M);
+        }
       }
 
       rtl_newFuncVersion(C->M->codeBase, scratchFnID);
@@ -193,17 +210,19 @@ void rtl_repl(rtl_Compiler *C)
 
     rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RET);
 
-    if (!rtl_clearFault(C->M)) {
+    if (!rtl_clearException(C->M)) {
       C->M->env = RTL_TUPLE;
 
       w = rtl_call(C->M, rtl_function(replFnID));
 
-      if (!rtl_clearFault(C->M)) {
+      RTL_UNWIND (C->M) {
+        rtl_printException(C->M, C->M->exception);
+        rtl_clearException(C->M);
+        printf("\n  \x1B[1mERROR!\x1B[0m\n");
+      } else {
         printf("\n=> ");
         rtl_formatExpr(C->M, w);
         printf("\n");
-      } else {
-        printf("\n  \x1B[1mERROR!\x1B[0m\n");
       }
 
       rtl_newFuncVersion(C->M->codeBase, replFnID);

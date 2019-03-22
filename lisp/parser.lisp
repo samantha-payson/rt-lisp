@@ -13,10 +13,11 @@
 ;;;; You should have received a copy of the GNU Lesser General Public License
 ;;;; along with RT Lisp.  If not, see <https://www.gnu.org/licenses/>.
 
+(require "lisp/iter.lisp")
+
 (package parser
     { .use     ( std )
-      .require ( "lisp/iter.lisp" ) ; .require not yet implemented ...
-      .export  ( parse p-char p-seq p-const)}
+      .export  ( parse p-char p-seq p-const) }
   
   (defun ensure-parser (p)
     (cond

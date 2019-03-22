@@ -242,14 +242,14 @@ rtl_Word rtl_io_openDir(rtl_Machine    *M,
   size_t pathLen;
 
   if (argsLen != 1) {
-    rtl_triggerFault(M, "arg-count",
-                     "io:open-dir expects 1 argument, a path name.");
+    rtl_throwMsg(M, "arg-count",
+                 "io:open-dir expects 1 argument, a path name.");
     return RTL_NIL;
   }
 
   if (!rtl_isString(M, args[0])) {
-    rtl_triggerFault(M, "expected-string",
-                     "Passed non-string as path to io:open-dir.");
+    rtl_throwMsg(M, "expected-string",
+                 "Passed non-string as path to io:open-dir.");
     return RTL_NIL;
   }
 
@@ -275,25 +275,25 @@ rtl_Word rtl_io_readDir(rtl_Machine    *M,
   rtl_Word out = RTL_MAP;
 
   if (argsLen != 1) {
-    rtl_triggerFault(M, "arg-count",
-                     "io:read-dir expects 1 argument, a DIR object.");
+    rtl_throwMsg(M, "arg-count",
+                 "io:read-dir expects 1 argument, a DIR object.");
 
     return RTL_NIL;
   }
 
   if (!rtl_isNative(args[0])) {
-    rtl_triggerFault(M, "expected-native",
-                     "io:read-dir expects its first argument to be a "
-                     "native object.");
+    rtl_throwMsg(M, "expected-native",
+                 "io:read-dir expects its first argument to be a "
+                 "native object.");
 
     return RTL_NIL;
   }
 
   rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
   if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
-    rtl_triggerFault(M, "expected-dir",
-                     "io:close-dir expects its first argument to be a "
-                     "DIR object.");
+    rtl_throwMsg(M, "expected-dir",
+                 "io:close-dir expects its first argument to be a "
+                 "DIR object.");
   }
 
   ent = readdir(rid.d);
@@ -361,25 +361,25 @@ rtl_Word rtl_io_closeDir(rtl_Machine    *M,
   rtl_io_Dir    rid;
 
   if (argsLen != 1) {
-    rtl_triggerFault(M, "arg-count",
-                     "io:close-dir expects 1 argument, a DIR object.");
+    rtl_throwMsg(M, "arg-count",
+                 "io:close-dir expects 1 argument, a DIR object.");
 
     return RTL_NIL;
   }
 
   if (!rtl_isNative(args[0])) {
-    rtl_triggerFault(M, "expected-native",
-                     "io:close-dir expects its first argument to be a "
-                     "native object.");
+    rtl_throwMsg(M, "expected-native",
+                 "io:close-dir expects its first argument to be a "
+                 "native object.");
 
     return RTL_NIL;
   }
 
   rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
   if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
-    rtl_triggerFault(M, "expected-dir",
-                     "io:close-dir expects its first argument to be a "
-                     "DIR object.");
+    rtl_throwMsg(M, "expected-dir",
+                 "io:close-dir expects its first argument to be a "
+                 "DIR object.");
   }
 
   if (closedir(rid.d)) {

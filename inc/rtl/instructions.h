@@ -89,6 +89,7 @@ typedef enum rtl_OpEncoding {
     M(GENSYM,      "gensym",      NULLARY_NOARG,    4) \
     M(RET,         "ret",         NULLARY_NOARG,    5) \
     M(END_LABELS,  "end-labels",  NULLARY_NOARG,    6) \
+    M(END_PROTECT, "end-protect", NULLARY_NOARG,    7) \
                                                        \
     M(CAR,         "car",         UNARY_NOARG,      0) \
     M(CDR,         "cdr",         UNARY_NOARG,      1) \
@@ -152,6 +153,7 @@ typedef enum rtl_OpEncoding {
     M(CLOSURE8,    "closure8",    NULLARY_BYTE,     9) \
                                                        \
     M(CJMP8,       "cjmp8",       UNARY_BYTE,       0) \
+    M(PROTECT8,    "protect8",    UNARY_BYTE,       1) \
                                                        \
                                                        \
     M(JMP16,       "jmp16",       NULLARY_SHORT,    0) \
@@ -166,6 +168,7 @@ typedef enum rtl_OpEncoding {
     M(REST,        "rest",        NULLARY_SHORT,    9) \
                                                        \
     M(CJMP16,      "cjmp16",      UNARY_SHORT,      0) \
+    M(PROTECT16,   "protect16",   UNARY_SHORT,      1) \
                                                        \
     M(CALL,        "call",        FUNCTION_SHORT,   0) \
     M(TAIL,        "tail",        FUNCTION_SHORT,   1) \
@@ -180,15 +183,16 @@ typedef enum rtl_OpEncoding {
                                                        \
                                                        \
     M(JMP32,       "jmp32",       NULLARY_WORD,     0) \
-    M(CJMP32,      "cjmp32",      NULLARY_WORD,     1) \
     M(CONST32,     "const32",     NULLARY_WORD,     3) \
     M(CLOSURE32,   "closure32",   NULLARY_WORD,     4) \
     M(GET_DYN,     "get-dyn",     NULLARY_WORD,     5) \
     M(RESTORE_DYN, "restore-dyn", NULLARY_WORD,     6) \
     M(UNDEF_VAR,   "undef-var",   NULLARY_WORD,     7) \
                                                        \
-    M(SAVE_DYN,    "save-dyn",    UNARY_WORD,       0) \
-    M(SET_DYN,     "set-dyn",     UNARY_WORD,       1) \
+    M(CJMP32,      "cjmp32",      UNARY_WORD,       0) \
+    M(PROTECT32,   "protect32",   UNARY_WORD,       1) \
+    M(SAVE_DYN,    "save-dyn",    UNARY_WORD,       2) \
+    M(SET_DYN,     "set-dyn",     UNARY_WORD,       3) \
                                                        \
                                                        \
     M(UNDEF_CALL,  "undef-call",  STATIC,           0) \

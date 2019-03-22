@@ -23,8 +23,8 @@ rtl_Machine M;
 
 void ctrlC(int sig)
 {
-  rtl_triggerFault(&M, "interrupt",
-                   "An interrupt was signalled by the user.");
+  rtl_throwMsg(&M, "interrupt",
+               "An interrupt was signalled by the user.");
 
   signal(SIGINT, ctrlC);
 }

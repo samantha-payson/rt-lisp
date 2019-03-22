@@ -24,9 +24,6 @@
 // loop. Hopefully this gives the compiler more freedom to keep things in
 // registers, etc...
 
-#define likely(x)       __builtin_expect(!!(x),1)
-#define unlikely(x)     __builtin_expect((x),0)
-
 static
 rtl_Generation *mkGeneration(int genNbr)
 {
@@ -147,12 +144,12 @@ rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
 rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   rtl_Word *backing;
 
-  if (unlikely(!len)) {
+  if (RTL_UNLIKELY(!len)) {
     abort();
   }
 
   if (!rtl_isTuple(tpl)) {
-    rtl_triggerWrongType(M, RTL_TUPLE, tpl);
+    rtl_throwWrongType(M, RTL_TUPLE, tpl);
 
     *len = 0;
     return NULL;
@@ -174,7 +171,7 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
 rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
-    rtl_triggerWrongType(M, RTL_CONS, cons);
+    rtl_throwWrongType(M, RTL_CONS, cons);
 
     return NULL;
   }
@@ -191,7 +188,7 @@ rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons)
 
   ptr = rtl_reifyCons(M, cons);
 
-  if (!ptr) return RTL_NIL;
+  if (RTL_UNLIKELY(!ptr)) return RTL_NIL;
 
   return ptr[0];
 }
@@ -204,7 +201,7 @@ rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons)
 
   ptr = rtl_reifyCons(M, cons);
 
-  if (!ptr) return RTL_NIL;
+  if (RTL_UNLIKELY(!ptr)) return RTL_NIL;
 
   return ptr[1];
 }
@@ -561,8 +558,8 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   rtl_Word       *ptr;
 
 #ifndef NDEBUG
-  if (M->fault) {
-    printf(" error: Performing allocation with a pending fault!\n");
+  if (M->exception) {
+    printf(" error: Performing allocation with a pending exception!\n");
     abort();
   }
 #endif
@@ -577,8 +574,8 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
     break;
 
   default:
-    rtl_triggerFault(M, "invalid-allocation",
-                     "Trying to allocate non-pointer type!\n");
+    rtl_throwMsg(M, "invalid-allocation",
+                 "Trying to allocate non-pointer type!\n");
     return NULL;
   }
 
@@ -586,9 +583,9 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   gen0 = heap->gen[0];
 
   // Allocate this generation if it doesn't exist.
-  if (unlikely(!gen0)) gen0 = heap->gen[0] = mkGeneration(0);
+  if (RTL_UNLIKELY(!gen0)) gen0 = heap->gen[0] = mkGeneration(0);
 
-  if (unlikely(gen0->fillPtr + nbr >= gen0->capacity)) {
+  if (RTL_UNLIKELY(gen0->fillPtr + nbr >= gen0->capacity)) {
     collectGen(M, 0);
 #ifndef NDEBUG
     if (rtl_debugCheckForCycles(M)) {
@@ -913,8 +910,8 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
 
 rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
 {
-  if (unlikely(!rtl_isMap(map))) {
-    rtl_triggerWrongType(M, RTL_MAP, map);
+  if (RTL_UNLIKELY(!rtl_isMap(map))) {
+    rtl_throwWrongType(M, RTL_MAP, map);
     return def;
   }
 
@@ -957,23 +954,6 @@ void rtl_visitMap(rtl_Machine      *M,
   rtl_popWorkingSet(M);
 }
 
-rtl_Word rtl_std_handleFault(rtl_Machine    *M,
-                             rtl_Word const *args,
-                             size_t         argsLen)
-{
-  assert(argsLen == 1);
-
-  printf("unhandled fault:\n     ");
-  rtl_formatExpr(M, args[0]);
-  printf("\n\n");
-
-  rtl_stackTrace(M);
-
-  M->fault = true;
-
-  return RTL_NIL;
-}
-
 struct foldMapAccum {
   rtl_Word init, fn;
 };
@@ -998,8 +978,7 @@ rtl_Word rtl_std_foldMap(rtl_Machine     *M,
   rtl_Word map;
 
   if (argsLen != 3) {
-    rtl_triggerFault(M, "arg-count",
-                     "fold-map expects exactly 3 arguments.");
+    rtl_throwMsg(M, "arg-count", "fold-map expects exactly 3 arguments.");
     return RTL_NIL;
   }
 
@@ -1022,8 +1001,8 @@ rtl_Word rtl_std_listToTuple(rtl_Machine     *M,
                              size_t          argsLen)
 {
   if (argsLen != 1) {
-    rtl_triggerFault(M, "arg-count",
-                     "std:list->tuple expects exactly 1 argument, a list.");
+    rtl_throwMsg(M, "arg-count",
+                 "std:list->tuple expects exactly 1 argument, a list.");
     return rtl_internSelector("error", "arg-count");
   }
 
@@ -1032,10 +1011,8 @@ rtl_Word rtl_std_listToTuple(rtl_Machine     *M,
 
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
-  // Required to register the initial handleFault builtin.
+  // Required to register builtins.
   rtl_Compiler C;
-
-  rtl_Word handleFault;
 
   rtl_initHeap(&M->heap);
 
@@ -1065,19 +1042,17 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
   M->backSetLen = 0;
   M->backSetCap = 32;
 
+  M->uwStack    = malloc(32*sizeof(rtl_UnwindHandler));
+  M->uwStackLen = 0;
+  M->uwStackCap = 32;
+
   M->codeBase = codeBase;
 
-  M->fault = false;
+  M->exception = NULL;
 
   M->yield = false;
 
   rtl_initCompiler(&C, M);
-
-  handleFault = rtl_registerBuiltin(&C, rtl_intern("std", "handle-fault"),
-                                    rtl_std_handleFault);
-
-  rtl_setVar(M, rtl_intern("std", "*error-handler*"),
-             handleFault);
 
   rtl_registerBuiltin(&C, rtl_intern("std", "fold-map"),
                       rtl_std_foldMap);
@@ -1093,15 +1068,15 @@ void rtl_resetMachine(rtl_Machine *M)
 
   M->env = RTL_TUPLE;
 
-  M->fault = M->yield = false;
+  M->yield = false;
+
+  if (M->exception) free(M->exception);
+  M->exception = NULL;
 }
 
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 {
   rtl_Word w = RTL_NIL, *ptr;
-
-  if (unlikely(M->fault))
-    return RTL_NIL;
 
   RTL_PUSH_WORKING_SET(M, &w, &car, &cdr);
 
@@ -1130,7 +1105,7 @@ void rtl_testGarbageCollector(size_t count)
   // Cons up a gigantic linked list.
   for (i = 0, M.vStack[0] = RTL_NIL; i < count; i++) {
     M.vStack[0] = rtl_cons(&M, rtl_int28(i), M.vStack[0]);
-    if (rtl_checkFault(&M)) {
+    RTL_UNWIND (&M) {
       printf("There's an error!\n");
       abort();
     }
@@ -1156,7 +1131,7 @@ void rtl_testGarbageCollector(size_t count)
     straggler0 = rtl_cons(&M, rtl_int28(-1), M.vStack[0]);
     straggler1 = rtl_cons(&M, rtl_int28(-2), straggler0);
 
-    if (rtl_checkFault(&M)) {
+    RTL_UNWIND (&M) {
       printf("There's an error!\n");
       abort();
     }
@@ -1226,29 +1201,19 @@ char const *rtl_typeName(rtl_WordType type)
   }
 }
 
-#define VPUSH(W) ({                                                     \
-      if (unlikely(M->vStackLen == M->vStackCap)) {                     \
-        M->vStackCap = M->vStackCap == 0 ? 64 : M->vStackCap * 2;       \
-        M->vStack    = realloc(M->vStack, sizeof(rtl_Word)*M->vStackCap); \
-      }                                                                 \
-                                                                        \
-      M->vStack[M->vStackLen++] = (W);                                  \
-    })                                                                  \
-  // End of multi-line macro
-
 #define VSTACK_ASSERT_LEN(N) ({                                 \
-      if (unlikely((N) > M->vStackLen)) {                       \
-        rtl_triggerFault(M, "stack-underflow",                  \
-                         "VStack underflow in interpreter.");   \
+      if (RTL_UNLIKELY((N) > M->vStackLen)) {                       \
+        rtl_throwMsg(M, "stack-underflow",                  \
+                     "VStack underflow in interpreter.");   \
         goto interp_cleanup;                                    \
       }                                                         \
     })                                                          \
   // End of multi-line macro
 
 #define RSTACK_ASSERT_LEN(N) ({                                 \
-      if (unlikely((N) > M->rStackLen)) {                       \
-        rtl_triggerFault(M, "stack-underflow",                  \
-                         "RStack underflow in interpreter.");   \
+      if (RTL_UNLIKELY((N) > M->rStackLen)) {                       \
+        rtl_throwMsg(M, "stack-underflow",                  \
+                     "RStack underflow in interpreter.");   \
         goto interp_cleanup;                                    \
       }                                                         \
     })                                                          \
@@ -1317,7 +1282,7 @@ char const *rtl_typeName(rtl_WordType type)
 #endif
 
 #define RPUSH(FN) ({                                                    \
-      if (unlikely(M->rStackLen == M->rStackCap)) {                     \
+      if (RTL_UNLIKELY(M->rStackLen == M->rStackCap)) {                     \
         M->rStackCap = M->rStackCap*2;                                  \
         M->rStack    = realloc(M->rStack,                               \
                                M->rStackCap * sizeof(rtl_RetAddr));     \
@@ -1345,12 +1310,6 @@ char const *rtl_typeName(rtl_WordType type)
       M->rStack[M->rStackLen - 1].fn = FN;    \
     })                                        \
   // End of multi-line macro
-
-#define VPOP() (M->vStack[--M->vStackLen])
-
-#define VPOPK(K) ({ M->vStackLen -= (K); })
-
-#define VPEEK(N) (M->vStack[M->vStackLen - ((N) + 1)])
 
 static
 uint8_t *readWord(uint8_t *pc, rtl_Word *out)
@@ -1458,11 +1417,11 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   if (func->isBuiltin) {
     rptr = rtl_reifyTuple(M, M->env, &len);
     if (len == 0) {
-      VPUSH(func->as.builtin.cFn(M, NULL, 0));
+      rtl_push(M, func->as.builtin.cFn(M, NULL, 0));
 
     } else {
       rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
-      VPUSH(func->as.builtin.cFn(M, rptr, len));
+      rtl_push(M, func->as.builtin.cFn(M, rptr, len));
 
     }
   } else {
@@ -1474,7 +1433,7 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
     rtl_run(M);
   }
 
-  return M->vStackLen ? VPOP() : RTL_NIL;
+  return M->vStackLen ? rtl_pop(M) : RTL_NIL;
 }
 
 void rtl_resume(rtl_Machine *M)
@@ -1483,13 +1442,23 @@ void rtl_resume(rtl_Machine *M)
     M->yield = false;
     rtl_run(M);
   } else {
-    rtl_triggerFault(M, "invalid-resume",
-                     "rtl_resume called on a machine that hadn't yielded.");
+    rtl_throwMsg(M, "invalid-resume",
+                 "rtl_resume called on a machine that hadn't yielded.");
   }
 }
 
+void rtl_throw(rtl_Machine *M, rtl_Word data)
+{
+  M->exception = malloc(sizeof(rtl_Exception)
+                        + sizeof(rtl_RetAddr)*M->rStackLen);
 
-void rtl_triggerUncallable(rtl_Machine *M, rtl_Word obj)
+  M->exception->data     = data;
+  M->exception->stackLen = M->rStackLen;
+
+  memcpy(M->exception->stack, M->rStack, sizeof(rtl_RetAddr)*M->rStackLen);
+}
+
+void rtl_throwUncallable(rtl_Machine *M, rtl_Word obj)
 {
   rtl_Word w = RTL_MAP;
 
@@ -1503,14 +1472,14 @@ void rtl_triggerUncallable(rtl_Machine *M, rtl_Word obj)
 
   w = rtl_recordSet(M, w, "object", obj);
 
-  __rtl_triggerFault(M, w);
+  rtl_throw(M, w);
 }
 
-void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
+void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
 {
   rtl_Word w = RTL_MAP;
 
-  char const *faultType;
+  char const *exnType;
 
   char message[256];
 
@@ -1520,51 +1489,51 @@ void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
 
   switch (type) {
   case RTL_NIL:
-    faultType = "expected-nil";
+    exnType = "expected-nil";
     break;
 
   case RTL_SYMBOL:
-    faultType = "expected-symbol";
+    exnType = "expected-symbol";
     break;
 
   case RTL_SELECTOR:
-    faultType = "expected-selector";
+    exnType = "expected-selector";
     break;
 
   case RTL_INT28:
-    faultType = "expected-int28";
+    exnType = "expected-int28";
     break;
 
   case RTL_FIX14:
-    faultType = "expected-fix14";
+    exnType = "expected-fix14";
     break;
 
   case RTL_CHAR:
-    faultType = "expected-char";
+    exnType = "expected-char";
     break;
 
   case RTL_TUPLE:
-    faultType = "expected-tuple";
+    exnType = "expected-tuple";
     break;
 
   case RTL_MAP:
-    faultType = "expected-map";
+    exnType = "expected-map";
     break;
 
   case RTL_CONS:
-    faultType = "expected-cons";
+    exnType = "expected-cons";
     break;
 
   case RTL_NATIVE:
-    faultType = "expected-native";
+    exnType = "expected-native";
     break;
 
   case RTL_TOP:
-    faultType = "expected-top";
+    exnType = "expected-top";
     break;
 
   default:
-    faultType = "wrong-type";
+    exnType = "wrong-type";
     break;
   }
 
@@ -1572,12 +1541,30 @@ void rtl_triggerWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
            rtl_typeName(type),
            rtl_typeNameOf(obj));
 
-  w = rtl_recordSet(M, w, "type", rtl_internSelector(NULL, faultType));
+  w = rtl_recordSet(M, w, "type", rtl_internSelector(NULL, exnType));
   w = rtl_recordSet(M, w, "message", rtl_string(M, message));
 
-  __rtl_triggerFault(M, w);
+  rtl_throw(M, w);
 
   rtl_popWorkingSet(M);
+}
+
+void rtl_pushUnwindHandler(rtl_Machine  *M,
+                           rtl_Word     fn,
+                           size_t       rStackIdx,
+                           uint8_t      *resumePC)
+{
+  if (RTL_UNLIKELY(M->uwStackLen == M->uwStackCap)) {
+    M->uwStackCap = 2*M->uwStackCap;
+    M->uwStack    = realloc(M->uwStack,
+                            sizeof(rtl_UnwindHandler)*M->uwStackLen);
+  }
+
+  M->uwStack[M->uwStackLen++] = (rtl_UnwindHandler) {
+    .fn        = fn,
+    .rStackIdx = rStackIdx,
+    .resumePC  = resumePC,
+  };
 }
 
 // A more streamlined implementation of rtl_run.
@@ -1616,19 +1603,58 @@ void rtl_run(rtl_Machine *M)
 
   rtl_Function   *func;
 
+  rtl_UnwindHandler *handler;
+  rtl_Exception     *exception;
+
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &e, &f);
 
-  while (!M->fault) {
+  rtl_pushUnwindHandler(M, RTL_NIL, M->rStackLen, NULL);
+
+  for (;;) {
     // printf("       VSTACK: ");
     // for (i = 0; i < M->vStackLen; i++) {
     //   printf(" ");
     //   rtl_formatExprShallow(M->vStack[i]);
     // }
     // printf("\n");
-    // rtl_stackTrace(M);
+    // rtl_printStackTrace(M);
     // printf("\n\n");
 
     // rtl_disasm(M->codeBase, M->pc);
+
+    // Exception handling happens in this loop.
+    while (RTL_UNLIKELY(M->exception != NULL)) {
+      if (M->uwStackLen == 0) goto cleanup;
+
+      handler = M->uwStack + M->uwStackLen - 1;
+
+      if (handler->fn == RTL_NIL) goto cleanup;
+
+      M->uwStackLen--;
+
+      exception = M->exception;
+      M->exception = NULL;
+
+      a = rtl_callWithArgs(M, handler->fn, e);
+
+      if (M->exception) {
+        printf("\nDOUBLE FAULT: Unhandled exception within an "
+                               "exception handler!\n\n");
+        rtl_printException(M, M->exception);
+        printf("\nOriginal Exception:\n\n");
+        rtl_printException(M, exception);
+        abort();
+      }
+
+      if (a == RTL_NIL) {
+        M->exception = exception;
+      } else {
+        free(exception);
+      }
+
+      M->rStackLen = handler->rStackIdx;
+      M->pc        = handler->resumePC;
+    }
 
     opcode = *M->pc++;
     enc    = (rtl_OpEncoding)(opcode >> 4);
@@ -1667,15 +1693,15 @@ void rtl_run(rtl_Machine *M)
 
     case RTL_OP_ENC_STATIC:
       M->pc = readWord(M->pc, &immW);
-      M->pc = readShort(M->pc, &imm16);
+      M->pc   = readShort(M->pc, &imm16);
       break;
     }
 
     // Labels is a (weird and rare) special case.
-    if (unlikely(opcode == RTL_OP_LABELS)) {
+    if (RTL_UNLIKELY(opcode == RTL_OP_LABELS)) {
       if (M->vStackLen < imm16) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by labels instruction!");
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by labels instruction!");
 
         continue;
       }
@@ -1712,7 +1738,7 @@ void rtl_run(rtl_Machine *M)
                                       offs + 1+len+1 + 1+imm16 + i*2);
       }
 
-      VPOPK(imm16);
+      rtl_popK(M, imm16);
 
       M->env = a;
 
@@ -1734,37 +1760,37 @@ void rtl_run(rtl_Machine *M)
     case RTL_OP_ENC_UNARY_SHORT:
     case RTL_OP_ENC_UNARY_VAR:
     case RTL_OP_ENC_UNARY_WORD:
-      if (unlikely(M->vStackLen < 1)) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by unary instruction!");
+      if (RTL_UNLIKELY(M->vStackLen < 1)) {
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by unary instruction!");
         continue;
       }
 
-      a = VPOP();
+      a = rtl_pop(M);
       break;
 
     case RTL_OP_ENC_BINARY_NOARG_A:
     case RTL_OP_ENC_BINARY_NOARG_B:
-      if (unlikely(M->vStackLen < 2)) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by binary instruction!");
+      if (RTL_UNLIKELY(M->vStackLen < 2)) {
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by binary instruction!");
         continue;
       }
 
-      b = VPOP();
-      a = VPOP();
+      b = rtl_pop(M);
+      a = rtl_pop(M);
       break;
 
     case RTL_OP_ENC_TERNARY_NOARG:
-      if (unlikely(M->vStackLen < 3)) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by ternary instruction!");
+      if (RTL_UNLIKELY(M->vStackLen < 3)) {
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by ternary instruction!");
         continue;
       }
 
-      c = VPOP();
-      b = VPOP();
-      a = VPOP();
+      c = rtl_pop(M);
+      b = rtl_pop(M);
+      a = rtl_pop(M);
       break;
 
     case RTL_OP_ENC_STATIC:
@@ -1773,9 +1799,9 @@ void rtl_run(rtl_Machine *M)
       // fallthrough ...
 
     case RTL_OP_ENC_DYNAMIC_SHORT:
-      if (unlikely(M->vStackLen < imm16)) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by dynamic instruction!");
+      if (RTL_UNLIKELY(M->vStackLen < imm16)) {
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by dynamic instruction!");
         continue;
       }
 
@@ -1785,17 +1811,17 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_ENC_FUNCTION_SHORT:
-      if (unlikely(M->vStackLen < (imm16 + 1))) {
-        rtl_triggerFault(M, "stack-underflow",
-                         "VStack underflowed by dynamic instruction!");
+      if (RTL_UNLIKELY(M->vStackLen < (imm16 + 1))) {
+        rtl_throwMsg(M, "stack-underflow",
+                     "VStack underflowed by dynamic instruction!");
         continue;
       }
 
       wptr = rtl_allocTuple(M, &a, imm16);
       memcpy(wptr, M->vStack + M->vStackLen - imm16, sizeof(rtl_Word)*imm16);
-      VPOPK(imm16);
+      rtl_popK(M, imm16);
 
-      f = VPOP();
+      f = rtl_pop(M);
       break;
     }
 
@@ -1809,19 +1835,19 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_MAP:
-      VPUSH(RTL_MAP);
+      rtl_push(M, RTL_MAP);
       break;
 
     case RTL_OP_NIL:
-      VPUSH(RTL_NIL);
+      rtl_push(M, RTL_NIL);
       break;
 
     case RTL_OP_TOP:
-      VPUSH(RTL_TOP);
+      rtl_push(M, RTL_TOP);
       break;
 
     case RTL_OP_GENSYM:
-      VPUSH(rtl_gensym());
+      rtl_push(M, rtl_gensym());
       break;
 
     case RTL_OP_RET:
@@ -1838,310 +1864,311 @@ void rtl_run(rtl_Machine *M)
       M->env = rtl_tuplePopLast(M, M->env);
       break;
 
+
     case RTL_OP_CAR:
-      VPUSH(rtl_car(M, a));
+      rtl_push(M, rtl_car(M, a));
       break;
 
     case RTL_OP_CDR:
-      VPUSH(rtl_cdr(M, a));
+      rtl_push(M, rtl_cdr(M, a));
       break;
 
     case RTL_OP_POP:
       break;
 
     case RTL_OP_DUP:
-      VPUSH(a);
-      VPUSH(a);
+      rtl_push(M, a);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_INT28P:
-      VPUSH(rtl_isInt28(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isInt28(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_FIX14P:
-      VPUSH(rtl_isFix14(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isFix14(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_SYMBOLP:
-      VPUSH(rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_SELECTORP:
-      VPUSH(rtl_isSelector(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isSelector(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_MAPP:
-      VPUSH(rtl_isMap(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isMap(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_CHARP:
-      VPUSH(rtl_isChar(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isChar(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_NILP:
     case RTL_OP_NOT:
-      VPUSH(rtl_isNil(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isNil(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_TOPP:
-      VPUSH(rtl_isTop(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isTop(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_CONSP:
-      VPUSH(rtl_isCons(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isCons(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_TUPLEP:
-      VPUSH(rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isTuple(a) ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_LEN:
-      VPUSH(rtl_int28(rtl_tupleLen(M, a)));
+      rtl_push(M, rtl_int28(rtl_tupleLen(M, a)));
       break;
 
     case RTL_OP_IADD:
-      if (unlikely(!rtl_isInt28(a))) {
-        rtl_triggerWrongType(M, RTL_INT28, a);
+      if (RTL_UNLIKELY(!rtl_isInt28(a))) {
+        rtl_throwWrongType(M, RTL_INT28, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
-      VPUSH(rtl_int28(rtl_int28Value(a) + rtl_int28Value(b)));
+      rtl_push(M, rtl_int28(rtl_int28Value(a) + rtl_int28Value(b)));
       break;
 
     case RTL_OP_ISUB:
-      if (unlikely(!rtl_isInt28(a))) {
-        rtl_triggerWrongType(M, RTL_INT28, a);
+      if (RTL_UNLIKELY(!rtl_isInt28(a))) {
+        rtl_throwWrongType(M, RTL_INT28, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
-      VPUSH(rtl_int28(rtl_int28Value(a) - rtl_int28Value(b)));
+      rtl_push(M, rtl_int28(rtl_int28Value(a) - rtl_int28Value(b)));
       break;
 
     case RTL_OP_IMUL:
-      if (unlikely(!rtl_isInt28(a))) {
-        rtl_triggerWrongType(M, RTL_INT28, a);
+      if (RTL_UNLIKELY(!rtl_isInt28(a))) {
+        rtl_throwWrongType(M, RTL_INT28, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
-      VPUSH(rtl_int28(rtl_int28Value(a) * rtl_int28Value(b)));
+      rtl_push(M, rtl_int28(rtl_int28Value(a) * rtl_int28Value(b)));
       break;
 
     case RTL_OP_IDIV:
-      if (unlikely(!rtl_isInt28(a))) {
-        rtl_triggerWrongType(M, RTL_INT28, a);
+      if (RTL_UNLIKELY(!rtl_isInt28(a))) {
+        rtl_throwWrongType(M, RTL_INT28, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
-      VPUSH(rtl_int28(rtl_int28Value(a) / rtl_int28Value(b)));
+      rtl_push(M, rtl_int28(rtl_int28Value(a) / rtl_int28Value(b)));
       break;
 
     case RTL_OP_IMOD:
-      if (unlikely(!rtl_isInt28(a))) {
-        rtl_triggerWrongType(M, RTL_INT28, a);
+      if (RTL_UNLIKELY(!rtl_isInt28(a))) {
+        rtl_throwWrongType(M, RTL_INT28, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
 
       }
 
-      VPUSH(rtl_int28(rtl_int28Value(a) % rtl_int28Value(b)));
+      rtl_push(M, rtl_int28(rtl_int28Value(a) % rtl_int28Value(b)));
       break;
 
     case RTL_OP_LT:
-      VPUSH(rtl_cmp(M, a, b) <  0 ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_cmp(M, a, b) <  0 ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_LEQ:
-      VPUSH(rtl_cmp(M, a, b) <= 0 ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_cmp(M, a, b) <= 0 ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_GT:
-      VPUSH(rtl_cmp(M, a, b) >  0 ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_cmp(M, a, b) >  0 ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_GEQ:
-      VPUSH(rtl_cmp(M, a, b) >= 0 ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_cmp(M, a, b) >= 0 ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_EQ:
-      VPUSH(a == b ? RTL_TOP : RTL_NIL);
+      rtl_push(M, a == b ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_NEQ:
-      VPUSH(a != b ? RTL_TOP : RTL_NIL);
+      rtl_push(M, a != b ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_ISO:
-      VPUSH(rtl_cmp(M, a, b) == 0 ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_cmp(M, a, b) == 0 ? RTL_TOP : RTL_NIL);
       break;
 
     case RTL_OP_FADD:
-      if (unlikely(!rtl_isFix14(a))) {
-        rtl_triggerWrongType(M, RTL_FIX14, a);
+      if (RTL_UNLIKELY(!rtl_isFix14(a))) {
+        rtl_throwWrongType(M, RTL_FIX14, a);
         continue;
 
-      } else if (unlikely(!rtl_isFix14(b))) {
-        rtl_triggerWrongType(M, RTL_FIX14, b);
+      } else if (RTL_UNLIKELY(!rtl_isFix14(b))) {
+        rtl_throwWrongType(M, RTL_FIX14, b);
         continue;
       }
 
-      VPUSH(rtl_fix14(rtl_fix14Value(a) + rtl_fix14Value(b)));
+      rtl_push(M, rtl_fix14(rtl_fix14Value(a) + rtl_fix14Value(b)));
       break;
 
     case RTL_OP_FSUB:
-      if (unlikely(!rtl_isFix14(a))) {
-        rtl_triggerWrongType(M, RTL_FIX14, a);
+      if (RTL_UNLIKELY(!rtl_isFix14(a))) {
+        rtl_throwWrongType(M, RTL_FIX14, a);
         continue;
 
-      } else if (unlikely(!rtl_isFix14(b))) {
-        rtl_triggerWrongType(M, RTL_FIX14, b);
+      } else if (RTL_UNLIKELY(!rtl_isFix14(b))) {
+        rtl_throwWrongType(M, RTL_FIX14, b);
         continue;
       }
 
-      VPUSH(rtl_fix14(rtl_fix14Value(a) - rtl_fix14Value(b)));
+      rtl_push(M, rtl_fix14(rtl_fix14Value(a) - rtl_fix14Value(b)));
       break;
 
     case RTL_OP_FMUL:
-      if (unlikely(!rtl_isFix14(a))) {
-        rtl_triggerWrongType(M, RTL_FIX14, a);
+      if (RTL_UNLIKELY(!rtl_isFix14(a))) {
+        rtl_throwWrongType(M, RTL_FIX14, a);
         continue;
 
-      } else if (unlikely(!rtl_isFix14(b))) {
-        rtl_triggerWrongType(M, RTL_FIX14, b);
+      } else if (RTL_UNLIKELY(!rtl_isFix14(b))) {
+        rtl_throwWrongType(M, RTL_FIX14, b);
         continue;
       }
 
-      VPUSH(rtl_fix14(rtl_fix14Value(a) * rtl_fix14Value(b)));
+      rtl_push(M, rtl_fix14(rtl_fix14Value(a) * rtl_fix14Value(b)));
       break;
 
     case RTL_OP_FDIV:
-      if (unlikely(!rtl_isFix14(a))) {
-        rtl_triggerWrongType(M, RTL_FIX14, a);
+      if (RTL_UNLIKELY(!rtl_isFix14(a))) {
+        rtl_throwWrongType(M, RTL_FIX14, a);
         continue;
 
-      } else if (unlikely(!rtl_isFix14(b))) {
-        rtl_triggerWrongType(M, RTL_FIX14, b);
+      } else if (RTL_UNLIKELY(!rtl_isFix14(b))) {
+        rtl_throwWrongType(M, RTL_FIX14, b);
         continue;
       }
 
-      VPUSH(rtl_fix14(rtl_fix14Value(a) / rtl_fix14Value(b)));
+      rtl_push(M, rtl_fix14(rtl_fix14Value(a) / rtl_fix14Value(b)));
       break;
 
     case RTL_OP_SET_CAR:
       rtl_writeCar(M, a, b);
 
-      VPUSH(b);
+      rtl_push(M, b);
       break;
 
     case RTL_OP_SET_CDR:
       rtl_writeCdr(M, a, b);
 
-      VPUSH(b);
+      rtl_push(M, b);
       break;
 
     case RTL_OP_CONS:
       c = rtl_cons(M, a, b);
 
-      VPUSH(c);
+      rtl_push(M, c);
       break;
 
     case RTL_OP_SWAP:
-      VPUSH(b);
-      VPUSH(a);
+      rtl_push(M, b);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_PUSH_FIRST:
       c = rtl_tuplePushFirst(M, a, b);
 
-      VPUSH(c);
+      rtl_push(M, c);
       break;
 
     case RTL_OP_PUSH_LAST:
       c = rtl_tuplePushLast(M, a, b);
 
-      VPUSH(c);
+      rtl_push(M, c);
       break;
 
     case RTL_OP_CONCAT:
       c = rtl_tupleConcat(M, a, b);
 
-      VPUSH(c);
+      rtl_push(M, c);
       break;
 
     case RTL_OP_GET:
-      if (unlikely(!rtl_isTuple(a))) {
-        rtl_triggerWrongType(M, RTL_TUPLE, a);
+      if (RTL_UNLIKELY(!rtl_isTuple(a))) {
+        rtl_throwWrongType(M, RTL_TUPLE, a);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
       rptr = rtl_reifyTuple(M, a, &len);
-      if (unlikely(unlikely(rtl_int28Value(b) >= len) || unlikely(rtl_int28Value(b) < 0))) {
-        rtl_triggerFault(M, "out-of-bounds",
-                         "tuple index out of bounds in get instruction.");
+      if (RTL_UNLIKELY(RTL_UNLIKELY(rtl_int28Value(b) >= len) || RTL_UNLIKELY(rtl_int28Value(b) < 0))) {
+        rtl_throwMsg(M, "out-of-bounds",
+                     "tuple index out of bounds in get instruction.");
         continue;
 
       }
 
-      VPUSH(rptr[rtl_int28Value(b)]);
+      rtl_push(M, rptr[rtl_int28Value(b)]);
       break;
 
 
     case RTL_OP_INSERT:
       d = rtl_mapInsert(M, a, b, c);
 
-      VPUSH(d);
+      rtl_push(M, d);
       break;
 
     case RTL_OP_LOOKUP:
-      VPUSH(rtl_mapLookup(M, a, b, c));
+      rtl_push(M, rtl_mapLookup(M, a, b, c));
       break;
 
     case RTL_OP_SET_ELEM:
-      if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
       }
 
       rtl_writeTupleElem(M, a, rtl_int28Value(b), c);
 
-      VPUSH(c);
+      rtl_push(M, c);
       break;
 
     case RTL_OP_SLICE:
-      if (unlikely(!rtl_isInt28(b))) {
-        rtl_triggerWrongType(M, RTL_INT28, b);
+      if (RTL_UNLIKELY(!rtl_isInt28(b))) {
+        rtl_throwWrongType(M, RTL_INT28, b);
         continue;
 
-      } else if (unlikely(!rtl_isInt28(c))) {
-        rtl_triggerWrongType(M, RTL_INT28, c);
+      } else if (RTL_UNLIKELY(!rtl_isInt28(c))) {
+        rtl_throwWrongType(M, RTL_INT28, c);
         continue;
       }
 
       d = rtl_tupleSlice(M, a, rtl_int28Value(b), rtl_int28Value(c));
 
-      VPUSH(d);
+      rtl_push(M, d);
       break;
 
     case RTL_OP_JMP8:
@@ -2154,32 +2181,34 @@ void rtl_run(rtl_Machine *M)
 
       break;
 
+    // protect8 defined below, after cjmp32
+
     case RTL_OP_SYMBOL8:
-      VPUSH(rtl_symbol(imm8));
+      rtl_push(M, rtl_symbol(imm8));
       break;
 
     case RTL_OP_SELECTOR8:
-      VPUSH(rtl_selector(imm8));
+      rtl_push(M, rtl_selector(imm8));
       break;
 
     case RTL_OP_INT8:
-      VPUSH(rtl_int28(imm8));
+      rtl_push(M, rtl_int28(imm8));
       break;
 
     case RTL_OP_FIX8:
-      VPUSH((imm8 << 4) | RTL_FIX14);
+      rtl_push(M, (imm8 << 4) | RTL_FIX14);
       break;
 
     case RTL_OP_CHAR8:
-      VPUSH(rtl_char(imm8));
+      rtl_push(M, rtl_char(imm8));
       break;
 
     case RTL_OP_FN8:
-      VPUSH(rtl_function(imm8));
+      rtl_push(M, rtl_function(imm8));
       break;
 
     case RTL_OP_UNRES8:
-      VPUSH(rtl_unresolvedSymbol(imm8));
+      rtl_push(M, rtl_unresolvedSymbol(imm8));
       break;
 
     case RTL_OP_CLOSURE8:
@@ -2188,7 +2217,7 @@ void rtl_run(rtl_Machine *M)
       wptr[0] = rtl_function(imm8);
       wptr[1] = M->env;
 
-      VPUSH(f);
+      rtl_push(M, f);
       break;
 
     case RTL_OP_JMP16:
@@ -2201,32 +2230,34 @@ void rtl_run(rtl_Machine *M)
 
       break;
 
+    // protect16 defined below, after cjmp32
+
     case RTL_OP_SYMBOL16:
-      VPUSH(rtl_symbol(imm16));
+      rtl_push(M, rtl_symbol(imm16));
       break;
 
     case RTL_OP_SELECTOR16:
-      VPUSH(rtl_selector(imm16));
+      rtl_push(M, rtl_selector(imm16));
       break;
 
     case RTL_OP_INT16:
-      VPUSH(rtl_int28(imm16));
+      rtl_push(M, rtl_int28(imm16));
       break;
 
     case RTL_OP_FIX16:
-      VPUSH((imm16 << 4) | RTL_FIX14);
+      rtl_push(M, (imm16 << 4) | RTL_FIX14);
       break;
 
     case RTL_OP_CHAR16:
-      VPUSH(rtl_char(imm16));
+      rtl_push(M, rtl_char(imm16));
       break;
 
     case RTL_OP_FN16:
-      VPUSH(rtl_function(imm16));
+      rtl_push(M, rtl_function(imm16));
       break;
 
     case RTL_OP_UNRES16:
-      VPUSH(rtl_unresolvedSymbol(imm16));
+      rtl_push(M, rtl_unresolvedSymbol(imm16));
       break;
 
     case RTL_OP_CLOSURE16:
@@ -2235,7 +2266,7 @@ void rtl_run(rtl_Machine *M)
       wptr[0] = rtl_function(imm16);
       wptr[1] = M->env;
 
-      VPUSH(f);
+      rtl_push(M, f);
       break;
 
     case RTL_OP_REST:
@@ -2289,52 +2320,65 @@ void rtl_run(rtl_Machine *M)
     case RTL_OP_TAIL:
     case RTL_OP_STATIC_CALL:
     case RTL_OP_STATIC_TAIL:
+    case RTL_OP_END_PROTECT:
+
+      if (opcode == RTL_OP_END_PROTECT) {
+        assert(M->uwStackLen != 0);
+        handler = M->uwStack + M->uwStackLen - 1;
+
+        f = handler->fn;
+
+        wptr    = rtl_allocTuple(M, &a, 1);
+        wptr[0] = RTL_NIL;
+      }
+      
       switch (rtl_typeOf(f)) {
       case RTL_SELECTOR:
         rptr = rtl_reifyTuple(M, a, &len);
-        if (unlikely(len != 1)) {
-          rtl_triggerFault(M, "arg-count",
-                           "selector expects a single argument when called as function.");
+        if (RTL_UNLIKELY(len != 1)) {
+          rtl_throwMsg(M, "arg-count",
+                       "selector expects a single argument when called as function.");
           continue;
         }
 
-        VPUSH(rtl_mapLookup(M, rptr[0], f, RTL_NIL));
+        rtl_push(M, rtl_mapLookup(M, rptr[0], f, RTL_NIL));
         break;
 
       case RTL_TUPLE:
         rptr = rtl_reifyTuple(M, a, &len);
-        if (unlikely(len != 1)) {
-          rtl_triggerFault(M, "arg-count",
-                           "tuple expects a single argument when called as a function.");
+        if (RTL_UNLIKELY(len != 1)) {
+          rtl_throwMsg(M, "arg-count",
+                       "tuple expects a single argument when called as a function.");
           continue;
 
-        } else if (unlikely(!rtl_isInt28(rptr[0]))) {
-          rtl_triggerWrongType(M, RTL_INT28, rptr[0]);
+        } else if (RTL_UNLIKELY(!rtl_isInt28(rptr[0]))) {
+          rtl_throwWrongType(M, RTL_INT28, rptr[0]);
           continue;
         }
 
         a = rptr[0];
         rptr = rtl_reifyTuple(M, f, &len);
-        if (unlikely(unlikely(rtl_int28Value(a) >= len) || unlikely(rtl_int28Value(a) < 0))) {
-          rtl_triggerFault(M, "out-of-bounds",
-                           "tuple index out of bounds when calling tuple as function.");
+        if (RTL_UNLIKELY(RTL_UNLIKELY(rtl_int28Value(a) >= len) || RTL_UNLIKELY(rtl_int28Value(a) < 0))) {
+          rtl_throwMsg(M, "out-of-bounds",
+                       "tuple index out of bounds when calling tuple as function.");
           continue;
 
         }
 
-        VPUSH(rptr[rtl_int28Value(a)]);
+        rtl_push(M, rptr[rtl_int28Value(a)]);
         break;
 
       case RTL_MAP:
         rptr = rtl_reifyTuple(M, a, &len);
-        if (unlikely(len != 1)) {
-          rtl_triggerFault(M, "arg-count",
-                           "tuple expects a single argument when called as a function.");
+        if (RTL_UNLIKELY(len != 1)) {
+          rtl_throwMsg(M, "arg-count",
+                       "tuple expects a single argument when called as a function.");
           continue;
+
 
         }
 
-        VPUSH(rtl_mapLookup(M, f, rptr[0], RTL_NIL));
+        rtl_push(M, rtl_mapLookup(M, f, rptr[0], RTL_NIL));
         break;
 
       case RTL_CLOSURE:
@@ -2360,7 +2404,9 @@ void rtl_run(rtl_Machine *M)
 
           rptr = rtl_reifyTuple(M, a, &len);
           b    = func->as.builtin.cFn(M, rptr, len);
-          VPUSH(b);
+          rtl_push(M, b);
+
+
 
           RPOP();
         } else {
@@ -2379,7 +2425,7 @@ void rtl_run(rtl_Machine *M)
         break;
 
       default:
-        rtl_triggerUncallable(M, f);
+        rtl_throwUncallable(M, f);
         continue;
 
       } break;
@@ -2389,39 +2435,39 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_TUPLE:
-      VPUSH(a);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_VAR:
       rptr = rtl_reifyTuple(M, M->env, &len);
-      if (unlikely(frame >= len)) {
-        rtl_triggerFault(M, "out-of-bounds",
+      if (RTL_UNLIKELY(frame >= len)) {
+        rtl_throwMsg(M, "out-of-bounds",
                          "var instruction references out-of-bounds frame.");
         continue;
       }
 
       rptr = rtl_reifyTuple(M, rptr[frame], &len);
-      if (unlikely(index >= len)) {
-        rtl_triggerFault(M, "arg-count",
-                         "var instruction references out-of-bounds argument index; "
-                         "function probably expected more arguments.");
+      if (RTL_UNLIKELY(index >= len)) {
+        rtl_throwMsg(M, "arg-count",
+                     "var instruction references out-of-bounds argument index; "
+                     "function probably expected more arguments.");
         continue;
       }
 
-      VPUSH(rptr[index]);
+      rtl_push(M, rptr[index]);
       break;
 
     case RTL_OP_SET_VAR:
       rptr = rtl_reifyTuple(M, M->env, &len);
-      if (unlikely(frame >= len)) {
-        rtl_triggerFault(M, "out-of-bounds",
-                         "set-var instruction references out-of-bounds frame.");
+      if (RTL_UNLIKELY(frame >= len)) {
+        rtl_throwMsg(M, "out-of-bounds",
+                     "set-var instruction references out-of-bounds frame.");
         continue;
       }
 
       rtl_writeTupleElem(M, rptr[frame], index, a);
 
-      VPUSH(a);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_JMP32:
@@ -2434,8 +2480,23 @@ void rtl_run(rtl_Machine *M)
 
       break;
 
+    case RTL_OP_PROTECT8:
+      imm16 = imm8;
+
+      // fallthrough ...
+
+    case RTL_OP_PROTECT16:
+      immW = imm16;
+
+      // fallthrough ...
+
+    case RTL_OP_PROTECT32:
+      rtl_pushUnwindHandler(M, a, M->rStackLen, M->pc + immW);
+      break;
+
+
     case RTL_OP_CONST32:
-      VPUSH(immW);
+      rtl_push(M, immW);
       break;
 
     case RTL_OP_CLOSURE32:
@@ -2444,11 +2505,11 @@ void rtl_run(rtl_Machine *M)
       wptr[0] = rtl_function(immW);
       wptr[1] = M->env;
 
-      VPUSH(f);
+      rtl_push(M, f);
       break;
 
     case RTL_OP_GET_DYN:
-      VPUSH(rtl_getVar(M, immW));
+      rtl_push(M, rtl_getVar(M, immW));
       break;
 
     case RTL_OP_RESTORE_DYN:
@@ -2458,20 +2519,20 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_SAVE_DYN:
-      if (unlikely(M->dStackLen == M->dStackCap)) {
-        M->dStackCap = M->dStackCap == M->dStackCap * 2;
+      if (RTL_UNLIKELY(M->dStackLen == M->dStackCap)) {
+        M->dStackCap = 2*M->dStackCap;
         M->dStack    = realloc(M->dStack, sizeof(rtl_Word)*M->dStackCap);
       }
 
       M->dStack[M->dStackLen++] = rtl_getVar(M, immW);
       rtl_setVar(M, immW, a);
 
-      VPUSH(a);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_SET_DYN:
       rtl_setVar(M, immW, a);
-      VPUSH(a);
+      rtl_push(M, a);
       break;
 
     case RTL_OP_UNDEF_VAR:
@@ -2484,7 +2545,7 @@ void rtl_run(rtl_Machine *M)
 
       c = rtl_recordSet(M, c, "name", immW);
 
-      __rtl_triggerFault(M, c);
+      rtl_throw(M, c);
       continue;
 
 
@@ -2499,13 +2560,15 @@ void rtl_run(rtl_Machine *M)
 
       c = rtl_recordSet(M, c, "name", f);
 
-      __rtl_triggerFault(M, c);
+      rtl_throw(M, c);
       continue;
 
     }
   }
 
  cleanup:
+  M->uwStackLen--;
+
   rtl_popWorkingSet(M);
 }
 
@@ -2603,7 +2666,7 @@ void rtl_emitByteToFunc(rtl_CodeBase *cb, uint32_t fnID, uint8_t b)
 
   assert(!func->isBuiltin);
 
-  if (unlikely(func->as.lisp.cap == func->as.lisp.len)) {
+  if (RTL_UNLIKELY(func->as.lisp.cap == func->as.lisp.len)) {
     func->as.lisp.cap = !func->as.lisp.cap ? 32 : 4*func->as.lisp.cap/3;
     func              = realloc(func, sizeof(rtl_Function) + func->as.lisp.cap);
     cb->fns[fnID]     = func;
@@ -2704,7 +2767,7 @@ rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
 
   w = rtl_mapLookup(M, M->dynamic, key, sentinel);
 
-  if (unlikely(w == sentinel)) {
+  if (RTL_UNLIKELY(w == sentinel)) {
     RTL_PUSH_WORKING_SET(M, &w);
 
     w = RTL_MAP;
@@ -2716,7 +2779,7 @@ rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
     w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "name"),
                       key);
 
-    __rtl_triggerFault(M, w);
+    rtl_throw(M, w);
 
     w = RTL_NIL;
 
@@ -2807,20 +2870,7 @@ rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
   return str;
 }
 
-void __rtl_triggerFault(rtl_Machine *M, rtl_Word data)
-{
-  rtl_Word lispHandler;
-
-  if (data == RTL_NIL) {
-    rtl_triggerFault(M, "nil-fault", "Nil was passed as fault data!");
-  } else {
-    lispHandler = rtl_getVar(M, rtl_intern("std", "*error-handler*"));
-
-    rtl_callWithArgs(M, lispHandler, data);
-  }
-}
-
-void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message)
+void rtl_throwMsg(rtl_Machine *M, char const *type, char const *message)
 {
   rtl_Word data = RTL_NIL,
            key  = RTL_NIL,
@@ -2840,7 +2890,7 @@ void rtl_triggerFault(rtl_Machine *M, char const *type, char const *message)
 
   rtl_popWorkingSet(M);
 
-  __rtl_triggerFault(M, data);
+  rtl_throw(M, data);
 }
 
 rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
@@ -2885,15 +2935,14 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
   rtl_reifyTuple(M, tuple, &inLen);
 
   // TODO: Trigger faults here ...
-  if (unlikely(inLen < end)) {
-    rtl_triggerFault(M, "bad-slice",
-                     "Trying to slice past the end of a tuple.");
+  if (RTL_UNLIKELY(inLen < end)) {
+    rtl_throwMsg(M, "bad-slice", "Trying to slice past the end of a tuple.");
     return RTL_NIL;
   }
     
-  if (unlikely(end < beg)) {
-    rtl_triggerFault(M, "bad-slice",
-                     "Trying to slice with end index < beginning index.");
+  if (RTL_UNLIKELY(end < beg)) {
+    rtl_throwMsg(M, "bad-slice",
+                 "Trying to slice with end index < beginning index.");
     return RTL_NIL;
   }
 
@@ -3024,8 +3073,7 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
 
       snprintf(msg, 512, "Can't rtl_callWithArgs object of type %s.",
                rtl_typeNameOf(callable));
-      rtl_triggerFault(M, "uncallable",
-                       msg);
+      rtl_throwMsg(M, "uncallable", msg);
       return RTL_NIL;
     }
   }
@@ -3040,7 +3088,7 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
 static
 void addToBackSet(rtl_Machine *M, rtl_Word w)
 {
-  if (unlikely(M->backSetLen == M->backSetCap)) {
+  if (RTL_UNLIKELY(M->backSetLen == M->backSetCap)) {
     M->backSetCap = 2*M->backSetCap;
     M->backSet    = realloc(M->backSet, M->backSetCap*sizeof(rtl_Word));
   }
@@ -3055,7 +3103,7 @@ void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   uint32_t consGen, consOffs;
 
   if (!rtl_isCons(cons)) {
-    rtl_triggerWrongType(M, RTL_CONS, cons);
+    rtl_throwWrongType(M, RTL_CONS, cons);
     return;
   }
 
@@ -3078,7 +3126,7 @@ void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   uint32_t consGen, consOffs;
 
   if (!rtl_isCons(cons)) {
-    rtl_triggerWrongType(M, RTL_CONS, cons);
+    rtl_throwWrongType(M, RTL_CONS, cons);
     return;
   }
 
@@ -3104,7 +3152,7 @@ void rtl_writeTupleElem(rtl_Machine *M,
   size_t len;
 
   if (!rtl_isTuple(tuple)) {
-    rtl_triggerWrongType(M, RTL_TUPLE, tuple);
+    rtl_throwWrongType(M, RTL_TUPLE, tuple);
     return;
   }
 
@@ -3112,8 +3160,8 @@ void rtl_writeTupleElem(rtl_Machine *M,
   len = rtl_int28Value(ptr[0]);
 
   if (len <= idx) {
-    rtl_triggerFault(M, "bad-write-index",
-                     "Trying to write to a tuple at an out-of-bounds index!");
+    rtl_throwMsg(M, "bad-write-index",
+                 "Trying to write to a tuple at an out-of-bounds index!");
     return;
   }
 

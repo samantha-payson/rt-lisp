@@ -765,7 +765,8 @@ uint8_t *prevInstruction(uint8_t *start, uint8_t *after)
   return prev;
 }
 
-void rtl_stackTrace(rtl_Machine *M)
+static
+void __rtl_printStackTrace(rtl_Machine *M, rtl_RetAddr *stack, size_t stackLen)
 {
   size_t         i;
   rtl_Function  *func;
@@ -775,10 +776,10 @@ void rtl_stackTrace(rtl_Machine *M)
 
   char fnName[1024];
 
-  printf("Stack Trace (most recent at bottom):\n");
-  for (i = 0; i < M->rStackLen; i++) {
-    func = rtl_reifyFunction(M->codeBase, M->rStack[i].fn);
-    fnID = rtl_functionID(M->rStack[i].fn);
+  printf("\nStack Trace (most recent at bottom):\n");
+  for (i = 0; i < stackLen; i++) {
+    func = rtl_reifyFunction(M->codeBase, stack[i].fn);
+    fnID = rtl_functionID(stack[i].fn);
 
     snprintf(fnName, 1024, "%s:%s",
              rtl_symbolPackageName(func->name),
@@ -786,12 +787,12 @@ void rtl_stackTrace(rtl_Machine *M)
 
 
     printf("    %4zu: %-32s #%04u\n",
-           M->rStackLen - 1 - i,
+           stackLen - 1 - i,
            fnName,
            (unsigned int)fnID);
 
     if (i + 1 < M->rStackLen) {
-      pc = M->rStack[i + 1].pc;
+      pc = stack[i + 1].pc;
     } else {
       pc = M->pc;
     }
@@ -808,4 +809,36 @@ void rtl_stackTrace(rtl_Machine *M)
 
     printf("\n");
   }
+}
+
+void rtl_printStackTrace(rtl_Machine *M)
+{
+  __rtl_printStackTrace(M, M->rStack, M->rStackLen);
+}
+
+void rtl_printException(rtl_Machine *M, rtl_Exception *exn)
+{
+  rtl_Word const dotType = rtl_internSelector(NULL, "type");
+  rtl_Word const dotMsg  = rtl_internSelector(NULL, "message");
+
+  rtl_Word type, msg;
+
+  char *msgBuf;
+  uint32_t msgLen;
+
+  type = rtl_mapLookup(M, exn->data, dotType, RTL_NIL);
+  msg  = rtl_mapLookup(M, exn->data, dotMsg,  RTL_NIL);
+
+  msgLen = rtl_stringSize(M, msg);
+  msgBuf = malloc(msgLen + 1);
+
+  rtl_reifyString(M, msg, msgBuf, msgLen + 1);
+
+  printf("\nException ");
+  rtl_formatExprShallow(type);
+  printf(":\n\n    %s\n\n", msgBuf);
+
+  __rtl_printStackTrace(M, exn->stack, exn->stackLen);
+
+  free(msgBuf);
 }
