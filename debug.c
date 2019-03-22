@@ -776,7 +776,7 @@ void __rtl_printStackTrace(rtl_Machine *M, rtl_RetAddr *stack, size_t stackLen)
 
   char fnName[1024];
 
-  printf("\nStack Trace (most recent at bottom):\n");
+  printf("Stack Trace (most recent at bottom):\n\n");
   for (i = 0; i < stackLen; i++) {
     func = rtl_reifyFunction(M->codeBase, stack[i].fn);
     fnID = rtl_functionID(stack[i].fn);
