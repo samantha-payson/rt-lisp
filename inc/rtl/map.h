@@ -27,36 +27,36 @@ rtl_Word rtl_emptyMap() { return RTL_MAP; }
 static inline
 bool rtl_isEmptyMap(rtl_Word w) { return w == RTL_MAP; }
 
-rtl_Word rtl_mapInsert(rtl_Machine *M,
-                       rtl_Word    map,
-                       rtl_Word    key,
-                       rtl_Word    val);
+rtl_Word rtl_xMapInsert(rtl_Machine *M,
+                        rtl_Word    map,
+                        rtl_Word    key,
+                        rtl_Word    val);
 
-rtl_Word rtl_mapLookup(rtl_Machine *M,
-                       rtl_Word    map,
-                       rtl_Word    key,
-                       rtl_Word    def);
+rtl_Word rtl_xMapLookup(rtl_Machine *M,
+                        rtl_Word    map,
+                        rtl_Word    key,
+                        rtl_Word    def);
 
-rtl_Word rtl_mapDelete(rtl_Machine *M, rtl_Word map, rtl_Word key);
+rtl_Word rtl_xMapDelete(rtl_Machine *M, rtl_Word map, rtl_Word key);
 
 typedef void (*rtl_MapVisitorFn)(rtl_Machine *M,
                                  void        *accum,
                                  rtl_Word    key,
                                  rtl_Word    val);
 
-void rtl_visitMap(rtl_Machine      *M,
-                  void             *accum,
-                  rtl_MapVisitorFn fn,
-                  rtl_Word         map);
+void rtl_xVisitMap(rtl_Machine      *M,
+                   void             *accum,
+                   rtl_MapVisitorFn fn,
+                   rtl_Word         map);
 
 // Shorthand method for setting a selector-keyed field in a map.
 static inline
-rtl_Word rtl_recordSet(rtl_Machine *M,
-                       rtl_Word map,
-                       char const *selector,
-                       rtl_Word data)
+rtl_Word rtl_xRecordSet(rtl_Machine *M,
+                        rtl_Word map,
+                        char const *selector,
+                        rtl_Word data)
 {
-  return rtl_mapInsert(M, map,
-                       rtl_internSelector(NULL, selector),
-                       data);
+  return rtl_xMapInsert(M, map,
+                        rtl_internSelector(NULL, selector),
+                        data);
 }

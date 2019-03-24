@@ -24,7 +24,7 @@ typedef struct rtl_repl_Compiler {
   rtl_NameSpace const *ns;
 } rtl_repl_Compiler;
 
-void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
+void rtl_xLoad(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 {
   rtl_Word w = RTL_NIL;
   FILE     *file;
@@ -35,12 +35,17 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
   file = fopen(path, "r");
   if (!file) {
     w = RTL_MAP;
-    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "type"),
-                      rtl_internSelector(NULL, "fopen-failed"));
-    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "message"),
-                      rtl_string(C->M, "Failed to open file"));
-    w = rtl_mapInsert(C->M, w, rtl_internSelector(NULL, "path"),
-                      rtl_string(C->M, path));
+    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "type"),
+                       rtl_internSelector(NULL, "fopen-failed"));
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "message"),
+                       rtl_string(C->M, "Failed to open file"));
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "path"),
+                       rtl_string(C->M, path));
+    RTL_ASSERT_NO_UNWIND(C->M);
 
     rtl_throw(C->M, w);
 
@@ -50,22 +55,20 @@ void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
     while (!feof(file)) {
       w = rtl_read(C, file);
 
-      rtl_compile(C, ns, scratchFnID, w);
+      rtl_xCompile(C, ns, scratchFnID, w);
+      RTL_UNWIND (C->M) goto cleanup;
 
       rtl_emitByteToFunc(C->M->codeBase, scratchFnID, RTL_OP_RET);
 
-      if (!rtl_clearException(C->M)) {
-        C->M->env = RTL_TUPLE;
-        w = rtl_call(C->M, rtl_function(scratchFnID));
-        RTL_UNWIND (C->M) {
-          rtl_printException(C->M, C->M->exception);
-          rtl_clearException(C->M);
-        }
-      }
+      C->M->env = RTL_TUPLE;
+      
+      rtl_xCall(C->M, rtl_function(scratchFnID));
+      RTL_UNWIND (C->M) goto cleanup;
 
       rtl_newFuncVersion(C->M->codeBase, scratchFnID);
     }
 
+ cleanup:
     fclose(file);
   }
 
@@ -88,16 +91,25 @@ rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
   RTL_PUSH_WORKING_SET(M, &handle);
 
   handle = rtl_getVar(M, rtl_intern("std", "*compiler*"));
-  rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+
+  rtl_xReifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+  RTL_UNWIND (M) goto cleanup;
+
   assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
 
-  pathLen = rtl_stringSize(M, args[0]);
+  pathLen = rtl_xStringSize(M, args[0]);
+  RTL_UNWIND (M) goto cleanup;
   path    = malloc(pathLen + 1);
 
-  rtl_reifyString(M, args[0], path, pathLen + 1);
+  rtl_xReifyString(M, args[0], path, pathLen + 1);
+  RTL_UNWIND (M) {
+    free(path);
+    goto cleanup;
+  }
 
-  rtl_load(wrapper.C, wrapper.ns, path);
+  rtl_xLoad(wrapper.C, wrapper.ns, path);
 
+ cleanup:
   rtl_popWorkingSet(M);
 
   return rtl_internSelector(NULL, "ok");
@@ -117,11 +129,14 @@ rtl_Word rtl_repl_macroExpand(rtl_Machine *M, rtl_Word const *args, size_t argsL
   RTL_PUSH_WORKING_SET(M, &handle, &result);
 
   handle = rtl_getVar(M, rtl_intern("std", "*compiler*"));
-  rtl_reifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+  rtl_xReifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
+  RTL_UNWIND (M) goto cleanup;
+
   assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
 
-  result = rtl_macroExpand(wrapper.C, wrapper.ns, args[0]);
+  result = rtl_xMacroExpand(wrapper.C, wrapper.ns, args[0]);
 
+ cleanup:
   rtl_popWorkingSet(M);
 
   return result;
@@ -161,7 +176,7 @@ rtl_Word rtl_repl_disassembleMacro(rtl_Machine *M, rtl_Word const *args, size_t 
   return rtl_internSelector(NULL, "ok");
 }
 
-void rtl_repl(rtl_Compiler *C)
+void rtl_xRepl(rtl_Compiler *C)
 {
   rtl_repl_Compiler wrapper;
   rtl_Word          handle = RTL_NIL, w = RTL_NIL;
@@ -172,8 +187,11 @@ void rtl_repl(rtl_Compiler *C)
 
   // First step: Load the prelude
   intrinsicNS = rtl_nsInPackage(NULL, rtl_internPackage(C, "intrinsic"));
-  rtl_load(C, &intrinsicNS, "lisp/bootstrap.lisp");
-  rtl_load(C, &intrinsicNS, "lisp/prelude.lisp");
+  rtl_xLoad(C, &intrinsicNS, "lisp/bootstrap.lisp");
+  RTL_UNWIND (C->M) goto cleanup;
+
+  rtl_xLoad(C, &intrinsicNS, "lisp/prelude.lisp");
+  RTL_UNWIND (C->M) goto cleanup;
 
   replNS = rtl_nsInPackage(NULL, rtl_internPackage(C, "repl"));
   useNS  = rtl_nsUsePackage(&replNS, rtl_internPackage(C, "std"));
@@ -189,45 +207,57 @@ void rtl_repl(rtl_Compiler *C)
   replFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "code-page"));
 
   rtl_registerBuiltin(C, rtl_intern("std", "load"), rtl_repl_load);
-  rtl_export(C, rtl_intern("std", "load"));
+  rtl_xExport(C, rtl_intern("std", "load"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("std", "disassemble"), rtl_repl_disassemble);
-  rtl_export(C, rtl_intern("std", "disassemble"));
+  rtl_xExport(C, rtl_intern("std", "disassemble"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("std", "disassemble-macro"),
                       rtl_repl_disassembleMacro);
-  rtl_export(C, rtl_intern("std", "disassemble-macro"));
+  rtl_xExport(C, rtl_intern("std", "disassemble-macro"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("std", "macroexpand"), rtl_repl_macroExpand);
-  rtl_export(C, rtl_intern("std", "macroexpand"));
+  rtl_xExport(C, rtl_intern("std", "macroexpand"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   while (!feof(stdin)) {
+    rtl_newFuncVersion(C->M->codeBase, replFnID);
+
     printf("\n[ \x1B[1mCRTL\x1B[0m ] ");
     fflush(stdout);
     w = rtl_read(C, stdin);
 
-    rtl_compile(C, &useNS, replFnID, w);
+    rtl_xCompile(C, &useNS, replFnID, w);
+    RTL_UNWIND (C->M) {
+      rtl_printException(C->M, C->M->exception);
+      rtl_clearException(C->M);
+      printf("\n  \x1B[1mERROR!\x1B[0m\n");
+
+      continue;
+    }
 
     rtl_emitByteToFunc(C->M->codeBase, replFnID, RTL_OP_RET);
 
-    if (!rtl_clearException(C->M)) {
-      C->M->env = RTL_TUPLE;
+    C->M->env = RTL_TUPLE;
 
-      w = rtl_call(C->M, rtl_function(replFnID));
+    w = rtl_xCall(C->M, rtl_function(replFnID));
 
-      RTL_UNWIND (C->M) {
-        rtl_printException(C->M, C->M->exception);
-        rtl_clearException(C->M);
-        printf("\n  \x1B[1mERROR!\x1B[0m\n");
-      } else {
-        printf("\n=> ");
-        rtl_formatExpr(C->M, w);
-        printf("\n");
-      }
+    RTL_UNWIND (C->M) {
+      rtl_printException(C->M, C->M->exception);
+      rtl_clearException(C->M);
+      printf("\n  \x1B[1mERROR!\x1B[0m\n");
 
-      rtl_newFuncVersion(C->M->codeBase, replFnID);
+      continue;
     }
+
+    printf("\n=> ");
+    rtl_formatExpr(C->M, w);
+    printf("\n");
   }
 
+ cleanup:
   rtl_popWorkingSet(C->M);
 }

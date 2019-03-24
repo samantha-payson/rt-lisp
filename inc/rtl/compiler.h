@@ -134,16 +134,16 @@ rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
 // fnID'th function of C->M->codeBase.
 void rtl_compileExpr(rtl_Compiler *C, uint32_t fnID, rtl_Word sxp);
 
-void rtl_compile(rtl_Compiler *C,
+void rtl_xCompile(rtl_Compiler *C,
                  rtl_NameSpace const *ns,
                  uint32_t fnID,
                  rtl_Word in);
 
 void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M);
 
-rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in);
+rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in);
 
-rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp);
+rtl_Intrinsic *rtl_xExprToIntrinsic(rtl_Compiler *C, rtl_Word sxp);
 
 rtl_Intrinsic *rtl_transformIntrinsic(rtl_Compiler *C, rtl_Intrinsic *x);
 
@@ -152,4 +152,4 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
                            rtl_Intrinsic const *x);
 
 // Export a symbol within its package.
-void rtl_export(rtl_Compiler *C, rtl_Word symbol);
+void rtl_xExport(rtl_Compiler *C, rtl_Word symbol);

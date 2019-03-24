@@ -42,7 +42,13 @@ int main() {
 
   rtl_io_installBuiltins(&C);
 
-  rtl_repl(&C);
+  rtl_xRepl(&C);
+  RTL_UNWIND (&M) {
+    rtl_printException(&M, M.exception);
+    rtl_clearException(&M);
+
+    printf("\n  crtl: error: REPL threw exception -- Goodbye!\n\n");
+  }
 
   return 0;
 }

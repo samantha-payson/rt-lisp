@@ -208,7 +208,9 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
-    ptr = rtl_reifyTuple(M, w, &len);
+    ptr = rtl_xReifyTuple(M, w, &len);
+    RTL_ASSERT_NO_UNWIND(M);
+
     if (rtl_isString(M, w)) {
       printf("\"");
       for (i = 0; i < len; i++) {
@@ -227,11 +229,15 @@ void rtl_formatExprIndented(rtl_Machine *M, rtl_Word w, int indent)
 
   case RTL_CONS:
     printf("(");
-    ptr = rtl_reifyCons(M, w);
+    ptr = rtl_xReifyCons(M, w);
+    RTL_ASSERT_NO_UNWIND(M);
+
     rtl_formatExprIndented(M, ptr[0], indent + 1);
 
     while (rtl_isCons(ptr[1])) {
-      ptr = rtl_reifyCons(M, ptr[1]);
+      ptr = rtl_xReifyCons(M, ptr[1]);
+      RTL_ASSERT_NO_UNWIND(M);
+
       printf(" ");
       rtl_formatExprIndented(M, ptr[0], indent + 1);
     }
@@ -659,7 +665,8 @@ void __rtl_debugCheckAlloc(rtl_Machine *M, rtl_Word w) {
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
-    rptr = rtl_reifyTuple(M, w, &len);
+    rptr = rtl_xReifyTuple(M, w, &len);
+    RTL_ASSERT_NO_UNWIND(M);
 
     for (i = 0; i < len; i++) {
       elemOffs = __rtl_ptrOffs(rptr[i]);
@@ -823,22 +830,52 @@ void rtl_printException(rtl_Machine *M, rtl_Exception *exn)
 
   rtl_Word type, msg;
 
+  rtl_Exception *tmp;
+
   char *msgBuf;
   uint32_t msgLen;
 
-  type = rtl_mapLookup(M, exn->data, dotType, RTL_NIL);
-  msg  = rtl_mapLookup(M, exn->data, dotMsg,  RTL_NIL);
+  // Save pending exception, so that we can perform operations on the exception
+  // data.
+  tmp          = M->exception;
+  M->exception = NULL;
 
-  msgLen = rtl_stringSize(M, msg);
-  msgBuf = malloc(msgLen + 1);
+  if (rtl_isMap(exn->data)) {
+    type = rtl_xMapLookup(M, exn->data, dotType, RTL_NIL);
+    RTL_ASSERT_NO_UNWIND(M);
 
-  rtl_reifyString(M, msg, msgBuf, msgLen + 1);
+    msg  = rtl_xMapLookup(M, exn->data, dotMsg,  RTL_NIL);
+    RTL_ASSERT_NO_UNWIND(M);
 
-  printf("\nException ");
-  rtl_formatExprShallow(type);
-  printf(":\n\n    %s\n\n", msgBuf);
+    msgLen = rtl_xStringSize(M, msg);
+    RTL_UNWIND (M) {
+      msgBuf = strdup("[Message was not a string]");
+    } else {
+      msgBuf = malloc(msgLen + 1);
+      rtl_xReifyString(M, msg, msgBuf, msgLen + 1);
+      RTL_UNWIND (M) {
+        free(msgBuf);
+        msgBuf = strdup("[Message was not a string]");
+      }
+    }
+
+    printf("\nException ");
+    rtl_formatExprShallow(type);
+    printf(":\n\n    %s\n\n", msgBuf);
+    printf("   ");
+    rtl_formatExpr(M, exn->data);
+    printf("\n\n");
+  } else {
+    msgBuf = NULL;
+    printf("\nException ");
+    rtl_formatExpr(M, exn->data);
+    printf("\n\n");
+  }
 
   __rtl_printStackTrace(M, exn->stack, exn->stackLen);
 
   free(msgBuf);
+
+  // Restore pending exception, so calling code can still see it.
+  M->exception = tmp;
 }

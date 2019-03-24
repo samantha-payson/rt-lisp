@@ -346,7 +346,8 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
     for (i = 0; i*2 < n; i++) {
       k = C->M->vStack[C->M->vStackLen - n + i*2];
       v = C->M->vStack[C->M->vStackLen - n + i*2 + 1];
-      w = rtl_mapInsert(C->M, w, k, v);
+      w = rtl_xMapInsert(C->M, w, k, v);
+      RTL_ASSERT_NO_UNWIND(C->M);
     }
 
     C->M->vStackLen -= n;

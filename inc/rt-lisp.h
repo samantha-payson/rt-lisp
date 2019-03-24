@@ -286,6 +286,16 @@ struct rtl_Machine {
 
 #define RTL_UNWIND(M) if (RTL_UNLIKELY((M)->exception != NULL))
 
+#ifndef NDEBUG
+# define RTL_ASSERT_NO_UNWIND(M) ({               \
+      RTL_UNWIND (M) { abort(); }                 \
+      ((void) 0);                                 \
+    })                                            \
+// end of multi-line macro
+#else
+# define RTL_ASSERT_NO_UNWIND(M) ((void)0)
+#endif
+
 // Initialize the machine M.
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase);
 
@@ -435,27 +445,27 @@ rtl_Word rtl_registerBuiltin(rtl_Compiler  *C,
                              rtl_Word      name,
                              rtl_BuiltinFn cFn);
 
-rtl_Word rtl_call(rtl_Machine *M, rtl_Word addr);
+rtl_Word rtl_xCall(rtl_Machine *M, rtl_Word addr);
 
-void rtl_run(rtl_Machine *M);
+void rtl_xRun(rtl_Machine *M);
 
-rtl_Word __rtl_callWithArgs(rtl_Machine *M,
+rtl_Word __rtl_xCallWithArgs(rtl_Machine *M,
                             rtl_Word    callable,
                             rtl_Word    *args,
                             size_t      argsLen);
 
-#define rtl_callWithArgs(M, CALLABLE, ARGS...) ({                              \
+#define rtl_xCallWithArgs(M, CALLABLE, ARGS...) ({                             \
       rtl_Word ___callArgs___[]  = { ARGS };                                   \
       size_t   ___callArgsLen___ = (sizeof ___callArgs___) / sizeof(rtl_Word); \
                                                                                \
-      __rtl_callWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___);      \
+      __rtl_xCallWithArgs(M, CALLABLE, ___callArgs___, ___callArgsLen___);     \
     })                                                                         \
   // End of multi-line macro
 
 
-rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
+rtl_Word rtl_xApplyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 
-rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list);
+rtl_Word rtl_xListToTuple(rtl_Machine *M, rtl_Word list);
 
 rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
                            rtl_NameSpace const *ns,
@@ -494,24 +504,26 @@ rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key);
 
 void rtl_io_installBuiltins(rtl_Compiler *C);
 
-void rtl_repl(rtl_Compiler *C);
+void rtl_xRepl(rtl_Compiler *C);
 
-void rtl_load(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path);
+void rtl_xLoad(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path);
 
 bool rtl_isString(rtl_Machine *M, rtl_Word w);
 
-void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap);
+void rtl_xReifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap);
 
-uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str);
+uint32_t rtl_xStringSize(rtl_Machine *M, rtl_Word str);
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr);
 
+int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b);
+
 // Overwrite the car of a cons cell on the heap.
-void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val);
-void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val);
-void rtl_writeTupleElem(rtl_Machine *M,
-                        rtl_Word    tuple,
-                        uint32_t    idx,
-                        rtl_Word    val);
+void rtl_xWriteCar(rtl_Machine *M, rtl_Word cons, rtl_Word val);
+void rtl_xWriteCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val);
+void rtl_xWriteTupleElem(rtl_Machine *M,
+                         rtl_Word    tuple,
+                         uint32_t    idx,
+                         rtl_Word    val);
 
 #endif // rt-lisp.h

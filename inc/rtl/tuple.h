@@ -24,48 +24,60 @@ rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len);
 
 // Return a pointer to the fields of tpl. Write the length of that tuple to
 // *len, which MUST point to a valid size_t.
-rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len);
+rtl_Word const *rtl_xReifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len);
 
 // Allocate a tuple with all the same elements, but with an extra position
 // containing w at the end.
-rtl_Word rtl_tuplePushLast(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
+rtl_Word rtl_xTuplePushLast(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
 
 // Allocate a tuple with all the same elements, but with an extra position
 // containing w at the beginning.
-rtl_Word rtl_tuplePushFirst(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
+rtl_Word rtl_xTuplePushFirst(rtl_Machine *M, rtl_Word tuple, rtl_Word w);
 
 // Allocate a tuple with the elements of a at the beginning, and the elements of
 // b at the end.
-rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b);
+rtl_Word rtl_xTupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b);
 
 // Allocate a tuple which contains the elements of the input tuple in the index
 // range [beg, end).
-rtl_Word rtl_tupleSlice(rtl_Machine *M,
-                        rtl_Word    tuple,
-                        uint32_t    beg,
-                        uint32_t    end);
+rtl_Word rtl_xTupleSlice(rtl_Machine *M,
+                         rtl_Word    tuple,
+                         uint32_t    beg,
+                         uint32_t    end);
 
 // Allocate a new tuple and fill it with elemsLen words pointed to by elems.
 rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen);
 
 static inline
-size_t rtl_tupleLen(rtl_Machine *M, rtl_Word tuple)
+size_t rtl_xTupleLen(rtl_Machine *M, rtl_Word tuple)
 {
   size_t len;
 
-  rtl_reifyTuple(M, tuple, &len);
+  rtl_xReifyTuple(M, tuple, &len);
+  RTL_UNWIND (M) return 0;
 
   return len;
 }
 
 static inline
-rtl_Word rtl_tuplePopLast(rtl_Machine *M, rtl_Word tuple)
+rtl_Word rtl_xTuplePopLast(rtl_Machine *M, rtl_Word tuple)
 {
-  return rtl_tupleSlice(M, tuple, 0, rtl_tupleLen(M, tuple) - 1);
+  size_t len;
+
+  len = rtl_xTupleLen(M, tuple);
+  RTL_UNWIND (M) return RTL_TUPLE;
+
+  return rtl_xTupleSlice(M, tuple, 0, len - 1);
 }
 
 static inline
-rtl_Word rtl_tuplePopFirst(rtl_Machine *M, rtl_Word tuple)
+rtl_Word rtl_xTuplePopFirst(rtl_Machine *M, rtl_Word tuple)
 {
-  return rtl_tupleSlice(M, tuple, 1, rtl_tupleLen(M, tuple));
+  size_t len;
+
+  len = rtl_xTupleLen(M, tuple);
+  RTL_UNWIND (M) return RTL_TUPLE;
+
+  return rtl_xTupleSlice(M, tuple, 1, len);
 }
+

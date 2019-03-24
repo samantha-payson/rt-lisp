@@ -438,14 +438,17 @@ rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *name)
   return rtlPkg;
 }
 
-void rtl_export(rtl_Compiler *C, rtl_Word w)
+void rtl_xExport(rtl_Compiler *C, rtl_Word w)
 {
   uint32_t    id;
   size_t      i;
   Symbol      *sym;
   rtl_Package *pkg;
 
-  assert(rtl_isSymbol(w) || rtl_isSelector(w));
+  if (RTL_UNLIKELY(!rtl_isSymbol(w))) {
+    rtl_throwWrongType(C->M, RTL_SYMBOL, w);
+    return;
+  }
 
   id = rtl_symbolID(w);
   assert(id < symNextID);

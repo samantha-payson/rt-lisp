@@ -22,83 +22,84 @@ int rtl_isCons(rtl_Word w) { return rtl_typeOf(w) == RTL_CONS; }
 
 // Return a pointer to two consecutive rtl_Words -- [0] = CAR and [1] = CDR
 // respectively.
-rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons);
+rtl_Word const *rtl_xReifyCons(rtl_Machine *M, rtl_Word cons);
 
-// NOTE: rtl_cons allocates GC memory, so if either of CAR or CDR is a pointer
-// type, then the memory they point to MUST be reachable from M.
-//
-// TODO: Once it's a bit clearer what usage looks like, we need to find an easy
-// way for C users to specify a working set of reachable words.
 rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr);
 
-rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons);
-rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons);
+// xCar and xCdr can be chained without checking for exceptions in-between,
+// since they will ALWAYS return RTL_NIL when they throw an exception.
+//
+// In other words, rtl_xCar(M, rtl_xCar(M, rtl_xCdr(M, x))) will gracefully
+// propagate an exception thrown by the cdr.
+//
+rtl_Word rtl_xCar(rtl_Machine *M, rtl_Word cons);
+rtl_Word rtl_xCdr(rtl_Machine *M, rtl_Word cons);
 
-rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last);
+rtl_Word rtl_xReverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last);
 
 static inline
-rtl_Word rtl_reverseList(rtl_Machine *M, rtl_Word ls) {
-  return rtl_reverseListImproper(M, ls, RTL_NIL);
+rtl_Word rtl_xReverseList(rtl_Machine *M, rtl_Word ls) {
+  return rtl_xReverseListImproper(M, ls, RTL_NIL);
 }
 
-size_t rtl_listLength(rtl_Machine *M, rtl_Word ls);
+size_t rtl_xListLength(rtl_Machine *M, rtl_Word ls);
 
 static inline
-rtl_Word rtl_caar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_car(M, cons));
-}
-
-static inline
-rtl_Word rtl_cadr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_cdr(M, cons));
-}
-
-static inline
-rtl_Word rtl_cdar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_car(M, cons));
+rtl_Word rtl_xCaar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCar(M, cons));
 }
 
 static inline
-rtl_Word rtl_cddr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_cdr(M, cons));
+rtl_Word rtl_xCadr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCdr(M, cons));
 }
 
 static inline
-rtl_Word rtl_caaar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_caar(M, cons));
+rtl_Word rtl_xCdar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCar(M, cons));
 }
 
 static inline
-rtl_Word rtl_caadr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_cadr(M, cons));
+rtl_Word rtl_xCddr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCdr(M, cons));
 }
 
 static inline
-rtl_Word rtl_cadar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_cdar(M, cons));
+rtl_Word rtl_xCaaar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCaar(M, cons));
 }
 
 static inline
-rtl_Word rtl_caddr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_car(M, rtl_cddr(M, cons));
+rtl_Word rtl_xCaadr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCadr(M, cons));
 }
 
 static inline
-rtl_Word rtl_cdaar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_caar(M, cons));
+rtl_Word rtl_xCadar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCdar(M, cons));
 }
 
 static inline
-rtl_Word rtl_cdadr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_cadr(M, cons));
+rtl_Word rtl_xCaddr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCar(M, rtl_xCddr(M, cons));
 }
 
 static inline
-rtl_Word rtl_cddar(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_cdar(M, cons));
+rtl_Word rtl_xCdaar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCaar(M, cons));
 }
 
 static inline
-rtl_Word rtl_cdddr(rtl_Machine *M, rtl_Word cons) {
-  return rtl_cdr(M, rtl_cddr(M, cons));
+rtl_Word rtl_xCdadr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCadr(M, cons));
+}
+
+static inline
+rtl_Word rtl_xCddar(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCdar(M, cons));
+}
+
+static inline
+rtl_Word rtl_xCdddr(rtl_Machine *M, rtl_Word cons) {
+  return rtl_xCdr(M, rtl_xCddr(M, cons));
 }

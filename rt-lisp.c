@@ -141,14 +141,14 @@ rtl_Word *__rtl_reifyPtr(rtl_Machine *M, rtl_Word ptr)
   return gen->words + offs;
 }
 
-rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
+rtl_Word const *rtl_xReifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
   rtl_Word *backing;
 
   if (RTL_UNLIKELY(!len)) {
     abort();
   }
 
-  if (!rtl_isTuple(tpl)) {
+  if (RTL_UNLIKELY(!rtl_isTuple(tpl))) {
     rtl_throwWrongType(M, RTL_TUPLE, tpl);
 
     *len = 0;
@@ -158,17 +158,12 @@ rtl_Word const *rtl_reifyTuple(rtl_Machine *M, rtl_Word tpl, size_t *len) {
     return NULL;
   } else {
     backing = __rtl_reifyPtr(M, tpl);
-    if (backing) {
-      *len = (size_t)((*backing) >> 4);
-      return backing + 1;
-    } else {
-      *len = 0;
-      return NULL;
-    }
+    *len = (size_t)((*backing) >> 4);
+    return backing + 1;
   }
 }
 
-rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
+rtl_Word const *rtl_xReifyCons(rtl_Machine *M, rtl_Word cons)
 {
   if (!rtl_isCons(cons)) {
     rtl_throwWrongType(M, RTL_CONS, cons);
@@ -179,29 +174,27 @@ rtl_Word const *rtl_reifyCons(rtl_Machine *M, rtl_Word cons)
   return __rtl_reifyPtr(M, cons);
 }
 
-rtl_Word rtl_car(rtl_Machine *M, rtl_Word cons)
+rtl_Word rtl_xCar(rtl_Machine *M, rtl_Word cons)
 {
 
   rtl_Word const *ptr;
 
   if (cons == RTL_NIL) return RTL_NIL;
 
-  ptr = rtl_reifyCons(M, cons);
-
-  if (RTL_UNLIKELY(!ptr)) return RTL_NIL;
+  ptr = rtl_xReifyCons(M, cons);
+  RTL_UNWIND (M) return RTL_NIL;
 
   return ptr[0];
 }
 
-rtl_Word rtl_cdr(rtl_Machine *M, rtl_Word cons)
+rtl_Word rtl_xCdr(rtl_Machine *M, rtl_Word cons)
 {
   rtl_Word const *ptr;
 
   if (cons == RTL_NIL) return RTL_NIL;
 
-  ptr = rtl_reifyCons(M, cons);
-
-  if (RTL_UNLIKELY(!ptr)) return RTL_NIL;
+  ptr = rtl_xReifyCons(M, cons);
+  RTL_UNWIND (M) return RTL_NIL;
 
   return ptr[1];
 }
@@ -237,7 +230,8 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
 
   switch (rtl_typeOf(w)) {
   case RTL_TUPLE:
-    fields = rtl_reifyTuple(M, w, &len);
+    fields = rtl_xReifyTuple(M, w, &len);
+    RTL_ASSERT_NO_UNWIND(M);
 
     // First mark the header ..
     if (rtl_bmpSetBit(gen->marks, wOffs, true)) {
@@ -294,7 +288,8 @@ void markWord(rtl_Machine *M, rtl_Generation *gen, rtl_Word w) {
     break;
 
   case RTL_CONS:
-    fields = rtl_reifyCons(M, w);
+    fields = rtl_xReifyCons(M, w);
+    RTL_ASSERT_NO_UNWIND(M);
 
     // Mark CAR then CDR
     if (!rtl_bmpSetBit(gen->marks, wOffs, true)) {
@@ -679,17 +674,26 @@ uint32_t rtl_sizeOfNative(rtl_Machine *M, rtl_Word n)
   return rtl_headerValue(rPtr[0]);
 }
 
-void rtl_reifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t outSize)
+void rtl_xReifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t outSize)
 {
   rtl_Word const *rPtr;
   uint32_t i, size;
   uint8_t  *u8;
 
-  assert(rtl_isNative(w));
+  if (RTL_UNLIKELY(!rtl_isNative(w))) {
+    rtl_throwWrongType(M, RTL_NATIVE, w);
+    return;
+  }
 
   rPtr = __rtl_reifyPtr(M, w);
   size = rtl_headerValue(rPtr[0]);
   u8   = (uint8_t *)out;
+
+  if (RTL_UNLIKELY(size != outSize)) {
+    rtl_throwMsg(M, "wrong-native-size",
+                 "Expected native object to be of a different size.");
+    return;
+  }
 
   for (i = 0; i < size; i++) {
     u8[i] = (rPtr[1 + i/3] >> (((i % 3) + 1)*8)) & 0xFF;
@@ -838,13 +842,18 @@ rtl_Word __rtl_mapInsert(rtl_Machine *M,
 }
 
 
-rtl_Word rtl_mapInsert(rtl_Machine *M,
-                       rtl_Word    map,
-                       rtl_Word    key,
-                       rtl_Word    val)
+rtl_Word rtl_xMapInsert(rtl_Machine *M,
+                        rtl_Word    map,
+                        rtl_Word    key,
+                        rtl_Word    val)
 {
   rtl_Word *backing;
   uint32_t hash, mask;
+
+  if (RTL_UNLIKELY(!rtl_isMap(map))) {
+    rtl_throwWrongType(M, RTL_MAP, map);
+    return RTL_MAP;
+  }
 
   if (map == RTL_MAP) {
     RTL_PUSH_WORKING_SET(M, &map, &key, &val);
@@ -908,7 +917,7 @@ rtl_Word __rtl_mapLookup(rtl_Machine *M,
   }
 }
 
-rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
+rtl_Word rtl_xMapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
 {
   if (RTL_UNLIKELY(!rtl_isMap(map))) {
     rtl_throwWrongType(M, RTL_MAP, map);
@@ -918,7 +927,7 @@ rtl_Word rtl_mapLookup(rtl_Machine *M, rtl_Word map, rtl_Word key, rtl_Word def)
   return __rtl_mapLookup(M, map, key, def, 0);
 }
 
-void rtl_visitMap(rtl_Machine      *M,
+void rtl_xVisitMap(rtl_Machine      *M,
                   void             *accum,
                   rtl_MapVisitorFn fn,
                   rtl_Word         map)
@@ -945,10 +954,12 @@ void rtl_visitMap(rtl_Machine      *M,
     entry   = backing + 1 + 2*i;
 
     if (rtl_isHeader(entry[0])) {
-      rtl_visitMap(M, accum, fn, entry[1]);
+      rtl_xVisitMap(M, accum, fn, entry[1]);
     } else {
       fn(M, accum, entry[0], entry[1]);
     }
+    
+    RTL_UNWIND (M) break;
   }
 
   rtl_popWorkingSet(M);
@@ -966,7 +977,7 @@ void foldEntry(rtl_Machine  *M,
 {
   struct foldMapAccum *acc = (struct foldMapAccum *)vaccum;
 
-  acc->init = rtl_callWithArgs(M, acc->fn, acc->init, key, val);
+  acc->init = rtl_xCallWithArgs(M, acc->fn, acc->init, key, val);
 }
 
 rtl_Word rtl_std_foldMap(rtl_Machine     *M,
@@ -988,7 +999,7 @@ rtl_Word rtl_std_foldMap(rtl_Machine     *M,
 
   RTL_PUSH_WORKING_SET(M, &acc.fn, &acc.init, &map);
 
-  rtl_visitMap(M, &acc, foldEntry, map);
+  rtl_xVisitMap(M, &acc, foldEntry, map);
 
   rtl_popWorkingSet(M);
 
@@ -1006,7 +1017,7 @@ rtl_Word rtl_std_listToTuple(rtl_Machine     *M,
     return rtl_internSelector("error", "arg-count");
   }
 
-  return rtl_listToTuple(M, args[0]);
+  return rtl_xListToTuple(M, args[0]);
 }
 
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
@@ -1092,65 +1103,6 @@ rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
   return w;
 }
 
-void rtl_testGarbageCollector(size_t count)
-{
-  rtl_Machine    M;
-  rtl_Word const *ptr;
-  int            i;
-
-  rtl_initMachine(&M, NULL);
-
-  M.vStackLen = 1;
-
-  // Cons up a gigantic linked list.
-  for (i = 0, M.vStack[0] = RTL_NIL; i < count; i++) {
-    M.vStack[0] = rtl_cons(&M, rtl_int28(i), M.vStack[0]);
-    RTL_UNWIND (&M) {
-      printf("There's an error!\n");
-      abort();
-    }
-  }
-
-  for (i = count - 1, ptr = rtl_reifyCons(&M, M.vStack[0]);
-       !rtl_isNil(ptr[1]);
-       i--, ptr = rtl_reifyCons(&M, ptr[1]))
-  {
-    if (i != rtl_int28Value(ptr[0])) {
-      printf("reifying cons, expected Int28 %d, got %s %d\n",
-             i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
-    }
-  }
-
-  // Create a couple of stray cons cells pointing to each cell in a list.
-
-  rtl_Word straggler0, straggler1;
-
-  for (i = 0, M.vStack[0] = RTL_NIL; i < count; i++) {
-    M.vStack[0] = rtl_cons(&M, rtl_int28(i), M.vStack[0]);
-
-    straggler0 = rtl_cons(&M, rtl_int28(-1), M.vStack[0]);
-    straggler1 = rtl_cons(&M, rtl_int28(-2), straggler0);
-
-    RTL_UNWIND (&M) {
-      printf("There's an error!\n");
-      abort();
-    }
-  }
-
-  (void)straggler0;
-  (void)straggler1;
-
-  for (i = count - 1, ptr = rtl_reifyCons(&M, M.vStack[0]);
-       !rtl_isNil(ptr[1]);
-       i--, ptr = rtl_reifyCons(&M, ptr[1]))
-  {
-    if (i != rtl_int28Value(ptr[0])) {
-      printf("reifying cons, expected Int28 %d, got %s %d\n",
-             i, rtl_typeNameOf(ptr[0]), (int)rtl_int28Value(ptr[0]));
-    }
-  }
-}
-
 char const *rtl_typeName(rtl_WordType type)
 {
   switch (type) {
@@ -1195,6 +1147,9 @@ char const *rtl_typeName(rtl_WordType type)
 
   case RTL_FUNCTION:
     return "[Function (impl detail)]";
+
+  case RTL_UNRESOLVED_SYMBOL:
+    return "[Unresolved Symbol (impl detail)]";
 
   default:
     return "[Unknown RTL type]";
@@ -1379,8 +1334,12 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       return aI32 - bI32;
 
     case RTL_TUPLE:
-      aPtr = rtl_reifyTuple(M, a, &aLen);
-      bPtr = rtl_reifyTuple(M, b, &bLen);
+      aPtr = rtl_xReifyTuple(M, a, &aLen);
+      RTL_ASSERT_NO_UNWIND(M);
+
+      bPtr = rtl_xReifyTuple(M, b, &bLen);
+      RTL_ASSERT_NO_UNWIND(M);
+
       for (i = 0; i < aLen && i < bLen; i++) {
         subResult = rtl_cmp(M, aPtr[i], bPtr[i]);
         if (subResult != 0) return subResult;
@@ -1389,8 +1348,11 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
       return (int)aLen - (int)bLen;
 
     case RTL_CONS:
-      aPtr = rtl_reifyCons(M, a);
-      bPtr = rtl_reifyCons(M, b);
+      aPtr = rtl_xReifyCons(M, a);
+      RTL_ASSERT_NO_UNWIND(M);
+
+      bPtr = rtl_xReifyCons(M, b);
+      RTL_ASSERT_NO_UNWIND(M);
 
       subResult = rtl_cmp(M, aPtr[0], bPtr[0]);
       if (subResult != 0) {
@@ -1405,7 +1367,7 @@ int rtl_cmp(rtl_Machine *M, rtl_Word a, rtl_Word b)
   }
 }
 
-rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
+rtl_Word rtl_xCall(rtl_Machine *M, rtl_Word fn)
 {
   rtl_Function    *func;
   rtl_Word const  *rptr;
@@ -1415,13 +1377,18 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
   func = rtl_reifyFunction(M->codeBase, fn);
 
   if (func->isBuiltin) {
-    rptr = rtl_reifyTuple(M, M->env, &len);
+    rptr = rtl_xReifyTuple(M, M->env, &len);
+    RTL_UNWIND (M) return RTL_NIL;
+
     if (len == 0) {
       rtl_push(M, func->as.builtin.cFn(M, NULL, 0));
 
     } else {
-      rptr = rtl_reifyTuple(M, rptr[len - 1], &len);
+      rptr = rtl_xReifyTuple(M, rptr[len - 1], &len);
+      RTL_UNWIND (M) return RTL_NIL;
+
       rtl_push(M, func->as.builtin.cFn(M, rptr, len));
+      RTL_UNWIND (M) return RTL_NIL;
 
     }
   } else {
@@ -1430,17 +1397,18 @@ rtl_Word rtl_call(rtl_Machine *M, rtl_Word fn)
 
     M->pc = func->as.lisp.code;
 
-    rtl_run(M);
+    rtl_xRun(M);
+    RTL_UNWIND (M) return RTL_NIL;
   }
 
   return M->vStackLen ? rtl_pop(M) : RTL_NIL;
 }
 
-void rtl_resume(rtl_Machine *M)
+void rtl_xResume(rtl_Machine *M)
 {
   if (M->yield) {
     M->yield = false;
-    rtl_run(M);
+    rtl_xRun(M);
   } else {
     rtl_throwMsg(M, "invalid-resume",
                  "rtl_resume called on a machine that hadn't yielded.");
@@ -1464,13 +1432,16 @@ void rtl_throwUncallable(rtl_Machine *M, rtl_Word obj)
 
   RTL_PUSH_WORKING_SET(M, &w);
 
-  w = rtl_recordSet(M, w, "type",
-                    rtl_internSelector(NULL, "uncallable"));
+  w = rtl_xRecordSet(M, w, "type",
+                     rtl_internSelector(NULL, "uncallable"));
+  RTL_ASSERT_NO_UNWIND(M);
 
-  w = rtl_recordSet(M, w, "message",
-                    rtl_string(M, "Tried to call an object which isn't callable."));
+  w = rtl_xRecordSet(M, w, "message",
+                     rtl_string(M, "Tried to call an object which isn't callable."));
+  RTL_ASSERT_NO_UNWIND(M);
 
-  w = rtl_recordSet(M, w, "object", obj);
+  w = rtl_xRecordSet(M, w, "object", obj);
+  RTL_ASSERT_NO_UNWIND(M);
 
   rtl_throw(M, w);
 }
@@ -1485,7 +1456,8 @@ void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
 
   RTL_PUSH_WORKING_SET(M, &w);
 
-  w = rtl_recordSet(M, w, "object", obj);
+  w = rtl_xRecordSet(M, w, "object", obj);
+  RTL_ASSERT_NO_UNWIND(M);
 
   switch (type) {
   case RTL_NIL:
@@ -1541,8 +1513,11 @@ void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
            rtl_typeName(type),
            rtl_typeNameOf(obj));
 
-  w = rtl_recordSet(M, w, "type", rtl_internSelector(NULL, exnType));
-  w = rtl_recordSet(M, w, "message", rtl_string(M, message));
+  w = rtl_xRecordSet(M, w, "type", rtl_internSelector(NULL, exnType));
+  RTL_ASSERT_NO_UNWIND(M);
+
+  w = rtl_xRecordSet(M, w, "message", rtl_string(M, message));
+  RTL_ASSERT_NO_UNWIND(M);
 
   rtl_throw(M, w);
 
@@ -1568,7 +1543,7 @@ void rtl_pushUnwindHandler(rtl_Machine  *M,
 }
 
 // A more streamlined implementation of rtl_run.
-void rtl_run(rtl_Machine *M)
+void rtl_xRun(rtl_Machine *M)
 {
   rtl_OpEncoding enc;
 
@@ -1635,7 +1610,7 @@ void rtl_run(rtl_Machine *M)
       exception = M->exception;
       M->exception = NULL;
 
-      a = rtl_callWithArgs(M, handler->fn, e);
+      a = rtl_xCallWithArgs(M, handler->fn, e);
 
       if (M->exception) {
         printf("\nDOUBLE FAULT: Unhandled exception within an "
@@ -1708,13 +1683,15 @@ void rtl_run(rtl_Machine *M)
 
       sptr = M->vStack + M->vStackLen - imm16;
 
-      rtl_reifyTuple(M, M->env, &len);
+      rtl_xReifyTuple(M, M->env, &len);
+      RTL_UNWIND (M) continue;
 
       wptr    = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+imm16 + 2*imm16);
       wptr[0] = rtl_header(len + 1);
 
       // Get rptr after we call rtl_allocGC, in case the buffer got moved.
-      rptr = rtl_reifyTuple(M, M->env, &len);
+      rptr = rtl_xReifyTuple(M, M->env, &len);
+      RTL_UNWIND (M) continue;
 
       for (i = 0; i < imm16; i++) {
         wptr[1+len+1 + 1+imm16 + i*2 + 0] = sptr[i];
@@ -1861,16 +1838,16 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_END_LABELS:
-      M->env = rtl_tuplePopLast(M, M->env);
+      M->env = rtl_xTuplePopLast(M, M->env);
       break;
 
 
     case RTL_OP_CAR:
-      rtl_push(M, rtl_car(M, a));
+      rtl_push(M, rtl_xCar(M, a));
       break;
 
     case RTL_OP_CDR:
-      rtl_push(M, rtl_cdr(M, a));
+      rtl_push(M, rtl_xCdr(M, a));
       break;
 
     case RTL_OP_POP:
@@ -1923,7 +1900,7 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_LEN:
-      rtl_push(M, rtl_int28(rtl_tupleLen(M, a)));
+      rtl_push(M, rtl_int28(rtl_xTupleLen(M, a)));
       break;
 
     case RTL_OP_IADD:
@@ -2073,13 +2050,15 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_SET_CAR:
-      rtl_writeCar(M, a, b);
+      rtl_xWriteCar(M, a, b);
+      RTL_UNWIND (M) continue;
 
       rtl_push(M, b);
       break;
 
     case RTL_OP_SET_CDR:
-      rtl_writeCdr(M, a, b);
+      rtl_xWriteCdr(M, a, b);
+      RTL_UNWIND (M) continue;
 
       rtl_push(M, b);
       break;
@@ -2096,21 +2075,16 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_PUSH_FIRST:
-      c = rtl_tuplePushFirst(M, a, b);
-
-      rtl_push(M, c);
+      rtl_push(M, rtl_xTuplePushFirst(M, a, b));
       break;
 
     case RTL_OP_PUSH_LAST:
-      c = rtl_tuplePushLast(M, a, b);
+      rtl_push(M, rtl_xTuplePushLast(M, a, b));
 
-      rtl_push(M, c);
       break;
 
     case RTL_OP_CONCAT:
-      c = rtl_tupleConcat(M, a, b);
-
-      rtl_push(M, c);
+      rtl_push(M, rtl_xTupleConcat(M, a, b));
       break;
 
     case RTL_OP_GET:
@@ -2123,7 +2097,9 @@ void rtl_run(rtl_Machine *M)
         continue;
       }
 
-      rptr = rtl_reifyTuple(M, a, &len);
+      rptr = rtl_xReifyTuple(M, a, &len);
+      RTL_UNWIND (M) continue;
+
       if (RTL_UNLIKELY(RTL_UNLIKELY(rtl_int28Value(b) >= len) || RTL_UNLIKELY(rtl_int28Value(b) < 0))) {
         rtl_throwMsg(M, "out-of-bounds",
                      "tuple index out of bounds in get instruction.");
@@ -2136,13 +2112,13 @@ void rtl_run(rtl_Machine *M)
 
 
     case RTL_OP_INSERT:
-      d = rtl_mapInsert(M, a, b, c);
+      d = rtl_xMapInsert(M, a, b, c);
 
       rtl_push(M, d);
       break;
 
     case RTL_OP_LOOKUP:
-      rtl_push(M, rtl_mapLookup(M, a, b, c));
+      rtl_push(M, rtl_xMapLookup(M, a, b, c));
       break;
 
     case RTL_OP_SET_ELEM:
@@ -2151,7 +2127,8 @@ void rtl_run(rtl_Machine *M)
         continue;
       }
 
-      rtl_writeTupleElem(M, a, rtl_int28Value(b), c);
+      rtl_xWriteTupleElem(M, a, rtl_int28Value(b), c);
+      RTL_UNWIND (M) continue;
 
       rtl_push(M, c);
       break;
@@ -2166,7 +2143,7 @@ void rtl_run(rtl_Machine *M)
         continue;
       }
 
-      d = rtl_tupleSlice(M, a, rtl_int28Value(b), rtl_int28Value(c));
+      d = rtl_xTupleSlice(M, a, rtl_int28Value(b), rtl_int28Value(c));
 
       rtl_push(M, d);
       break;
@@ -2271,32 +2248,38 @@ void rtl_run(rtl_Machine *M)
 
     case RTL_OP_REST:
       // Load the current args tuple into a
-      rptr = rtl_reifyTuple(M, M->env, &len);
+      rptr = rtl_xReifyTuple(M, M->env, &len);
+      RTL_ASSERT_NO_UNWIND(M);
+
       a    = rptr[len - 1];
 
-      rtl_reifyTuple(M, a, &len);
+      rtl_xReifyTuple(M, a, &len);
+      RTL_UNWIND (M) continue;
 
       // Cons up the end of that tuple into a list.
       b = RTL_NIL;
       for (i = len; i > imm16; i--) {
         // Reload rptr on each iteration, in-case GC has moved the tuple.
-        rptr = rtl_reifyTuple(M, a, &len);
-
+        rptr = rtl_xReifyTuple(M, a, &len);
+        RTL_ASSERT_NO_UNWIND(M);
+  
         b = rtl_cons(M, rptr[i - 1], b);
       }
 
       // Allocate a new args tuple with the first elements of the old one and
       // our new list element.
       wptr = rtl_allocTuple(M, &c, imm16 + 1);
-      rptr = rtl_reifyTuple(M, a, &len); // Reload again ...
+      rptr = rtl_xReifyTuple(M, a, &len); // Reload again ...
+      RTL_ASSERT_NO_UNWIND(M);
 
       memcpy(wptr, rptr, sizeof(rtl_Word)*imm16);
       wptr[imm16] = b;
 
       // Finally create a new env tuple with our new args tuple at the end.
-      rtl_reifyTuple(M, M->env, &len);
+      rtl_xReifyTuple(M, M->env, &len);
       wptr = rtl_allocTuple(M, &d, len);
-      rptr = rtl_reifyTuple(M, M->env, &len); // Reload again ...
+      rptr = rtl_xReifyTuple(M, M->env, &len); // Reload again ...
+      RTL_ASSERT_NO_UNWIND(M);
 
       memcpy(wptr, rptr, sizeof(rtl_Word)*(len - 1));
       wptr[len - 1] = c;
@@ -2306,7 +2289,8 @@ void rtl_run(rtl_Machine *M)
 
 
     case RTL_OP_APPLY_LIST:
-      b = rtl_listToTuple(M, b);
+      b = rtl_xListToTuple(M, b);
+      RTL_UNWIND (M) continue;
 
       // fallthrough ...
 
@@ -2334,18 +2318,22 @@ void rtl_run(rtl_Machine *M)
       
       switch (rtl_typeOf(f)) {
       case RTL_SELECTOR:
-        rptr = rtl_reifyTuple(M, a, &len);
+        rptr = rtl_xReifyTuple(M, a, &len);
+        RTL_UNWIND (M) continue;
+
         if (RTL_UNLIKELY(len != 1)) {
           rtl_throwMsg(M, "arg-count",
                        "selector expects a single argument when called as function.");
           continue;
         }
 
-        rtl_push(M, rtl_mapLookup(M, rptr[0], f, RTL_NIL));
+        rtl_push(M, rtl_xMapLookup(M, rptr[0], f, RTL_NIL));
         break;
 
       case RTL_TUPLE:
-        rptr = rtl_reifyTuple(M, a, &len);
+        rptr = rtl_xReifyTuple(M, a, &len);
+        RTL_UNWIND (M) continue;
+
         if (RTL_UNLIKELY(len != 1)) {
           rtl_throwMsg(M, "arg-count",
                        "tuple expects a single argument when called as a function.");
@@ -2357,7 +2345,9 @@ void rtl_run(rtl_Machine *M)
         }
 
         a = rptr[0];
-        rptr = rtl_reifyTuple(M, f, &len);
+        rptr = rtl_xReifyTuple(M, f, &len);
+        RTL_UNWIND (M) continue;
+
         if (RTL_UNLIKELY(RTL_UNLIKELY(rtl_int28Value(a) >= len) || RTL_UNLIKELY(rtl_int28Value(a) < 0))) {
           rtl_throwMsg(M, "out-of-bounds",
                        "tuple index out of bounds when calling tuple as function.");
@@ -2369,7 +2359,9 @@ void rtl_run(rtl_Machine *M)
         break;
 
       case RTL_MAP:
-        rptr = rtl_reifyTuple(M, a, &len);
+        rptr = rtl_xReifyTuple(M, a, &len);
+        RTL_UNWIND (M) continue;
+
         if (RTL_UNLIKELY(len != 1)) {
           rtl_throwMsg(M, "arg-count",
                        "tuple expects a single argument when called as a function.");
@@ -2378,7 +2370,7 @@ void rtl_run(rtl_Machine *M)
 
         }
 
-        rtl_push(M, rtl_mapLookup(M, f, rptr[0], RTL_NIL));
+        rtl_push(M, rtl_xMapLookup(M, f, rptr[0], RTL_NIL));
         break;
 
       case RTL_CLOSURE:
@@ -2394,7 +2386,9 @@ void rtl_run(rtl_Machine *M)
 
         func   = rtl_reifyFunction(M->codeBase, f);
         M->pc  = func->as.lisp.code;
-        M->env = rtl_tuplePushLast(M, b, a);
+        M->env = rtl_xTuplePushLast(M, b, a);
+        RTL_ASSERT_NO_UNWIND(M);
+
         break;
 
       case RTL_FUNCTION:
@@ -2402,11 +2396,11 @@ void rtl_run(rtl_Machine *M)
         if (func->isBuiltin) {
           RPUSH(f);
 
-          rptr = rtl_reifyTuple(M, a, &len);
-          b    = func->as.builtin.cFn(M, rptr, len);
-          rtl_push(M, b);
+          rptr = rtl_xReifyTuple(M, a, &len);
+          RTL_UNWIND (M) continue;
 
-
+          rtl_push(M, func->as.builtin.cFn(M, rptr, len));
+          RTL_UNWIND (M) continue;
 
           RPOP();
         } else {
@@ -2439,14 +2433,18 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_VAR:
-      rptr = rtl_reifyTuple(M, M->env, &len);
+      rptr = rtl_xReifyTuple(M, M->env, &len);
+      RTL_ASSERT_NO_UNWIND(M);
+
       if (RTL_UNLIKELY(frame >= len)) {
         rtl_throwMsg(M, "out-of-bounds",
                          "var instruction references out-of-bounds frame.");
         continue;
       }
 
-      rptr = rtl_reifyTuple(M, rptr[frame], &len);
+      rptr = rtl_xReifyTuple(M, rptr[frame], &len);
+      RTL_ASSERT_NO_UNWIND(M);
+
       if (RTL_UNLIKELY(index >= len)) {
         rtl_throwMsg(M, "arg-count",
                      "var instruction references out-of-bounds argument index; "
@@ -2458,14 +2456,16 @@ void rtl_run(rtl_Machine *M)
       break;
 
     case RTL_OP_SET_VAR:
-      rptr = rtl_reifyTuple(M, M->env, &len);
+      rptr = rtl_xReifyTuple(M, M->env, &len);
+      RTL_ASSERT_NO_UNWIND(M);
+
       if (RTL_UNLIKELY(frame >= len)) {
         rtl_throwMsg(M, "out-of-bounds",
                      "set-var instruction references out-of-bounds frame.");
         continue;
       }
 
-      rtl_writeTupleElem(M, rptr[frame], index, a);
+      rtl_xWriteTupleElem(M, rptr[frame], index, a);
 
       rtl_push(M, a);
       break;
@@ -2537,13 +2537,16 @@ void rtl_run(rtl_Machine *M)
 
     case RTL_OP_UNDEF_VAR:
       c = RTL_MAP;
-      c = rtl_recordSet(M, c, "type",
-                        rtl_internSelector(NULL, "undefined-var"));
+      c = rtl_xRecordSet(M, c, "type",
+                         rtl_internSelector(NULL, "undefined-var"));
+      RTL_ASSERT_NO_UNWIND(M);
 
-      c = rtl_recordSet(M, c, "message",
-                        rtl_string(M, "Tried to reference an undefined global variable."));
+      c = rtl_xRecordSet(M, c, "message",
+                         rtl_string(M, "Tried to reference an undefined global variable."));
+      RTL_ASSERT_NO_UNWIND(M);
 
-      c = rtl_recordSet(M, c, "name", immW);
+      c = rtl_xRecordSet(M, c, "name", immW);
+      RTL_ASSERT_NO_UNWIND(M);
 
       rtl_throw(M, c);
       continue;
@@ -2552,13 +2555,16 @@ void rtl_run(rtl_Machine *M)
     case RTL_OP_UNDEF_CALL:
     case RTL_OP_UNDEF_TAIL:
       c = RTL_MAP;
-      c = rtl_recordSet(M, c, "type",
+      c = rtl_xRecordSet(M, c, "type",
                         rtl_internSelector(NULL, "undefined-function"));
+      RTL_ASSERT_NO_UNWIND(M);
 
-      c = rtl_recordSet(M, c, "message",
+      c = rtl_xRecordSet(M, c, "message",
                         rtl_string(M, "Tried to call an undefined function."));
+      RTL_ASSERT_NO_UNWIND(M);
 
-      c = rtl_recordSet(M, c, "name", f);
+      c = rtl_xRecordSet(M, c, "name", f);
+      RTL_ASSERT_NO_UNWIND(M);
 
       rtl_throw(M, c);
       continue;
@@ -2572,30 +2578,36 @@ void rtl_run(rtl_Machine *M)
   rtl_popWorkingSet(M);
 }
 
-rtl_Word rtl_listToTuple(rtl_Machine *M, rtl_Word list)
+rtl_Word rtl_xListToTuple(rtl_Machine *M, rtl_Word list)
 {
   size_t   len;
   rtl_Word *ptr;
-  rtl_Word tuple;
+  rtl_Word tuple = RTL_TUPLE;
   size_t   i;
 
   RTL_PUSH_WORKING_SET(M, &list);
 
   assert(rtl_isCons(list) || rtl_isNil(list));
 
-  len = rtl_listLength(M, list);
+  len = rtl_xListLength(M, list);
+  RTL_UNWIND (M) goto cleanup;
+
   ptr = rtl_allocTuple(M, &tuple, len);
 
-  for (i = 0; list != RTL_NIL; list = rtl_cdr(M, list), i++) {
-    ptr[i] = rtl_car(M, list);
-  }
+  for (i = 0; list != RTL_NIL; list = rtl_xCdr(M, list), i++) {
+    RTL_UNWIND(M) goto cleanup;
 
+    ptr[i] = rtl_xCar(M, list);
+    RTL_UNWIND(M) goto cleanup;
+}
+
+cleanup:
   rtl_popWorkingSet(M);
 
   return tuple;
 }
 
-rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
+rtl_Word rtl_xApplyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 {
   rtl_Word *ptr;
   rtl_Word args = RTL_NIL,
@@ -2604,7 +2616,11 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 
   RTL_PUSH_WORKING_SET(M, &args, &env, &argList, &out);
 
-  args = rtl_listToTuple(M, argList);
+  args = rtl_xListToTuple(M, argList);
+  RTL_UNWIND (M) {
+    rtl_popWorkingSet(M);
+    return RTL_NIL;
+  }
 
   ptr    = rtl_allocTuple(M, &env, 1);
   ptr[0] = args;
@@ -2613,7 +2629,7 @@ rtl_Word rtl_applyList(rtl_Machine *M, rtl_Word fn, rtl_Word argList)
 
   rtl_popWorkingSet(M);
 
-  return rtl_call(M, fn);
+  return rtl_xCall(M, fn);
 }
 
 uint32_t rtl_newFuncID(rtl_CodeBase *cb, rtl_Word name)
@@ -2697,14 +2713,20 @@ uint32_t rtl_nextFuncOffs(rtl_CodeBase *cb, uint32_t fnID)
   return cb->fns[fnID]->as.lisp.len;
 }
 
-rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
+rtl_Word rtl_xReverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
 {
-  rtl_Word result = RTL_NIL;
+  rtl_Word head   = RTL_NIL,
+           result = RTL_NIL;
 
-  RTL_PUSH_WORKING_SET(M, &ls, &last, &result);
+  RTL_PUSH_WORKING_SET(M, &head, &ls, &last, &result);
 
-  for (result = last; ls != RTL_NIL; ls = rtl_cdr(M, ls)) {
-    result = rtl_cons(M, rtl_car(M, ls), result);
+  for (result = last; ls != RTL_NIL; ls = rtl_xCdr(M, ls)) {
+    RTL_UNWIND (M) break;
+
+    head   = rtl_xCar(M, ls);
+    RTL_UNWIND (M) break;
+
+    result = rtl_cons(M, head, result);
   }
 
   rtl_popWorkingSet(M);
@@ -2712,12 +2734,13 @@ rtl_Word rtl_reverseListImproper(rtl_Machine *M, rtl_Word ls, rtl_Word last)
   return result;
 }
 
-size_t rtl_listLength(rtl_Machine *M, rtl_Word ls)
+size_t rtl_xListLength(rtl_Machine *M, rtl_Word ls)
 {
   size_t n;
 
   for (n = 0; ls != RTL_NIL; n++) {
-    ls = rtl_cdr(M, ls);
+    ls = rtl_xCdr(M, ls);
+    RTL_UNWIND (M) return 0;
   }
 
   return n;
@@ -2756,7 +2779,8 @@ void __rtl_popWorkingSet(rtl_Machine *M, char const *fName)
 
 void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word val)
 {
-  M->dynamic = rtl_mapInsert(M, M->dynamic, key, val);
+  M->dynamic = rtl_xMapInsert(M, M->dynamic, key, val);
+  RTL_ASSERT_NO_UNWIND(M);
 }
 
 rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
@@ -2765,25 +2789,31 @@ rtl_Word rtl_getVar(rtl_Machine *M, rtl_Word key)
 
   rtl_Word w;
 
-  w = rtl_mapLookup(M, M->dynamic, key, sentinel);
+  w = rtl_xMapLookup(M, M->dynamic, key, sentinel);
+  RTL_ASSERT_NO_UNWIND(M);
 
   if (RTL_UNLIKELY(w == sentinel)) {
     RTL_PUSH_WORKING_SET(M, &w);
 
     w = RTL_MAP;
-    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "type"),
+    w = rtl_xMapInsert(M, w, rtl_internSelector(NULL, "type"),
                       rtl_internSelector(NULL, "undefined-dynamic-var"));
-    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "message"),
+    RTL_ASSERT_NO_UNWIND(M);
+
+    w = rtl_xMapInsert(M, w, rtl_internSelector(NULL, "message"),
                       rtl_string(M, "Tried to read from an undefined "
                                     "dynamic variable."));
-    w = rtl_mapInsert(M, w, rtl_internSelector(NULL, "name"),
-                      key);
+    RTL_ASSERT_NO_UNWIND(M);
+
+    w = rtl_xMapInsert(M, w, rtl_internSelector(NULL, "name"), key);
+    RTL_ASSERT_NO_UNWIND(M);
+
+    rtl_popWorkingSet(M);
 
     rtl_throw(M, w);
 
     w = RTL_NIL;
 
-    rtl_popWorkingSet(M);
   }
 
   return w;
@@ -2795,7 +2825,8 @@ bool rtl_isString(rtl_Machine *M, rtl_Word w)
   size_t len, i;
 
   if (rtl_isTuple(w)) {
-    rptr = rtl_reifyTuple(M, w, &len);
+    rptr = rtl_xReifyTuple(M, w, &len);
+    RTL_ASSERT_NO_UNWIND(M);
 
     for (i = 0; i < len; i++) {
       if (!rtl_isChar(rptr[i])) return false;
@@ -2807,7 +2838,7 @@ bool rtl_isString(rtl_Machine *M, rtl_Word w)
   }
 }
 
-void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
+void rtl_xReifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
 {
   char *end, *prev, *next;
   rtl_Word const *rptr;
@@ -2816,10 +2847,19 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
   end  = buf + cap - 1;
   next = buf;
 
-  assert(rtl_isString(M, str));
+  rptr = rtl_xReifyTuple(M, str, &len);
+  RTL_UNWIND(M) {
+    buf[0] = '\0';
+    return;
+  }
 
-  rptr = rtl_reifyTuple(M, str, &len);
   for (i = 0; i < len && next < end; i++) {
+    if (RTL_UNLIKELY(!rtl_isChar(rptr[i]))) {
+      rtl_throwWrongType(M, RTL_CHAR, rptr[i]);
+      buf[0] = '\0';
+      return;
+    }
+
     prev = next;
     next = utf8catcodepoint(next, rtl_charValue(rptr[i]), end - next);
 
@@ -2832,7 +2872,7 @@ void rtl_reifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap)
   *end = 0;
 }
 
-uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str)
+uint32_t rtl_xStringSize(rtl_Machine *M, rtl_Word str)
 {
   rtl_Word const *rptr;
   size_t len, i;
@@ -2841,9 +2881,15 @@ uint32_t rtl_stringSize(rtl_Machine *M, rtl_Word str)
 
   size = 0;
 
-  rptr = rtl_reifyTuple(M, str, &len);
+  rptr = rtl_xReifyTuple(M, str, &len);
+  RTL_UNWIND (M) return 0;
 
   for (i = 0; i < len; i++) {
+    if (RTL_UNLIKELY(!rtl_isChar(rptr[i]))) {
+      rtl_throwWrongType(M, RTL_CHAR, rptr[i]);
+      return 0;
+    }
+
     size += utf8codepointsize(rtl_charValue(rptr[i]));
   }
 
@@ -2882,57 +2928,68 @@ void rtl_throwMsg(rtl_Machine *M, char const *type, char const *message)
 
   key  = rtl_internSelector(NULL, "type");
   val  = rtl_internSelector(NULL, type);
-  data = rtl_mapInsert(M, data, key, val);
+  data = rtl_xMapInsert(M, data, key, val);
+  RTL_ASSERT_NO_UNWIND(M);
 
   key  = rtl_internSelector(NULL, "message");
   val  = rtl_string(M, message);
-  data = rtl_mapInsert(M, data, key, val);
+  data = rtl_xMapInsert(M, data, key, val);
+  RTL_ASSERT_NO_UNWIND(M);
 
   rtl_popWorkingSet(M);
 
   rtl_throw(M, data);
 }
 
-rtl_Word rtl_tupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
+rtl_Word rtl_xTupleConcat(rtl_Machine *M, rtl_Word a, rtl_Word b)
 {
   rtl_Word const *aptr, *bptr;
   size_t aLen, bLen;
   rtl_Word *wptr;
-  rtl_Word out = RTL_NIL;
+  rtl_Word out = RTL_TUPLE;
 
   RTL_PUSH_WORKING_SET(M, &a, &b, &out);
 
-  rtl_reifyTuple(M, a, &aLen);
-  rtl_reifyTuple(M, b, &bLen);
+  rtl_xReifyTuple(M, a, &aLen);
+  RTL_UNWIND (M) goto cleanup;
+
+  rtl_xReifyTuple(M, b, &bLen);
+  RTL_UNWIND (M) goto cleanup;
 
   wptr = rtl_allocTuple(M, &out, aLen + bLen);
-  aptr = rtl_reifyTuple(M, a, &aLen);
-  bptr = rtl_reifyTuple(M, b, &bLen);
+  aptr = rtl_xReifyTuple(M, a, &aLen);
+  RTL_ASSERT_NO_UNWIND(M);
+
+  bptr = rtl_xReifyTuple(M, b, &bLen);
+  RTL_ASSERT_NO_UNWIND(M);
 
   memcpy(wptr,        aptr, sizeof(rtl_Word)*aLen);
   memcpy(wptr + aLen, bptr, sizeof(rtl_Word)*bLen);
+
+cleanup:
 
   rtl_popWorkingSet(M);
 
   return out;
 }
 
-rtl_Word rtl_tupleSlice(rtl_Machine *M,
-                        rtl_Word    tuple,
-                        uint32_t    beg,
-                        uint32_t    end)
+rtl_Word rtl_xTupleSlice(rtl_Machine *M,
+                         rtl_Word    tuple,
+                         uint32_t    beg,
+                         uint32_t    end)
 {
   size_t    inLen,
             outLen;
 
-  rtl_Word  out = RTL_NIL;
+  rtl_Word  out = RTL_TUPLE;
 
   rtl_Word const *rptr;
   rtl_Word       *wptr;
 
   RTL_PUSH_WORKING_SET(M, &tuple, &out);
 
-  rtl_reifyTuple(M, tuple, &inLen);
+  rtl_xReifyTuple(M, tuple, &inLen);
+  RTL_UNWIND (M) goto cleanup;
 
   // TODO: Trigger faults here ...
   if (RTL_UNLIKELY(inLen < end)) {
@@ -2949,45 +3006,47 @@ rtl_Word rtl_tupleSlice(rtl_Machine *M,
   outLen = end - beg;
 
   wptr = rtl_allocTuple(M, &out, outLen);
-  rptr = rtl_reifyTuple(M, tuple, &inLen);
+  rptr = rtl_xReifyTuple(M, tuple, &inLen);
+  RTL_ASSERT_NO_UNWIND(M);
 
   memcpy(wptr, rptr + beg, sizeof(rtl_Word)*outLen);
 
+cleanup:
   rtl_popWorkingSet(M);
 
   return out;
 }
 
 
-rtl_Word rtl_tuplePushLast(rtl_Machine *M, rtl_Word in, rtl_Word w)
+rtl_Word rtl_xTuplePushLast(rtl_Machine *M, rtl_Word in, rtl_Word w)
 {
   rtl_Word const *rptr;
   rtl_Word       *wptr;
 
   size_t   len;
-  rtl_Word out = RTL_NIL;
+  rtl_Word out = RTL_TUPLE;
 
   RTL_PUSH_WORKING_SET(M, &in, &out, &w);
 
-  if (in != RTL_NIL) {
-    rptr = rtl_reifyTuple(M, in, &len);
-  } else {
-    rptr = NULL;
-    len  = 0;
-  }
+  rptr = rtl_xReifyTuple(M, in, &len);
+  RTL_UNWIND(M) goto cleanup;
 
   wptr = rtl_allocTuple(M, &out, len + 1);
   wptr[len] = w;
 
-  if (in != RTL_NIL) rptr = rtl_reifyTuple(M, in, &len);
+  rptr = rtl_xReifyTuple(M, in, &len);
+  RTL_ASSERT_NO_UNWIND(M);
+
   memcpy(wptr, rptr, sizeof(rtl_Word)*len);
 
+
+cleanup:
   rtl_popWorkingSet(M);
 
   return out;
 }
 
-rtl_Word rtl_tuplePushFirst(rtl_Machine *M, rtl_Word in, rtl_Word w)
+rtl_Word rtl_xTuplePushFirst(rtl_Machine *M, rtl_Word in, rtl_Word w)
 {
   rtl_Word const *rptr;
   rtl_Word       *wptr;
@@ -2997,19 +3056,18 @@ rtl_Word rtl_tuplePushFirst(rtl_Machine *M, rtl_Word in, rtl_Word w)
 
   RTL_PUSH_WORKING_SET(M, &in, &out, &w);
 
-  if (in != RTL_NIL) {
-    rptr = rtl_reifyTuple(M, in, &len);
-  } else {
-    rptr = NULL;
-    len  = 0;
-  }
+  rptr = rtl_xReifyTuple(M, in, &len);
+  RTL_UNWIND(M) goto cleanup;
 
   wptr = rtl_allocTuple(M, &out, len + 1);
   wptr[0] = w;
 
-  if (in != RTL_NIL) rptr = rtl_reifyTuple(M, in, &len);
+  rptr = rtl_xReifyTuple(M, in, &len);
+  RTL_ASSERT_NO_UNWIND(M);
+
   memcpy(wptr + 1, rptr, sizeof(rtl_Word)*len);
 
+cleanup:
   rtl_popWorkingSet(M);
 
   return out;
@@ -3037,10 +3095,10 @@ rtl_Word rtl_tuple(rtl_Machine *M, rtl_Word *elems, size_t elemsLen)
   return tuple;
 }
 
-rtl_Word __rtl_callWithArgs(rtl_Machine *M,
-                            rtl_Word    callable,
-                            rtl_Word    *args,
-                            size_t      argsLen)
+rtl_Word __rtl_xCallWithArgs(rtl_Machine *M,
+                             rtl_Word    callable,
+                             rtl_Word    *args,
+                             size_t      argsLen)
 {
   rtl_Word argsTuple = RTL_NIL,
            tmpTuple  = RTL_NIL,
@@ -3060,7 +3118,7 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
     callable = rptr[0];
     envTuple = rptr[1];
 
-    envTuple = rtl_tuplePushLast(M, envTuple, argsTuple);
+    envTuple = rtl_xTuplePushLast(M, envTuple, argsTuple);
     break;
 
   case RTL_FUNCTION:
@@ -3074,6 +3132,9 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
       snprintf(msg, 512, "Can't rtl_callWithArgs object of type %s.",
                rtl_typeNameOf(callable));
       rtl_throwMsg(M, "uncallable", msg);
+
+      rtl_popWorkingSet(M);
+
       return RTL_NIL;
     }
   }
@@ -3082,7 +3143,7 @@ rtl_Word __rtl_callWithArgs(rtl_Machine *M,
 
   rtl_popWorkingSet(M);
 
-  return rtl_call(M, callable);
+  return rtl_xCall(M, callable);
 }
 
 static
@@ -3096,7 +3157,7 @@ void addToBackSet(rtl_Machine *M, rtl_Word w)
   M->backSet[M->backSetLen++] = w;
 }
 
-void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
+void rtl_xWriteCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
 {
   rtl_Word *ptr;
 
@@ -3119,7 +3180,7 @@ void rtl_writeCar(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   }
 }
 
-void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
+void rtl_xWriteCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
 {
   rtl_Word *ptr;
 
@@ -3142,10 +3203,10 @@ void rtl_writeCdr(rtl_Machine *M, rtl_Word cons, rtl_Word val)
   }
 }
 
-void rtl_writeTupleElem(rtl_Machine *M,
-                        rtl_Word    tuple,
-                        uint32_t    idx,
-                        rtl_Word    val)
+void rtl_xWriteTupleElem(rtl_Machine *M,
+                         rtl_Word    tuple,
+                         uint32_t    idx,
+                         rtl_Word    val)
 {
   rtl_Word *ptr;
   uint32_t tplGen, tplOffs;

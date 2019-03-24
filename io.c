@@ -48,11 +48,17 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
   assert(rtl_isString(M, args[0]));
   assert(rtl_isSelector(args[1]));
 
-  pathLen = rtl_stringSize(M, args[0]);
+  pathLen = rtl_xStringSize(M, args[0]);
+  RTL_UNWIND (M) return RTL_NIL;
   path    = malloc(pathLen + 1);
 
-  rtl_reifyString(M, args[0], path, pathLen + 1);
+  rtl_xReifyString(M, args[0], path, pathLen + 1);
+  RTL_UNWIND (M) {
+    free(path);
+    return RTL_NIL;
+  }
 
+  // TODO: proper error handling here.
   if (args[1] == dotRead) {
     rif.f = fopen(path, "r");
     if (!rif.f) {
@@ -96,9 +102,10 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
   uint8_t byteCount, utf8[4];
 
   assert(argsLen == 1);
-  assert(rtl_isNative(args[0]));
 
-  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  RTL_UNWIND (M) return RTL_NIL;
+
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
   ch = fgetc(rif.f);
@@ -157,11 +164,13 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
   utf8_int32_t ch;
 
   assert(argsLen == 2);
-  assert(rtl_isNative(args[0]) && rtl_isChar(args[1]));
+  assert(rtl_isChar(args[1]));
 
   ch = rtl_charValue(args[1]);
 
-  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  RTL_UNWIND (M) return RTL_NIL;
+
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
   utf8catcodepoint(utf8, ch, 4);
@@ -187,15 +196,22 @@ rtl_Word rtl_io_writeString(rtl_Machine    *M,
   int32_t      count;
 
   assert(argsLen == 2);
-  assert(rtl_isNative(args[0]) && rtl_isString(M, args[1]));
+  assert(rtl_isString(M, args[1]));
 
-  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  RTL_UNWIND (M) return RTL_NIL;
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
-  size = rtl_stringSize(M, args[1]);
+  size = rtl_xStringSize(M, args[1]);
+  RTL_UNWIND (M) return RTL_NIL;
+
   utf8 = malloc(size + 1);
 
-  rtl_reifyString(M, args[1], utf8, size + 1);
+  rtl_xReifyString(M, args[1], utf8, size + 1);
+  RTL_UNWIND (M) {
+    free(utf8);
+    return RTL_NIL;
+  }
 
   count = fwrite(utf8, 1, size, rif.f);
 
@@ -216,9 +232,10 @@ rtl_Word rtl_io_close(rtl_Machine    *M,
   rtl_io_File rif;
 
   assert(argsLen == 1);
-  assert(rtl_isNative(args[0]));
 
-  rtl_reifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
+  RTL_UNWIND (M) return RTL_NIL;
+
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
   fclose(rif.f);
@@ -253,13 +270,21 @@ rtl_Word rtl_io_openDir(rtl_Machine    *M,
     return RTL_NIL;
   }
 
-  pathLen = rtl_stringSize(M, args[0]);
+  pathLen = rtl_xStringSize(M, args[0]);
+  RTL_UNWIND (M) return RTL_NIL;
+
   path    = malloc(pathLen + 1);
 
-  rtl_reifyString(M, args[0], path, pathLen + 1);
+  rtl_xReifyString(M, args[0], path, pathLen + 1);
+  RTL_UNWIND (M) {
+    free(path);
+    return RTL_NIL;
+  }
 
   rid.tag = MULTICHAR('D', 'I', 'R', 0);
   rid.d   = opendir(path);
+
+  free(path);
 
   return rtl_native(M, &rid, sizeof(rtl_io_Dir));
 }
@@ -281,19 +306,14 @@ rtl_Word rtl_io_readDir(rtl_Machine    *M,
     return RTL_NIL;
   }
 
-  if (!rtl_isNative(args[0])) {
-    rtl_throwMsg(M, "expected-native",
-                 "io:read-dir expects its first argument to be a "
-                 "native object.");
+  rtl_xReifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
+  RTL_UNWIND (M) return RTL_NIL;
 
-    return RTL_NIL;
-  }
-
-  rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
   if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
     rtl_throwMsg(M, "expected-dir",
                  "io:close-dir expects its first argument to be a "
                  "DIR object.");
+    return RTL_NIL;
   }
 
   ent = readdir(rid.d);
@@ -303,50 +323,53 @@ rtl_Word rtl_io_readDir(rtl_Machine    *M,
 
   RTL_PUSH_WORKING_SET(M, &out);
 
-  out = rtl_recordSet(M, out, "name", rtl_string(M, ent->d_name));
+  out = rtl_xRecordSet(M, out, "name", rtl_string(M, ent->d_name));
+  RTL_ASSERT_NO_UNWIND(M);
 
   switch (ent->d_type) {
   case DT_BLK:
-    out = rtl_recordSet(M, out, "type",
-                        rtl_internSelector("io", "block"));
+    out = rtl_xRecordSet(M, out, "type",
+                         rtl_internSelector("io", "block"));
     break;
 
   case DT_CHR:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "char"));
     break;
 
   case DT_DIR:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "directory"));
     break;
 
   case DT_FIFO:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "fifo"));
     break;
 
   case DT_LNK:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "sym-link"));
     break;
 
   case DT_REG:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "regular"));
     break;
 
   case DT_SOCK:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "socket"));
     break;
 
   case DT_UNKNOWN:
   default:
-    out = rtl_recordSet(M, out, "type",
+    out = rtl_xRecordSet(M, out, "type",
                         rtl_internSelector("io", "unknown"));
     break;
   }
+  
+  RTL_ASSERT_NO_UNWIND(M);
 
   rtl_popWorkingSet(M);
 
@@ -375,7 +398,9 @@ rtl_Word rtl_io_closeDir(rtl_Machine    *M,
     return RTL_NIL;
   }
 
-  rtl_reifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
+  rtl_xReifyNative(M, args[0], &rid, sizeof(rtl_io_Dir));
+  RTL_UNWIND (M) return RTL_NIL;
+
   if (rid.tag != MULTICHAR('D', 'I', 'R', 0)) {
     rtl_throwMsg(M, "expected-dir",
                  "io:close-dir expects its first argument to be a "
@@ -393,29 +418,35 @@ void rtl_io_installBuiltins(rtl_Compiler *C)
 {
   rtl_internPackage(C, "io");
 
-  rtl_export(C, rtl_internSelector("io", "EOF"));
-
   rtl_registerBuiltin(C, rtl_intern("io", "open"), rtl_io_open);
-  rtl_export(C, rtl_intern("io", "open"));
+  rtl_xExport(C, rtl_intern("io", "open"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "read-char"), rtl_io_readChar);
-  rtl_export(C, rtl_intern("io", "read-char"));
+  rtl_xExport(C, rtl_intern("io", "read-char"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "write-char"), rtl_io_writeChar);
-  rtl_export(C, rtl_intern("io", "write-char"));
+  rtl_xExport(C, rtl_intern("io", "write-char"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "write-string"), rtl_io_writeString);
-  rtl_export(C, rtl_intern("io", "write-string"));
+  rtl_xExport(C, rtl_intern("io", "write-string"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "close"), rtl_io_close);
-  rtl_export(C, rtl_intern("io", "close"));
+  rtl_xExport(C, rtl_intern("io", "close"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "open-dir"), rtl_io_openDir);
-  rtl_export(C, rtl_intern("io", "open-dir"));
+  rtl_xExport(C, rtl_intern("io", "open-dir"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "read-dir"), rtl_io_readDir);
-  rtl_export(C, rtl_intern("io", "read-dir"));
+  rtl_xExport(C, rtl_intern("io", "read-dir"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 
   rtl_registerBuiltin(C, rtl_intern("io", "close-dir"), rtl_io_closeDir);
-  rtl_export(C, rtl_intern("io", "close-dir"));
+  rtl_xExport(C, rtl_intern("io", "close-dir"));
+  RTL_ASSERT_NO_UNWIND(C->M);
 }

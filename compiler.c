@@ -124,7 +124,7 @@ void rtl_resolveCallSites(rtl_Compiler *C, rtl_Word name, rtl_Word fn)
 
       default:
         printf("   !!! Invalid call site !!!\n");
-        abort();
+        __builtin_unreachable();
       }
     }
   }
@@ -301,8 +301,9 @@ static bool symCacheWasInit;
   .CNAME = rtl_intern("intrinsic", LISPNAME),   \
   // End of multi-line macro
 
-#define EXPORT_INTRINSIC(CNAME, LISPNAME)       \
-  rtl_export(C, symCache.intrinsic.CNAME);      \
+#define EXPORT_INTRINSIC(CNAME, LISPNAME)     \
+  rtl_xExport(C, symCache.intrinsic.CNAME);   \
+  RTL_ASSERT_NO_UNWIND(C->M);                 \
   // End of multi-line macro
 
 static inline
@@ -356,7 +357,7 @@ void __resolveMapEntry(rtl_Machine *M,
   key = rtl_resolveAll(acc->C, acc->ns, key);
   val = rtl_resolveAll(acc->C, acc->ns, val);
 
-  acc->map = rtl_mapInsert(M, acc->map, key, val);
+  acc->map = rtl_xMapInsert(M, acc->map, key, val);
 
   rtl_popWorkingSet(M);
 }
@@ -374,7 +375,7 @@ rtl_Word rtl_resolveMap(rtl_Compiler *C,
 
   RTL_PUSH_WORKING_SET(C->M, &map, &acc.map);
 
-  rtl_visitMap(C->M, &acc, __resolveMapEntry, map);
+  rtl_xVisitMap(C->M, &acc, __resolveMapEntry, map);
 
   rtl_popWorkingSet(C->M);
 
@@ -403,16 +404,24 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
     break;
 
   case RTL_TUPLE:
-    rtl_reifyTuple(C->M, in, &len);
+    rtl_xReifyTuple(C->M, in, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     wptr = rtl_allocTuple(C->M, &out, len);
-    rptr = rtl_reifyTuple(C->M, in, &len);
+    rptr = rtl_xReifyTuple(C->M, in, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     for (i = 0; i < len; i++) {
       wptr[i] = rtl_resolveAll(C, ns, rptr[i]);
     } break;
     
   case RTL_CONS:
-    a = rtl_resolveAll(C, ns, rtl_car(C->M, in));
-    b = rtl_resolveAll(C, ns, rtl_cdr(C->M, in));
+    a = rtl_resolveAll(C, ns, rtl_xCar(C->M, in));
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    b = rtl_resolveAll(C, ns, rtl_xCdr(C->M, in));
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     out = rtl_cons(C->M, a, b);
     break;
 
@@ -436,12 +445,15 @@ void __macroExpandEntry(rtl_Machine *M,
 
   RTL_PUSH_WORKING_SET(M, &key, &val);
 
-  key = rtl_macroExpand(acc->C, acc->ns, key);
+  key = rtl_xMacroExpand(acc->C, acc->ns, key);
+  RTL_UNWIND (M) goto cleanup;
 
-  val = rtl_macroExpand(acc->C, acc->ns, val);
+  val = rtl_xMacroExpand(acc->C, acc->ns, val);
+  RTL_UNWIND (M) goto cleanup;
 
-  acc->map = rtl_mapInsert(M, acc->map, key, val);
+  acc->map = rtl_xMapInsert(M, acc->map, key, val);
 
+cleanup:
   rtl_popWorkingSet(M);
 }
 
@@ -458,7 +470,7 @@ rtl_Word macroExpandMap(rtl_Compiler        *C,
 
   RTL_PUSH_WORKING_SET(C->M, &map, &acc.map);
 
-  rtl_visitMap(C->M, &acc, __macroExpandEntry, map);
+  rtl_xVisitMap(C->M, &acc, __macroExpandEntry, map);
 
   rtl_popWorkingSet(C->M);
 
@@ -468,7 +480,7 @@ rtl_Word macroExpandMap(rtl_Compiler        *C,
 // Expects everything after the 'lambda' symbol of a lambda expression.
 //
 // e.g. ((arg0 arg1 arg2) body)
-rtl_Word rtl_macroExpandLambda(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
+rtl_Word rtl_xMacroExpandLambda(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
   rtl_Word arg, out, tail;
 
@@ -476,22 +488,32 @@ rtl_Word rtl_macroExpandLambda(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Wor
 
   RTL_PUSH_WORKING_SET(C->M, &in, &arg, &out, &tail);
 
-  arg = rtl_resolveAll(C, ns, rtl_car(C->M, in));
+  arg = rtl_resolveAll(C, ns, rtl_xCar(C->M, in));
+  RTL_UNWIND (C->M) goto cleanup;
+
   out = rtl_cons(C->M, arg, RTL_NIL);
 
-  for (tail = rtl_cdr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
-    arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+  for (tail = rtl_xCdr(C->M, in); tail != RTL_NIL; tail = rtl_xCdr(C->M, tail)) {
+    RTL_UNWIND (C->M) goto cleanup;
+
+    arg = rtl_xCar(C->M, tail);
+    RTL_UNWIND (C->M) goto cleanup;
+
+    arg = rtl_xMacroExpand(C, ns, arg);
+    RTL_UNWIND (C->M) goto cleanup;
+
     out = rtl_cons(C->M, arg, out);
   }
 
-  out = rtl_reverseList(C->M, out);
+  out = rtl_xReverseList(C->M, out);
 
+cleanup:
   rtl_popWorkingSet(C->M);
 
   return out;
 }
 
-rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
+rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 {
   rtl_Word head   = RTL_NIL,
            arg    = RTL_NIL,
@@ -520,11 +542,16 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     break;
 
   case RTL_TUPLE:
-    rptr = rtl_reifyTuple(C->M, in, &len);
+    rtl_xReifyTuple(C->M, in, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     wptr = rtl_allocTuple(C->M, &out, len);
-    rptr = rtl_reifyTuple(C->M, in, &len);
+    rptr = rtl_xReifyTuple(C->M, in, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+    
     for (i = 0; i < len; i++) {
-      wptr[i] = rtl_macroExpand(C, ns, rptr[i]);
+      wptr[i] = rtl_xMacroExpand(C, ns, rptr[i]);
+      RTL_UNWIND (C->M) break;
     } break;
 
   case RTL_MAP:
@@ -532,33 +559,64 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     break;
 
   case RTL_CONS:
-    head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
+    head = rtl_xCar(C->M, in);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    head = rtl_xMacroExpand(C, ns, head);
+    RTL_UNWIND (C->M) break;
 
     if (head == symCache.intrinsic.inPackage) {
-      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
+      name = rtl_xCadr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      name = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
       newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
-      out   = rtl_macroExpand(C, &newNS,
-                              rtl_cons(C->M,
-                                       rtl_intern("intrinsic", "progn"),
-                                       rtl_cddr(C->M, in)));
+      out   = rtl_xMacroExpand(C, &newNS,
+                               rtl_cons(C->M,
+                                        rtl_intern("intrinsic", "progn"),
+                                        tail));
 
     } else if (head == symCache.intrinsic.usePackage) {
-      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
+      name  = rtl_xCadr(C->M, in); 
+      RTL_UNWIND (C->M) break;
+
+      name  = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
       newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
-      out   = rtl_macroExpand(C, &newNS,
-                              rtl_cons(C->M,
-                                       rtl_intern("intrinsic", "progn"),
-                                       rtl_cddr(C->M, in)));
+      out   = rtl_xMacroExpand(C, &newNS,
+                               rtl_cons(C->M,
+                                        rtl_intern("intrinsic", "progn"),
+                                        tail));
 
     } else if (head == symCache.intrinsic.aliasPackage) {
-      name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
-      alias = rtl_macroExpand(C, ns, rtl_cadr(C->M, rtl_cadr(C->M, in)));
+      name = rtl_xCaadr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      name = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      alias = rtl_xCadr(C->M, rtl_xCadr(C->M, in));
+      RTL_UNWIND (C->M) break;
+
+      alias = rtl_xMacroExpand(C, ns, alias);
       newNS = rtl_nsAliasPackage(ns, rtl_internPackage(C, rtl_symbolName(name)),
                                  rtl_symbolName(alias));
-      out   = rtl_macroExpand(C, &newNS,
-                              rtl_cons(C->M,
-                                       rtl_intern("intrinsic", "progn"),
-                                       rtl_cddr(C->M, in)));
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      out = rtl_xMacroExpand(C, &newNS,
+                             rtl_cons(C->M,
+                                      rtl_intern("intrinsic", "progn"),
+                                      tail));
 
     } else if (head == symCache.intrinsic.alias) {
       out = in;
@@ -567,39 +625,66 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       out = rtl_resolveAll(C, ns, in);
 
     } else if (head == symCache.intrinsic.lambda) {
+      tail = rtl_xCdr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
       out = rtl_cons(C->M, head,
-                     rtl_macroExpandLambda(C, ns, rtl_cdr(C->M, in)));
+                     rtl_xMacroExpandLambda(C, ns, tail));
 
     } else if (head == symCache.intrinsic.labels) {
       arg = RTL_NIL;
 
-      for (clause = rtl_cadr(C->M, in); clause != RTL_NIL; clause = rtl_cdr(C->M, clause)) {
-        name = rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caar(C->M, clause)));
-        arg  = rtl_cons(C->M, rtl_cons(C->M, name,
-                                       rtl_macroExpandLambda(C, ns, rtl_cdar(C->M, clause))),
+      for (clause = rtl_xCadr(C->M, in);
+           clause != RTL_NIL;
+           clause = rtl_xCdr(C->M, clause))
+      {
+        name = rtl_xCaar(C->M, clause);
+        RTL_UNWIND (C->M) break;
+
+        name = rtl_resolveSymbol(C, ns, rtl_symbolID(name));
+
+        tail = rtl_xCdar(C->M, clause);
+        RTL_UNWIND (C->M) break;
+
+        tail = rtl_xMacroExpandLambda(C, ns, tail);
+        RTL_UNWIND (C->M) break;
+
+        arg = rtl_cons(C->M, rtl_cons(C->M, name, tail),
                         arg);
       }
 
-      out = rtl_cons(C->M, arg,
-                     rtl_cons(C->M, head,
-                              RTL_NIL));
+      RTL_UNWIND (C->M) break;
 
-      for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
-        arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+      out = rtl_cons(C->M, arg,
+                     rtl_cons(C->M, head, RTL_NIL));
+
+      for (tail = rtl_xCddr(C->M, in); tail != RTL_NIL; tail = rtl_xCdr(C->M, tail)) {
+        RTL_UNWIND (C->M) break;
+
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) break;
+
+        arg = rtl_xMacroExpand(C, ns, arg);
+        RTL_UNWIND (C->M) break;
+
         out = rtl_cons(C->M, arg, out);
       }
 
-      out = rtl_reverseList(C->M, out);
+      RTL_UNWIND (C->M) break;
 
-    } else if (head == symCache.intrinsic.defun) {
-      tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
-      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
-                      tail);
-      out = rtl_cons(C->M, head, tail);
+      out = rtl_xReverseList(C->M, out);
 
-    } else if (head == symCache.intrinsic.defmacro) {
-      tail = rtl_macroExpandLambda(C, ns, rtl_cddr(C->M, in));
-      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
+    } else if (head == symCache.intrinsic.defun || head == symCache.intrinsic.defmacro) {
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_xMacroExpandLambda(C, ns, tail);
+      RTL_UNWIND (C->M) break;
+
+      name = rtl_xCadr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
                       tail);
       out = rtl_cons(C->M, head, tail);
 
@@ -607,28 +692,56 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       out = rtl_resolveAll(C, ns, in);
 
     } else if (head == symCache.intrinsic.dynSet) {
-      tail = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_caddr(C->M, in)),
-                      RTL_NIL);
-      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_cadr(C->M, in))),
+      tail = rtl_xCaddr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_xMacroExpand(C, ns, tail);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_cons(C->M, tail, RTL_NIL);
+
+      name = rtl_xCadr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
                       tail);
-      out = rtl_cons(C->M, head,
-                     tail);
+
+      out = rtl_cons(C->M, head, tail);
 
     } else if (head == symCache.intrinsic.bind) {
-      clause = rtl_cadr(C->M, in);
-      clause = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_cadr(C->M, clause)),
-                        RTL_NIL);
-      clause = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(rtl_caadr(C->M, in))),
+      arg = rtl_xCar(C->M, rtl_xCdadr(C->M, in));
+      RTL_UNWIND (C->M) break;
+
+      arg = rtl_xMacroExpand(C, ns, arg);
+      RTL_UNWIND (C->M) break;
+
+      arg = rtl_cons(C->M, arg, RTL_NIL);
+
+      name = rtl_xCaadr(C->M, in);
+      RTL_UNWIND (C->M) break;
+
+      clause = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
                         clause);
 
       out = RTL_NIL;
 
-      for (tail = rtl_cddr(C->M, in); tail != RTL_NIL; tail = rtl_cdr(C->M, tail)) {
-        out = rtl_cons(C->M, rtl_macroExpand(C, ns, rtl_car(C->M, tail)),
-                       out);
+      for (tail = rtl_xCddr(C->M, in); tail != RTL_NIL; tail = rtl_xCdr(C->M, tail)) {
+        RTL_UNWIND (C->M) break;
+
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) break;
+
+        arg = rtl_xMacroExpand(C, ns, arg);
+        RTL_UNWIND (C->M) break;
+
+        out = rtl_cons(C->M, arg, out);
       }
 
-      out = rtl_reverseList(C->M, out);
+      RTL_UNWIND (C->M) break;
+
+      out = rtl_xReverseList(C->M, out);
+      RTL_UNWIND (C->M) break;
+      
       out = rtl_cons(C->M, head,
                      rtl_cons(C->M, clause,
                               out));
@@ -637,21 +750,36 @@ rtl_Word rtl_macroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       fnDef = rtl_lookupFn(C->M->codeBase, head);
 
       if (fnDef != NULL && fnDef->macro != RTL_NIL) {
-        out = rtl_macroExpand(C, ns,
-                              rtl_applyList(C->M,
-                                            fnDef->macro,
-                                            rtl_cdr(C->M, in)));
+        out = rtl_xCdr(C->M, in);
+        RTL_UNWIND (C->M) break;
+
+        out = rtl_xApplyList(C->M, fnDef->macro, out);
+        RTL_UNWIND (C->M) break;
+
+        out = rtl_xMacroExpand(C, ns, out);
 
      } else {
         out = rtl_cons(C->M, head, RTL_NIL);
 
-        for (tail = rtl_cdr(C->M, in); rtl_isCons(tail); tail = rtl_cdr(C->M, tail))
+        for (tail = rtl_xCdr(C->M, in); rtl_isCons(tail); tail = rtl_xCdr(C->M, tail))
         {
-          arg = rtl_macroExpand(C, ns, rtl_car(C->M, tail));
+          RTL_UNWIND (C->M) break;
+
+          arg = rtl_xCar(C->M, tail);
+          RTL_UNWIND (C->M) break;
+
+          arg = rtl_xMacroExpand(C, ns, arg);
+          RTL_UNWIND (C->M) break;
+
           out = rtl_cons(C->M, arg, out);
         }
 
-        out = rtl_reverseListImproper(C->M, out, rtl_macroExpand(C, ns, tail));
+        RTL_UNWIND (C->M) break;
+
+        tail = rtl_xMacroExpand(C, ns, tail);
+        RTL_UNWIND (C->M) break;
+
+        out = rtl_xReverseListImproper(C->M, out, tail);
       }
 
     } break;
@@ -672,7 +800,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x);
 static
 void rtl_tailCallPass(rtl_Intrinsic *x);
 
-void rtl_compile(rtl_Compiler *C,
+void rtl_xCompile(rtl_Compiler *C,
                  rtl_NameSpace const *ns,
                  uint32_t fnID,
                  rtl_Word in)
@@ -698,84 +826,129 @@ void rtl_compile(rtl_Compiler *C,
 
   switch (rtl_typeOf(in)) {
   case RTL_CONS:
-    head = rtl_macroExpand(C, ns, rtl_car(C->M, in));
+    head = rtl_xCar(C->M, in);
+    RTL_UNWIND (C->M) goto cleanup;
+
+    head = rtl_xMacroExpand(C, ns, head);
+    RTL_UNWIND (C->M) goto cleanup;
 
     if (head == symCache.intrinsic.inPackage) {
-      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
-      newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
-      rtl_compile(C, &newNS, fnID,
-                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-                           rtl_cddr(C->M, in)));
+      name = rtl_xCadr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
 
-      rtl_popWorkingSet(C->M);
-      return;
+      name = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      newNS = rtl_nsInPackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
+
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      rtl_xCompile(C, &newNS, fnID,
+                   rtl_cons(C->M, rtl_intern("intrinsic", "progn"), tail));
+
+      goto cleanup;
 
     } else if (head == symCache.intrinsic.usePackage) {
-      name  = rtl_macroExpand(C, ns, rtl_cadr(C->M, in));
-      newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
-      rtl_compile(C, &newNS, fnID,
-                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-                           rtl_cddr(C->M, in)));
+      name = rtl_xCadr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
 
-      rtl_popWorkingSet(C->M);
-      return;
+      name = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      newNS = rtl_nsUsePackage(ns, rtl_internPackage(C, rtl_symbolName(name)));
+
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      rtl_xCompile(C, &newNS, fnID,
+                   rtl_cons(C->M, rtl_intern("intrinsic", "progn"), tail));
+
+      goto cleanup;
 
     } else if (head == symCache.intrinsic.aliasPackage) {
-      name  = rtl_macroExpand(C, ns, rtl_car(C->M, rtl_cadr(C->M, in)));
-      alias = rtl_macroExpand(C, ns, rtl_cadr(C->M, rtl_cadr(C->M, in)));
+      name = rtl_xCaadr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      name  = rtl_xMacroExpand(C, ns, name);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      alias = rtl_xCadr(C->M, rtl_xCadr(C->M, in));
+      RTL_UNWIND (C->M) goto cleanup;
+
+      alias = rtl_xMacroExpand(C, ns, alias);
+      RTL_UNWIND (C->M) goto cleanup;
+
       newNS = rtl_nsAliasPackage(ns, rtl_internPackage(C, rtl_symbolName(name)),
                                  rtl_symbolName(alias));
-      rtl_compile(C, &newNS, fnID,
-                  rtl_cons(C->M, rtl_intern("intrinsic", "progn"),
-                           rtl_cddr(C->M, in)));
 
-      rtl_popWorkingSet(C->M);
-      return;
+      tail = rtl_xCddr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      rtl_xCompile(C, &newNS, fnID,
+                   rtl_cons(C->M, rtl_intern("intrinsic", "progn"), tail));
+
+      goto cleanup;
 
     } else if (head == symCache.intrinsic.alias) {
       printf("\n   !!! alias not yet supported !!!\n\n");
       abort();
 
     } else if (head == symCache.intrinsic.progn) {
-      if (rtl_cdr(C->M, in) == RTL_NIL) {
+      if (rtl_xCdr(C->M, in) == RTL_NIL) {
+        RTL_UNWIND (C->M) goto cleanup;
+
         rtl_emitByteToFunc(codeBase, fnID, RTL_OP_NIL);
       } else {
-        for (tail = rtl_cdr(C->M, in);
+        for (tail = rtl_xCdr(C->M, in);
              tail != RTL_NIL;
-             tail = rtl_cdr(C->M, tail))
+             tail = rtl_xCdr(C->M, tail))
         {
-          rtl_compile(C, ns, fnID, rtl_car(C->M, tail));
+          RTL_UNWIND (C->M) goto cleanup;
 
-          if (rtl_cdr(C->M, tail) != RTL_NIL) {
+          arg = rtl_xCar(C->M, tail);
+          RTL_UNWIND (C->M) goto cleanup;
+
+          rtl_xCompile(C, ns, fnID, arg);
+          RTL_UNWIND (C->M) goto cleanup;
+
+          if (rtl_xCdr(C->M, tail) != RTL_NIL) {
+            RTL_UNWIND (C->M) goto cleanup;
+
             rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
           }
         }
       }
 
-      rtl_popWorkingSet(C->M);
-      return;
-
+      goto cleanup;
     }
 
     fnDef = rtl_lookupFn(C->M->codeBase, head);
 
     if (fnDef != NULL && fnDef->macro != RTL_NIL) {
-      rtl_compile(C, ns, fnID,
-                  rtl_applyList(C->M,
-                                fnDef->macro,
-                                rtl_cdr(C->M, in)));
-      rtl_popWorkingSet(C->M);
-      return;
+      arg = rtl_xCdr(C->M, in);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      arg = rtl_xApplyList(C->M, fnDef->macro, arg);
+      RTL_UNWIND (C->M) goto cleanup;
+
+      rtl_xCompile(C, ns, fnID, arg);
+
+      goto cleanup;
     }
 
     // Fallthrough ...
 
   default:
-    out = rtl_macroExpand(C, ns, in);
+    out = rtl_xMacroExpand(C, ns, in);
+    RTL_UNWIND (C->M) goto cleanup;
+
     break;
   }
 
-  ir = rtl_exprToIntrinsic(C, out);
+  ir = rtl_xExprToIntrinsic(C, out);
+  RTL_UNWIND (C->M) goto cleanup;
+
   ir = rtl_transformIntrinsic(C, ir);
 
   rtl_tailCallPass(ir);
@@ -783,6 +956,7 @@ void rtl_compile(rtl_Compiler *C,
 
   rtl_emitIntrinsicCode(C, fnID, ir);
 
+cleanup:
   rtl_popWorkingSet(C->M);
 }
 
@@ -799,27 +973,34 @@ void __entryToIntrinsic(rtl_Machine *M,
 {
   intrAccum *acc = (intrAccum *)vaccum;
 
-  acc->intr = rtl_mkInsertIntrinsic(acc->intr,
-                                    rtl_exprToIntrinsic(acc->C, key),
-                                    rtl_exprToIntrinsic(acc->C, val));
+  rtl_Intrinsic *iKey, *iVal;
+
+  iKey = rtl_xExprToIntrinsic(acc->C, key);
+  RTL_UNWIND (M) return;
+
+  iVal = rtl_xExprToIntrinsic(acc->C, val);
+  RTL_UNWIND (M) return;
+
+  acc->intr = rtl_mkInsertIntrinsic(acc->intr, iKey, iVal);
 }
 
-rtl_Intrinsic *mapToIntrinsic(rtl_Compiler  *C,
-                              rtl_Word      map)
+static
+rtl_Intrinsic *xMapToIntrinsic(rtl_Compiler  *C,
+                               rtl_Word      map)
 {
   intrAccum acc = {
     .C    = C,
     .intr = rtl_mkConstantIntrinsic(RTL_MAP),
   };
 
-  rtl_visitMap(C->M, &acc, __entryToIntrinsic, map);
+  rtl_xVisitMap(C->M, &acc, __entryToIntrinsic, map);
 
   return acc.intr;
 }
 
-rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
+rtl_Intrinsic *rtl_xExprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 {
-  rtl_Word head, clause, tail, name;
+  rtl_Word head, clause, tail, name, arg;
   rtl_Word const *rptr;
   size_t len, i;
   rtl_Intrinsic **buf;
@@ -830,6 +1011,8 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
   rtl_Word      *labelsNames;
   size_t        labelsLen;
   size_t        labelsCap;
+
+  rtl_Intrinsic *a, *b, *c;
 
   rtl_Word *argNames;
   size_t   argNamesLen;
@@ -853,129 +1036,285 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
   switch (rtl_typeOf(sxp)) {
   case RTL_TUPLE:
-    rptr = rtl_reifyTuple(C->M, sxp, &len);
+    rptr = rtl_xReifyTuple(C->M, sxp, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     for (i = 0; i < len; i++) {
       if (bufCap == bufLen) {
         bufCap = !bufCap ? 4 : 2*bufCap;
         buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
       }
 
-      buf[bufLen++] = rtl_exprToIntrinsic(C, rptr[i]);
+      buf[bufLen++] = rtl_xExprToIntrinsic(C, rptr[i]);
+      RTL_UNWIND (C->M) break;
     }
 
     return rtl_mkTupleIntrinsic(buf, bufLen);
 
   case RTL_MAP:
-    return mapToIntrinsic(C, sxp);
+    return xMapToIntrinsic(C, sxp);
 
   case RTL_CONS:
-    head = rtl_car(C->M, sxp);
-    len  = rtl_listLength(C->M, sxp);
+    head = rtl_xCar(C->M, sxp);
+    RTL_UNWIND (C->M) return NULL;
+
+    len  = rtl_xListLength(C->M, sxp);
+    RTL_UNWIND (C->M) return NULL;
 
     if (head == symCache.intrinsic.cons) {
       assert(len == 3);
-      return rtl_mkConsIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                 rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkConsIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.car) {
       assert(len == 2);
-      return rtl_mkCarIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkCarIntrinsic(a);
 
     } else if (head == symCache.intrinsic.cdr) {
       assert(len == 2);
-      return rtl_mkCdrIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkCdrIntrinsic(a);
 
     } else if (head == symCache.intrinsic.tuple) {
-      for (tail = rtl_cdr(C->M, sxp);
+      for (tail = rtl_xCdr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
       }
 
       return rtl_mkTupleIntrinsic(buf, bufLen);
 
     } else if (head == symCache.intrinsic.len) {
-      return rtl_mkLenIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkLenIntrinsic(a);
 
     } else if (head == symCache.intrinsic.get) {
-      return rtl_mkGetIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkGetIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.pushFirst) {
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_FIRST,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_FIRST, a, b);
 
     } else if (head == symCache.intrinsic.pushLast) {
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_LAST,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_PUSH_LAST, a, b);
 
     } else if (head == symCache.intrinsic.concat) {
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_CONCAT,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_CONCAT, a, b);
 
     } else if (head == symCache.intrinsic.slice) {
-      return rtl_mkSliceIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, rtl_cdr(C->M, sxp))));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdddr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      c = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkSliceIntrinsic(a, b, c);
 
     } else if (head == symCache.intrinsic.map) {
       return rtl_mkConstantIntrinsic(RTL_MAP);
 
     } else if (head == symCache.intrinsic.insert) {
-      return rtl_mkInsertIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdddr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      c = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkInsertIntrinsic(a, b, c);
 
     } else if (head == symCache.intrinsic.lookup) {
-      return rtl_mkLookupIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdddr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      c = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkLookupIntrinsic(a, b, c);
 
     } else if (head == symCache.intrinsic.dynGet) {
-      return rtl_mkDynGetIntrinsic(rtl_cadr(C->M, sxp));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkDynGetIntrinsic(arg);
 
     } else if (head == symCache.intrinsic.dynSet) {
-      return rtl_mkDynSetIntrinsic(rtl_cadr(C->M, sxp),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      name = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkDynSetIntrinsic(name, a);
 
     } else if (head == symCache.intrinsic.bind) {
-      for (tail = rtl_cddr(C->M, sxp);
+      for (tail = rtl_xCddr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
       }
 
-      return rtl_mkBindIntrinsic(rtl_car(C->M, rtl_cadr(C->M, sxp)),
-                                 rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdadr(C->M, sxp))),
-                                 buf,
-                                 bufLen);
+      name = rtl_xCaadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdadr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBindIntrinsic(name, a, buf, bufLen);
 
     } else if (head == symCache.intrinsic.progn) {
-      for (tail = rtl_cdr(C->M, sxp);
+      for (tail = rtl_xCdr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, rtl_xCar(C->M, tail));
+        RTL_UNWIND (C->M) return NULL;
       }
 
       return rtl_mkPrognIntrinsic(buf, bufLen);
@@ -983,30 +1322,38 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else if (head == symCache.intrinsic.lambda) {
       assert(len >= 2);
 
-      for (tail = rtl_cadr(C->M, sxp);
+      for (tail = rtl_xCadr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
-        assert(rtl_isSymbol(rtl_car(C->M, tail)));
+        RTL_UNWIND (C->M) return NULL;
+        assert(rtl_isSymbol(rtl_xCar(C->M, tail)));
 
         if (argNamesCap == argNamesLen) {
           argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
           argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
         }
 
-        argNames[argNamesLen++] = rtl_car(C->M, tail);
+        argNames[argNamesLen++] = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
       }
 
-      for (tail = rtl_cddr(C->M, sxp);
+      for (tail = rtl_xCddr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
       }
 
       return rtl_mkLambdaIntrinsic(argNames, argNamesLen, buf, bufLen);
@@ -1014,34 +1361,43 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else if (head == symCache.intrinsic.labels) {
       assert(len >= 2);
 
-      for (clause = rtl_cadr(C->M, sxp);
+      for (clause = rtl_xCadr(C->M, sxp);
            clause != RTL_NIL;
-           clause = rtl_cdr(C->M, clause))
+           clause = rtl_xCdr(C->M, clause))
       {
-        for (tail = rtl_cadar(C->M, clause);
+        RTL_UNWIND (C->M) return NULL;
+        for (tail = rtl_xCadar(C->M, clause);
              tail != RTL_NIL;
-             tail = rtl_cdr(C->M, tail))
+             tail = rtl_xCdr(C->M, tail))
         {
-          assert(rtl_isSymbol(rtl_car(C->M, tail)));
+          RTL_UNWIND (C->M) return NULL;
+          assert(rtl_isSymbol(rtl_xCar(C->M, tail)));
 
           if (argNamesCap == argNamesLen) {
             argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
             argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
           }
 
-          argNames[argNamesLen++] = rtl_car(C->M, tail);
+          argNames[argNamesLen++] = rtl_xCar(C->M, tail);
+          RTL_UNWIND (C->M) return NULL;
         }
 
-        for (tail = rtl_cddar(C->M, clause);
+        for (tail = rtl_xCddar(C->M, clause);
              tail != RTL_NIL;
-             tail = rtl_cdr(C->M, tail))
+             tail = rtl_xCdr(C->M, tail))
         {
+          RTL_UNWIND (C->M) return NULL;
+
           if (bufCap == bufLen) {
             bufCap = !bufCap ? 4 : 2*bufCap;
             buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
           }
 
-          buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+          arg = rtl_xCar(C->M, tail);
+          RTL_UNWIND (C->M) return NULL;
+
+          buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+          RTL_UNWIND (C->M) return NULL;
         }
 
         if (labelsCap == labelsLen) {
@@ -1050,7 +1406,9 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
           labelsNames = realloc(labelsNames, sizeof(rtl_Word)*labelsCap);
         }
 
-        labelsNames[labelsLen] = rtl_caar(C->M, clause);
+        labelsNames[labelsLen] = rtl_xCaar(C->M, clause);
+        RTL_UNWIND (C->M) return NULL;
+
         labels[labelsLen++]    = rtl_mkLambdaIntrinsic(argNames, argNamesLen,
                                                        buf,      bufLen);
 
@@ -1061,16 +1419,22 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
         bufCap = bufLen = 0;
       }
 
-      for (tail = rtl_cddr(C->M, sxp);
+      for (tail = rtl_xCddr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
-          if (bufCap == bufLen) {
-            bufCap = !bufCap ? 4 : 2*bufCap;
-            buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
-          }
+        RTL_UNWIND (C->M) return NULL;
+        if (bufCap == bufLen) {
+          bufCap = !bufCap ? 4 : 2*bufCap;
+          buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
+        }
 
-          buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
+
       }
 
       return rtl_mkLabelsIntrinsic(labelsNames, labels, labelsLen, buf, bufLen);
@@ -1079,20 +1443,23 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
                head == symCache.intrinsic.defmacro) {
       assert(len >= 3);
 
-      name = rtl_cadr(C->M, sxp);
+      name = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
 
-      for (tail =  rtl_caddr(C->M, sxp);
+      for (tail = rtl_xCaddr(C->M, sxp);
            rtl_isCons(tail);
-           tail =  rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
-        assert(rtl_isSymbol(rtl_car(C->M, tail)));
+        RTL_UNWIND (C->M) return NULL;
+        assert(rtl_isSymbol(rtl_xCar(C->M, tail)));
 
         if (argNamesCap == argNamesLen) {
           argNamesCap = !argNamesCap ? 4 : argNamesCap*2;
           argNames    = realloc(argNames, sizeof(rtl_Word)*argNamesCap);
         }
 
-        argNames[argNamesLen++] = rtl_car(C->M, tail);
+        argNames[argNamesLen++] = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
       }
 
       if (!rtl_isNil(tail)) {
@@ -1107,16 +1474,22 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
         hasRestArg = true;
       }
 
-      for (tail = rtl_cdddr(C->M, sxp);
+      for (tail = rtl_xCdddr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
       }
 
       if (head == symCache.intrinsic.defun) {
@@ -1136,184 +1509,470 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
       }
     } else if (head == symCache.intrinsic.export) {
       assert(len == 2);
-      return rtl_mkExportIntrinsic(rtl_cadr(C->M, sxp));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkExportIntrinsic(arg);
 
     } else if (head == symCache.intrinsic.quote) {
       assert(len == 2);
-      return rtl_mkQuoteIntrinsic(rtl_cadr(C->M, sxp));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkQuoteIntrinsic(arg);
 
     } else if (head == symCache.intrinsic.iadd) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IADD,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IADD, a, b);
 
     } else if (head == symCache.intrinsic.isub) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISUB,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISUB, a, b);
 
     } else if (head == symCache.intrinsic.imul) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMUL,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMUL, a, b);
       
     } else if (head == symCache.intrinsic.idiv) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IDIV,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
-      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IDIV, a, b);
+
     } else if (head == symCache.intrinsic.imod) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMOD,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_IMOD, a, b);
       
     } else if (head == symCache.intrinsic.lt) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LT,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LT, a, b);
       
     } else if (head == symCache.intrinsic.leq) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LEQ,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_LEQ, a, b);
       
     } else if (head == symCache.intrinsic.gt) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GT,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GT, a, b);
       
     } else if (head == symCache.intrinsic.geq) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GEQ,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_GEQ, a, b);
       
     } else if (head == symCache.intrinsic.eq) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_EQ,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_EQ, a, b);
       
     } else if (head == symCache.intrinsic.neq) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_NEQ,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_NEQ, a, b);
       
     } else if (head == symCache.intrinsic.iso) {
       assert(len == 3);
-      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISO,
-                                  rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                  rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkBinopIntrinsic(RTL_INTRINSIC_ISO, a, b);
 
     } else if (head == symCache.intrinsic.nilp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_NIL,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_NIL, a);
 
     } else if (head == symCache.intrinsic.symbolp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_SYMBOL,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_SYMBOL, a);
 
     } else if (head == symCache.intrinsic.selectorp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_SELECTOR,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_SELECTOR, a);
 
     } else if (head == symCache.intrinsic.int28p) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_INT28,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_INT28, a);
 
     } else if (head == symCache.intrinsic.fix14p) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_FIX14,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_FIX14, a);
 
     } else if (head == symCache.intrinsic.tuplep) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_TUPLE,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_TUPLE, a);
 
     } else if (head == symCache.intrinsic.charp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_CHAR,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_CHAR, a);
 
     } else if (head == symCache.intrinsic.mapp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_MAP,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_MAP, a);
 
     } else if (head == symCache.intrinsic.consp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_CONS,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_CONS, a);
 
     } else if (head == symCache.intrinsic.functionp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_FUNCTION,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_FUNCTION, a);
 
     } else if (head == symCache.intrinsic.closurep) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_CLOSURE,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_CLOSURE, a);
 
     } else if (head == symCache.intrinsic.unresolvedp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_UNRESOLVED_SYMBOL,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_UNRESOLVED_SYMBOL, a);
 
     } else if (head == symCache.intrinsic.topp) {
       assert(len == 2);
-      return rtl_mkTypePredIntrinsic(RTL_TOP,
-                                     rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)));
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkTypePredIntrinsic(RTL_TOP, a);
 
     } else if (head == symCache.intrinsic._if) {
       assert(len == 3 || len == 4);
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
 
-      return rtl_mkIfIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                               rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-                               rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdddr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      c = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkIfIntrinsic(a, b, c);
 
     } else if (head == symCache.intrinsic.applyList) {
       assert(len == 3);
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
 
-      return rtl_mkApplyListIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                      rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkApplyListIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.applyTuple) {
       assert(len == 3);
+      
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
 
-      return rtl_mkApplyTupleIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                       rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkApplyTupleIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.setVar) {
-      return rtl_mkSetVarIntrinsic(rtl_cadr(C->M, sxp),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      name = rtl_xCadr(C->M, sxp);
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkSetVarIntrinsic(name, a);
 
     } else if (head == symCache.intrinsic.setCar) {
-      return rtl_mkSetCarIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkSetCarIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.setCdr) {
-      return rtl_mkSetCdrIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                   rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkSetCdrIntrinsic(a, b);
 
     } else if (head == symCache.intrinsic.setElem) {
-      return rtl_mkSetElemIntrinsic(rtl_exprToIntrinsic(C, rtl_cadr(C->M, sxp)),
-                                    rtl_exprToIntrinsic(C, rtl_caddr(C->M, sxp)),
-                                    rtl_exprToIntrinsic(C, rtl_car(C->M, rtl_cdddr(C->M, sxp))));
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCar(C->M, rtl_xCdddr(C->M, sxp));
+      RTL_UNWIND (C->M) return NULL;
+
+      c = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkSetElemIntrinsic(a, b, c);
 
     } else if (head == symCache.intrinsic.yield) {
       return rtl_mkYieldIntrinsic();
@@ -1325,21 +1984,31 @@ rtl_Intrinsic *rtl_exprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
     } else {
       assert(len >= 1);
 
-      for (tail = rtl_cdr(C->M, sxp);
+      for (tail = rtl_xCdr(C->M, sxp);
            tail != RTL_NIL;
-           tail = rtl_cdr(C->M, tail))
+           tail = rtl_xCdr(C->M, tail))
       {
+        RTL_UNWIND (C->M) return NULL;
+
         if (bufCap == bufLen) {
           bufCap = !bufCap ? 4 : 2*bufCap;
           buf    = realloc(buf, sizeof(rtl_Intrinsic *)*bufCap);
         }
 
-        buf[bufLen++] = rtl_exprToIntrinsic(C, rtl_car(C->M, tail));
+        arg = rtl_xCar(C->M, tail);
+        RTL_UNWIND (C->M) return NULL;
+
+        buf[bufLen++] = rtl_xExprToIntrinsic(C, arg);
+        RTL_UNWIND (C->M) return NULL;
       }
 
-      return rtl_mkCallIntrinsic(rtl_exprToIntrinsic(C, rtl_car(C->M, sxp)),
-                                 buf,
-                                 bufLen);
+      arg = rtl_xCar(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkCallIntrinsic(a, buf, bufLen);
     } break;
 
   case RTL_SYMBOL:
@@ -1910,7 +2579,8 @@ size_t quoteMapCodeSize(rtl_Machine *M, rtl_Word map)
 {
   size_t codeSize = 1;
 
-  rtl_visitMap(M, &codeSize, __quoteEntryCodeSize, map);
+  rtl_xVisitMap(M, &codeSize, __quoteEntryCodeSize, map);
+  RTL_ASSERT_NO_UNWIND(M);
 
   return codeSize;
 }
@@ -1920,6 +2590,8 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
 {
   rtl_Word const *rptr;
   size_t i, len, codeSize;
+
+  rtl_Word a, b;
 
   switch (rtl_typeOf(x)) {
   case RTL_NIL:
@@ -1941,8 +2613,14 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
     }
 
   case RTL_CONS:
-    return quoteCodeSize(M, rtl_car(M, x))
-         + quoteCodeSize(M, rtl_cdr(M, x))
+    a = rtl_xCar(M, x);
+    RTL_ASSERT_NO_UNWIND(M);
+
+    b = rtl_xCdr(M, x);
+    RTL_ASSERT_NO_UNWIND(M);
+
+    return quoteCodeSize(M, a)
+         + quoteCodeSize(M, b)
          + 1;
 
   case RTL_MAP:
@@ -1950,7 +2628,8 @@ size_t quoteCodeSize(rtl_Machine *M, rtl_Word x)
 
   case RTL_TUPLE:
     codeSize = 0;
-    rptr = rtl_reifyTuple(M, x, &len);
+    rptr = rtl_xReifyTuple(M, x, &len);
+    RTL_ASSERT_NO_UNWIND(M);
 
     for (i = 0; i < len; i++) {
       codeSize += quoteCodeSize(M, rptr[i]);
@@ -2287,7 +2966,8 @@ void emitMapQuoteCode(rtl_Compiler        *C,
 
   rtl_emitByteToFunc(C->M->codeBase, fnID, RTL_OP_MAP);
 
-  rtl_visitMap(C->M, &acc, __emitEntryQuoteCode, map);
+  rtl_xVisitMap(C->M, &acc, __emitEntryQuoteCode, map);
+  RTL_ASSERT_NO_UNWIND(C->M);
 }
 
 void rtl_emitAtomConst(rtl_CodeBase *codeBase, uint32_t fnID, rtl_Word expr)
@@ -2370,6 +3050,8 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
   rtl_Word const *rptr;
   size_t i, len;
 
+  rtl_Word a, b;
+
   rtl_CodeBase *codeBase;
 
   codeBase = C->M->codeBase;
@@ -2385,9 +3067,15 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
     rtl_emitAtomConst(codeBase, fnID, expr);
     break;
 
-   case RTL_CONS:
-    emitQuoteCode(C, fnID, rtl_car(C->M, expr));
-    emitQuoteCode(C, fnID, rtl_cdr(C->M, expr));
+  case RTL_CONS:
+    a = rtl_xCar(C->M, expr);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    b = rtl_xCdr(C->M, expr);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
+    emitQuoteCode(C, fnID, a);
+    emitQuoteCode(C, fnID, b);
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_CONS);
     break;
 
@@ -2396,7 +3084,9 @@ void emitQuoteCode(rtl_Compiler *C, uint16_t fnID, rtl_Word expr)
     break;
 
   case RTL_TUPLE:
-    rptr = rtl_reifyTuple(C->M, expr, &len);
+    rptr = rtl_xReifyTuple(C->M, expr, &len);
+    RTL_ASSERT_NO_UNWIND(C->M);
+
     for (i = 0; i < len; i++) {
       emitQuoteCode(C, fnID, rptr[i]);
     }
@@ -2779,7 +3469,7 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
     break;
 
   case RTL_INTRINSIC_EXPORT:
-    rtl_export(C, x->as.export);
+    rtl_xExport(C, x->as.export);
     rtl_emitByteToFunc(codeBase, fnID, RTL_OP_TOP);
     break;
 

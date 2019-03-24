@@ -22,6 +22,6 @@ bool rtl_isNative(rtl_Word w) { return rtl_typeOf(w) == RTL_NATIVE; }
 
 rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size);
 
-void rtl_reifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t size);
+void rtl_xReifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t size);
 
 uint32_t rtl_sizeOfNative(rtl_Machine *M, rtl_Word native);
