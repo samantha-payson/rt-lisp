@@ -20,6 +20,11 @@
 static inline
 int rtl_isMap(rtl_Word w) { return rtl_typeOf(w) == RTL_MAP; }
 
+static inline
+void rtl_xAssertMap(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_MAP, w);
+}
 
 static inline
 rtl_Word rtl_emptyMap() { return RTL_MAP; }

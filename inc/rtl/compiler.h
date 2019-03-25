@@ -17,55 +17,6 @@
 # error "rtl/compiler.h should only be included indirectly via rt-lisp.h"
 #endif
 
-typedef enum rtl_CompilerErrorType {
-  RTL_COMPILER_OK,
-  RTL_COMPILER_SYMBOL_NOT_EXPORTED,
-  RTL_COMPILER_NO_SUCH_PACKAGE,
-} rtl_CompilerErrorType;
-
-typedef struct rtl_CompilerError {
-  rtl_CompilerErrorType type;
-
-  union {
-    struct {
-      char const  *name;
-      rtl_Package *pkg;
-    } symbolNotExported;
-
-    struct {
-      char const *name;
-    } noSuchPackage;
-  } as;
-} rtl_CompilerError;
-
-static inline
-rtl_CompilerError __rtl_errSymbolNotExported(char const  *name,
-                                             rtl_Package *pkg)
-{
-  return (rtl_CompilerError) {
-    .type = RTL_COMPILER_SYMBOL_NOT_EXPORTED,
-    .as = {
-      .symbolNotExported = {
-        .name = name,
-        .pkg  = pkg,
-      },
-    },
-  };
-}
-
-static inline
-rtl_CompilerError __rtl_errNoSuchPackage(char const  *name)
-{
-  return (rtl_CompilerError) {
-    .type = RTL_COMPILER_NO_SUCH_PACKAGE,
-    .as = {
-      .noSuchPackage = {
-        .name = name,
-      },
-    },
-  };
-}
-
 #define RTL_COMPILER_PKG_HASH_SIZE 17
 #define RTL_COMPILER_CALL_SITE_HASH_SIZE 127
 
@@ -86,7 +37,6 @@ typedef struct rtl_CallSiteArray {
 } rtl_CallSiteArray;
 
 typedef struct rtl_Compiler {
-  rtl_CompilerError error;
 
   rtl_Machine *M;
 
@@ -121,14 +71,9 @@ rtl_FnDef *rtl_lookupFn(rtl_CodeBase *cb, rtl_Word name);
 rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *pkg);
 
 // Resolve a symbol in the given namespace.
-rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
-                           rtl_NameSpace const *ns,
-                           uint32_t            unresID);
-
-// Resolve a symbol in the given namespace.
-rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
-                             rtl_NameSpace const *ns,
-                             uint32_t            unresID);
+rtl_Word rtl_xResolveSymbol(rtl_Compiler        *C,
+                            rtl_NameSpace const *ns,
+                            rtl_Word            sym);
 
 // Compile the (already macro-expanded) S-Expr and emit the resulting to the
 // fnID'th function of C->M->codeBase.

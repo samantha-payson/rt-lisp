@@ -20,6 +20,12 @@
 static inline
 int rtl_isSymbol(rtl_Word w) { return rtl_typeOf(w) == RTL_SYMBOL; }
 
+static inline
+void rtl_xAssertSymbol(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_SYMBOL, w);
+}
+
 char const *rtl_symbolName(rtl_Word w);
 
 char const *rtl_symbolPackageName(rtl_Word w);

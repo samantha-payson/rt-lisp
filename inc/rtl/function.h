@@ -22,6 +22,12 @@ static inline
 bool rtl_isFunction(rtl_Word w) { return rtl_typeOf(w) == RTL_FUNCTION; }
 
 static inline
+void rtl_xAssertFunction(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_FUNCTION, w);
+}
+
+static inline
 uint32_t rtl_functionID(rtl_Word w) { return (w >> 4) & 0xFFFFFFF; }
 
 static inline

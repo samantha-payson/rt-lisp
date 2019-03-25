@@ -21,6 +21,12 @@ static inline
 int rtl_isInt28(rtl_Word w) { return rtl_typeOf(w) == RTL_INT28; }
 
 static inline
+void rtl_xAssertInt28(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_INT28, w);
+}
+
+static inline
 int32_t rtl_int28Value(rtl_Word w) { return (int32_t)w >> 4; }
 
 static inline

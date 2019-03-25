@@ -21,6 +21,12 @@ static inline
 int rtl_isFix14(rtl_Word w) { return rtl_typeOf(w) == RTL_FIX14; }
 
 static inline
+void rtl_xAssertFix14(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_FIX14, w);
+}
+
+static inline
 float rtl_fix14Value(rtl_Word w) {
   return (float)rtl_int28Value(w) / (float)(1 << 14);
 }

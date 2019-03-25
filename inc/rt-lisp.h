@@ -419,6 +419,21 @@ bool rtl_isClosure(rtl_Word w) {
   return rtl_typeOf(w) == w;
 }
 
+
+// Throw an exception which just consists of a message.
+void rtl_throwMsg(rtl_Machine *M, char const *type, char const *message);
+
+// Throw an exception for an incorrectly typed argument.
+void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj);
+
+static inline
+void rtl_xAssertType(rtl_Machine *M, rtl_WordType type, rtl_Word w)
+{
+  if (RTL_UNLIKELY(rtl_typeOf(w) != type)) {
+    rtl_throwWrongType(M, type, w);
+  }
+}
+
 #include "rtl/nil.h"
 #include "rtl/symbol.h"
 #include "rtl/selector.h"
@@ -450,9 +465,9 @@ rtl_Word rtl_xCall(rtl_Machine *M, rtl_Word addr);
 void rtl_xRun(rtl_Machine *M);
 
 rtl_Word __rtl_xCallWithArgs(rtl_Machine *M,
-                            rtl_Word    callable,
-                            rtl_Word    *args,
-                            size_t      argsLen);
+                             rtl_Word    callable,
+                             rtl_Word    *args,
+                             size_t      argsLen);
 
 #define rtl_xCallWithArgs(M, CALLABLE, ARGS...) ({                             \
       rtl_Word ___callArgs___[]  = { ARGS };                                   \
@@ -466,16 +481,6 @@ rtl_Word __rtl_xCallWithArgs(rtl_Machine *M,
 rtl_Word rtl_xApplyList(rtl_Machine *M, rtl_Word addr, rtl_Word argList);
 
 rtl_Word rtl_xListToTuple(rtl_Machine *M, rtl_Word list);
-
-rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
-                           rtl_NameSpace const *ns,
-                           uint32_t            unresID);
-
-// Throw an exception which just consists of a message.
-void rtl_throwMsg(rtl_Machine *M, char const *type, char const *message);
-
-// Throw an exception for an incorrectly typed argument.
-void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj);
 
 static inline
 bool rtl_clearException(rtl_Machine *M)

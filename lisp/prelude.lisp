@@ -226,7 +226,15 @@
                @(butlast body+arg))
              @(last body+arg)))
 
-  (export package require -> ->>
+  (defmacro <- (fn . arg*)
+    (if (nil? arg*)
+        fn
+      (let ((arg (car arg*)))
+        (if (cons? arg)
+            `(<- (~fn @arg) @(cdr arg*))
+          `(<- (~fn ~arg) @(cdr arg*))))))
+
+  (export package require -> ->> <-
           last butlast
           filter vfilter xfilter
           mapc-1 mapc-2 mapc-3 mapc-4 mapc vmapc

@@ -20,6 +20,12 @@
 static inline
 bool rtl_isNative(rtl_Word w) { return rtl_typeOf(w) == RTL_NATIVE; }
 
+static inline
+void rtl_xAssertNative(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_NATIVE, w);
+}
+
 rtl_Word rtl_native(rtl_Machine *M, void const *data, uint32_t size);
 
 void rtl_xReifyNative(rtl_Machine *M, rtl_Word w, void *out, uint32_t size);

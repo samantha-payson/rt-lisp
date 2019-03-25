@@ -1509,7 +1509,7 @@ void rtl_throwWrongType(rtl_Machine *M, rtl_WordType type, rtl_Word obj)
     break;
   }
 
-  snprintf(message, 256, "Wrong argument type, expected '%s', got '%s'.",
+  snprintf(message, 256, "Wrong type, expected '%s', got '%s'.",
            rtl_typeName(type),
            rtl_typeNameOf(obj));
 
@@ -1547,13 +1547,13 @@ void rtl_xRun(rtl_Machine *M)
 {
   rtl_OpEncoding enc;
 
-  uint8_t     imm8;
+  uint8_t     imm8  = 0;
 
-  uint16_t    imm16,
-              frame,
-              index;
+  uint16_t    imm16 = 0,
+              frame = 0,
+              index = 0;
 
-  rtl_Word    immW;
+  rtl_Word    immW = 0;
 
   uint32_t    gen,
               offs;
@@ -2255,6 +2255,12 @@ void rtl_xRun(rtl_Machine *M)
 
       rtl_xReifyTuple(M, a, &len);
       RTL_UNWIND (M) continue;
+
+      if (len < (size_t)imm16) {
+        rtl_throwMsg(M, "out-of-bounds",
+                     "rest instruction references out-of-bounds arguments.");
+        continue;
+      }
 
       // Cons up the end of that tuple into a list.
       b = RTL_NIL;

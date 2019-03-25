@@ -20,6 +20,12 @@
 static inline
 int rtl_isTuple(rtl_Word w) { return rtl_typeOf(w) == RTL_TUPLE; }
 
+static inline
+void rtl_xAssertTuple(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_TUPLE, w);
+}
+
 rtl_Word *rtl_allocTuple(rtl_Machine *M, rtl_Word *w, size_t len);
 
 // Return a pointer to the fields of tpl. Write the length of that tuple to

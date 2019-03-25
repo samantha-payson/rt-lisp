@@ -19,3 +19,9 @@
 
 static inline
 int rtl_isTop(rtl_Word w) { return rtl_typeOf(w) == RTL_TOP; }
+
+static inline
+void rtl_xAssertTop(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_TOP, w);
+}

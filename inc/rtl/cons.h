@@ -20,6 +20,12 @@
 static inline
 int rtl_isCons(rtl_Word w) { return rtl_typeOf(w) == RTL_CONS; }
 
+static inline
+void rtl_xAssertCons(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_CONS, w);
+}
+
 // Return a pointer to two consecutive rtl_Words -- [0] = CAR and [1] = CDR
 // respectively.
 rtl_Word const *rtl_xReifyCons(rtl_Machine *M, rtl_Word cons);

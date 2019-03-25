@@ -19,3 +19,9 @@
 
 static inline
 int rtl_isNil(rtl_Word w) { return rtl_typeOf(w) == RTL_NIL; }
+
+static inline
+void rtl_xAssertNil(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_NIL, w);
+}

@@ -23,6 +23,12 @@ static inline
 bool rtl_isChar(rtl_Word w) { return rtl_typeOf(w) == RTL_CHAR; }
 
 static inline
+void rtl_xAssertChar(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_CHAR, w);
+}
+
+static inline
 rtl_Word rtl_char(utf8_int32_t c) { return (c << 4) | RTL_CHAR; }
 
 static inline

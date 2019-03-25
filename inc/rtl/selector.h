@@ -21,6 +21,12 @@ static inline
 int rtl_isSelector(rtl_Word w) { return rtl_typeOf(w) == RTL_SELECTOR; }
 
 static inline
+void rtl_xAssertSelector(rtl_Machine *M, rtl_Word w)
+{
+  rtl_xAssertType(M, RTL_SELECTOR, w);
+}
+
+static inline
 rtl_Word rtl_selector(uint32_t id) { return (id << 4) | RTL_SELECTOR; }
 
 static inline

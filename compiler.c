@@ -334,9 +334,9 @@ void rtl_initCompiler(rtl_Compiler *C, rtl_Machine *M) {
   memset(C->pkgByID,         0, sizeof C->pkgByID);
 }
 
-rtl_Word rtl_resolveAll(rtl_Compiler *C,
-                        rtl_NameSpace const *ns,
-                        rtl_Word sxp);
+rtl_Word rtl_xResolveAll(rtl_Compiler *C,
+                         rtl_NameSpace const *ns,
+                         rtl_Word sxp);
 
 typedef struct mapAccum {
   rtl_Compiler         *C;
@@ -354,15 +354,19 @@ void __resolveMapEntry(rtl_Machine *M,
 
   RTL_PUSH_WORKING_SET(M, &key, &val);
 
-  key = rtl_resolveAll(acc->C, acc->ns, key);
-  val = rtl_resolveAll(acc->C, acc->ns, val);
+  key = rtl_xResolveAll(acc->C, acc->ns, key);
+  RTL_UNWIND (M) goto cleanup;
+
+  val = rtl_xResolveAll(acc->C, acc->ns, val);
+  RTL_UNWIND (M) goto cleanup;
 
   acc->map = rtl_xMapInsert(M, acc->map, key, val);
 
+ cleanup:
   rtl_popWorkingSet(M);
 }
 
-rtl_Word rtl_resolveMap(rtl_Compiler *C,
+rtl_Word rtl_xResolveMap(rtl_Compiler *C,
                         rtl_NameSpace const *ns,
                         uint32_t mask,
                         rtl_Word map)
@@ -382,9 +386,9 @@ rtl_Word rtl_resolveMap(rtl_Compiler *C,
   return acc.map;
 }
 
-rtl_Word rtl_resolveAll(rtl_Compiler *C,
-                        rtl_NameSpace const *ns,
-                        rtl_Word in)
+rtl_Word rtl_xResolveAll(rtl_Compiler *C,
+                         rtl_NameSpace const *ns,
+                         rtl_Word in)
 {
   rtl_Word a = RTL_NIL, b = RTL_NIL, out = RTL_NIL;
 
@@ -396,11 +400,11 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
-    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
+    out = rtl_xResolveSymbol(C, ns, in);
     break;
 
   case RTL_MAP:
-    out = rtl_resolveMap(C, ns, 1, in);
+    out = rtl_xResolveMap(C, ns, 1, in);
     break;
 
   case RTL_TUPLE:
@@ -412,15 +416,22 @@ rtl_Word rtl_resolveAll(rtl_Compiler *C,
     RTL_ASSERT_NO_UNWIND(C->M);
 
     for (i = 0; i < len; i++) {
-      wptr[i] = rtl_resolveAll(C, ns, rptr[i]);
+      wptr[i] = rtl_xResolveAll(C, ns, rptr[i]);
+      RTL_UNWIND (C->M) break;
     } break;
     
   case RTL_CONS:
-    a = rtl_resolveAll(C, ns, rtl_xCar(C->M, in));
+    a = rtl_xCar(C->M, in);
     RTL_ASSERT_NO_UNWIND(C->M);
 
-    b = rtl_resolveAll(C, ns, rtl_xCdr(C->M, in));
+    a = rtl_xResolveAll(C, ns, a);
+    RTL_UNWIND (C->M) break;
+
+    b = rtl_xCdr(C->M, in);
     RTL_ASSERT_NO_UNWIND(C->M);
+
+    b = rtl_xResolveAll(C, ns, b);
+    RTL_UNWIND (C->M) break;
 
     out = rtl_cons(C->M, a, b);
     break;
@@ -488,7 +499,10 @@ rtl_Word rtl_xMacroExpandLambda(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Wo
 
   RTL_PUSH_WORKING_SET(C->M, &in, &arg, &out, &tail);
 
-  arg = rtl_resolveAll(C, ns, rtl_xCar(C->M, in));
+  arg = rtl_xCar(C->M, in);
+  RTL_UNWIND (C->M) goto cleanup;
+
+  arg = rtl_xResolveAll(C, ns, arg);
   RTL_UNWIND (C->M) goto cleanup;
 
   out = rtl_cons(C->M, arg, RTL_NIL);
@@ -538,7 +552,7 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
-    out = rtl_resolveSymbol(C, ns, rtl_symbolID(in));
+    out = rtl_xResolveSymbol(C, ns, in);
     break;
 
   case RTL_TUPLE:
@@ -622,7 +636,7 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       out = in;
 
     } else if (head == symCache.intrinsic.quote) {
-      out = rtl_resolveAll(C, ns, in);
+      out = rtl_xResolveAll(C, ns, in);
 
     } else if (head == symCache.intrinsic.lambda) {
       tail = rtl_xCdr(C->M, in);
@@ -641,7 +655,7 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
         name = rtl_xCaar(C->M, clause);
         RTL_UNWIND (C->M) break;
 
-        name = rtl_resolveSymbol(C, ns, rtl_symbolID(name));
+        name = rtl_xResolveSymbol(C, ns, name);
 
         tail = rtl_xCdar(C->M, clause);
         RTL_UNWIND (C->M) break;
@@ -684,12 +698,14 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       name = rtl_xCadr(C->M, in);
       RTL_UNWIND (C->M) break;
 
-      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
-                      tail);
+      name = rtl_xResolveSymbol(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_cons(C->M, name, tail);
       out = rtl_cons(C->M, head, tail);
 
     } else if (head == symCache.intrinsic.dynGet) {
-      out = rtl_resolveAll(C, ns, in);
+      out = rtl_xResolveAll(C, ns, in);
 
     } else if (head == symCache.intrinsic.dynSet) {
       tail = rtl_xCaddr(C->M, in);
@@ -703,8 +719,10 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       name = rtl_xCadr(C->M, in);
       RTL_UNWIND (C->M) break;
 
-      tail = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
-                      tail);
+      name = rtl_xResolveSymbol(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      tail = rtl_cons(C->M, name, tail);
 
       out = rtl_cons(C->M, head, tail);
 
@@ -720,8 +738,10 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
       name = rtl_xCaadr(C->M, in);
       RTL_UNWIND (C->M) break;
 
-      clause = rtl_cons(C->M, rtl_resolveSymbol(C, ns, rtl_symbolID(name)),
-                        clause);
+      name = rtl_xResolveSymbol(C, ns, name);
+      RTL_UNWIND (C->M) break;
+
+      clause = rtl_cons(C->M, name, clause);
 
       out = RTL_NIL;
 

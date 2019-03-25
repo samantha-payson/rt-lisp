@@ -255,14 +255,12 @@ uint32_t resolvePkgID(rtl_NameSpace const *ns, UnresolvedSymbol const *usym)
 }
 
 static
-rtl_Package *rtl_resolvePackage(rtl_Compiler *C, uint32_t id)
+rtl_Package *rtl_xResolvePackage(rtl_Compiler *C, uint32_t id)
 {
-  Package     *pkg;
   rtl_Package *rtlPkg;
   uint32_t    idx;
 
   assert(id < pkgNextID);
-  pkg = pkgByID[id];
 
   idx = id % RTL_COMPILER_PKG_HASH_SIZE;
 
@@ -272,15 +270,15 @@ rtl_Package *rtl_resolvePackage(rtl_Compiler *C, uint32_t id)
     }
   }
 
-  // We didn't find a package with the given ID, error!
-  C->error = __rtl_errNoSuchPackage(pkg->name);
+  rtl_throwMsg(C->M, "unknown-package",
+               "Can't resolve package with a given ID (likely compiler bug).");
 
   return NULL;
 }
 
-rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
-                           rtl_NameSpace const *ns,
-                           uint32_t            unresID)
+rtl_Word rtl_xResolveSymbol(rtl_Compiler        *C,
+                            rtl_NameSpace const *ns,
+                            rtl_Word            sym)
 {
   UnresolvedSymbol const *usym;
   rtl_NameSpace const    *seek;
@@ -288,6 +286,24 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
   uint32_t    pkgID;
   rtl_Package *pkg;
   size_t      i;
+
+  uint32_t unresID;
+
+  size_t const errBufLen = 1024;
+
+  char errBuf[errBufLen];
+
+  if (rtl_isSymbol(sym)) {
+    return sym;
+  }
+
+  if (rtl_typeOf(sym) != RTL_UNRESOLVED_SYMBOL) {
+    // Throw RTL_SYMBOL for a clearer error message...
+    rtl_throwWrongType(C->M, RTL_SYMBOL, sym);
+    return RTL_NIL;
+  }
+
+  unresID = rtl_symbolID(sym);
 
   assert(unresID < unresNextID);
 
@@ -325,12 +341,10 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
   // Ok, it wasn't a simple alias, now we need to resolve this symbol within a
   // package.
   pkgID = resolvePkgID(ns, usym);
-  pkg   = rtl_resolvePackage(C, pkgID);
+  pkg   = rtl_xResolvePackage(C, pkgID);
+  RTL_UNWIND (C->M) return RTL_NIL;
 
-  if (NULL == pkg) {
-    printf("No such package as %s in %s:%s!", usym->pkg, usym->pkg, usym->name);
-    abort();
-  } else if (pkg != ns->currentPkg) {
+  if (pkg != ns->currentPkg) {
     // pkg is not the current package, this means that the symbol was qualified
     // and the qualifier refers to a different package.
     //
@@ -342,62 +356,16 @@ rtl_Word rtl_resolveSymbol(rtl_Compiler        *C,
       }
     }
 
-    // .. or return an error if there is no exported symbol with that name.
-    printf("Symbol referred to as %s:%s not exported from package %s!\n",
-           usym->pkg, usym->name, pkg->name);
-    abort();
+    // .. or throw an exception if there is no exported symbol with that name.
+    snprintf(errBuf, errBufLen,
+             "Symbol referred to as %s:%s not exported from package %s!\n",
+             usym->pkg, usym->name, pkg->name);
+
+    rtl_throwMsg(C->M, "not-exported", errBuf);
+    return RTL_NIL;
   } else {
     // pkg is the current package, just intern the symbol.
     return rtl_symbol(rtl_internSymbolID(pkgID, usym->name));
-  }
-}
-
-rtl_Word rtl_resolveSelector(rtl_Compiler        *C,
-                             rtl_NameSpace const *ns,
-                             uint32_t            unresID)
-{
-  UnresolvedSymbol const *usym;
-
-  uint32_t    pkgID;
-  rtl_Package *pkg;
-  size_t      i;
-
-  assert(unresID < unresNextID);
-
-  usym  = unresByID[unresID];
-
-  // First check to see if this is an unqualified selector
-  if (NULL == usym->pkg) {
-    pkgID = rtl_internPackageID("");
-    return rtl_selector(rtl_internSymbolID(pkgID, usym->name));
-  }
-
-  // Ok, this is a qualified selector, resolve the package.
-  pkgID = resolvePkgID(ns, usym);
-  pkg   = rtl_resolvePackage(C, pkgID);
-
-  if (NULL == pkg) // Check for errors resolving package...
-    return RTL_NIL;
-
-  if (pkg != ns->currentPkg) {
-    // pkg is not the current package, this means that the symbol was qualified
-    // and the qualifier refers to a different package.
-    //
-    // Check to see if that package exports a symbol with the name we want ..
-    for (i = 0; i < pkg->selectorExportsLen; i++) {
-      if (!strcmp(pkg->selectorExports[i].name, usym->name)) {
-        // .. then return it if we find one ..
-        return pkg->selectorExports[i].selector;
-      }
-    }
-
-    // .. or return an error if there is no exported symbol with that name.
-    C->error = __rtl_errSymbolNotExported(usym->name, pkg);
-    abort();
-    return RTL_NIL;
-  } else {
-    // pkg is the current package, just intern the symbol.
-    return rtl_selector(rtl_internSymbolID(pkgID, usym->name));
   }
 }
 
@@ -428,10 +396,6 @@ rtl_Package *rtl_internPackage(rtl_Compiler *C, char const *name)
   rtlPkg->symbolExportsLen = 0;
   rtlPkg->symbolExportsCap = 0;
 
-  rtlPkg->selectorExports    = NULL;
-  rtlPkg->selectorExportsLen = 0;
-  rtlPkg->selectorExportsCap = 0;
-
   rtlPkg->next    = C->pkgByID[idx];
   C->pkgByID[idx] = rtlPkg;
 
@@ -454,46 +418,27 @@ void rtl_xExport(rtl_Compiler *C, rtl_Word w)
   assert(id < symNextID);
 
   sym = symByID[id];
-  pkg = rtl_resolvePackage(C, sym->pkg->id);
+  pkg = rtl_xResolvePackage(C, sym->pkg->id);
+  RTL_UNWIND (C->M) return;
 
-  if (rtl_isSymbol(w)) {
-    // Check if this symbol has already been exported ..
-    for (i = 0; i < pkg->symbolExportsLen; i++) {
-      if (pkg->symbolExports[i].symbol == w)
-        // .. if so, just return.
-        return;
+  // Check if this symbol has already been exported ..
+  for (i = 0; i < pkg->symbolExportsLen; i++) {
+    if (pkg->symbolExports[i].symbol == w) {
+      // .. if so, just return.
+      return;
     }
-
-    if (pkg->symbolExportsCap == pkg->symbolExportsLen) {
-      pkg->symbolExportsCap = pkg->symbolExportsCap == 0 ? 32 : 2*pkg->symbolExportsCap;
-      pkg->symbolExports    = realloc(pkg->symbolExports,
-                                      sizeof(rtl_PkgSymbolExport)*pkg->symbolExportsCap);
-    }
-
-    pkg->symbolExports[pkg->symbolExportsLen++] = (rtl_PkgSymbolExport) {
-      .name   = sym->name,
-      .symbol = w,
-    };
-
-  } else {
-    // Check if this selector has already been exported ..
-    for (i = 0; i < pkg->selectorExportsLen; i++) {
-      if (pkg->selectorExports[i].selector == w)
-        // .. if so, just return.
-        return;
-    }
-
-    if (pkg->selectorExportsCap == pkg->selectorExportsLen) {
-      pkg->selectorExportsCap = pkg->selectorExportsCap == 0 ? 32 : 2*pkg->selectorExportsCap;
-      pkg->selectorExports    = realloc(pkg->selectorExports,
-                                        sizeof(rtl_PkgSelectorExport)*pkg->selectorExportsCap);
-    }
-
-    pkg->selectorExports[pkg->selectorExportsLen++] = (rtl_PkgSelectorExport) {
-      .name     = sym->name,
-      .selector = w,
-    };
   }
+
+  if (pkg->symbolExportsCap == pkg->symbolExportsLen) {
+    pkg->symbolExportsCap = pkg->symbolExportsCap == 0 ? 32 : 2*pkg->symbolExportsCap;
+    pkg->symbolExports    = realloc(pkg->symbolExports,
+                                    sizeof(rtl_PkgSymbolExport)*pkg->symbolExportsCap);
+  }
+
+  pkg->symbolExports[pkg->symbolExportsLen++] = (rtl_PkgSymbolExport) {
+    .name   = sym->name,
+    .symbol = w,
+  };
 }
 
 char const *rtl_symbolName(rtl_Word w)
