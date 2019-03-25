@@ -501,7 +501,7 @@ bool rtl_clearException(rtl_Machine *M)
   return wasExn;
 }
 
-rtl_Word rtl_read(rtl_Compiler *C, FILE *f);
+rtl_Word rtl_xRead(rtl_Compiler *C, FILE *f);
 
 void rtl_setVar(rtl_Machine *M, rtl_Word key, rtl_Word value);
 

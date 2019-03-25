@@ -32,7 +32,7 @@ void eatWhitespace(FILE *f)
   ungetc(ch, f);
 }
 
-rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
+rtl_Word rtl_xReadAtom(rtl_Compiler *C, FILE *f, int first)
 {
   char buf[512];
   char *ptr;
@@ -107,33 +107,35 @@ rtl_Word rtl_readAtom(rtl_Compiler *C, FILE *f, int first)
   }
 }
 
-int rtl_readDelim(rtl_Compiler *C, FILE *f, int delim)
+int rtl_xReadDelim(rtl_Compiler *C, FILE *f, int delim)
 {
   int ch, n;
+  rtl_Word w;
 
   eatWhitespace(f);
   ch = fgetc(f);
   for (n = 0; ch != delim && ch != EOF; n++) {
     // Put ch back on the stream so that rtl_read can work with it.
     ungetc(ch, f);
+    w = rtl_xRead(C, f);
+    RTL_UNWIND (C->M) return 0;
     
-    rtl_push(C->M, rtl_read(C, f));
+    rtl_push(C->M, w);
 
     eatWhitespace(f);
     ch = fgetc(f);
   }
 
   if (ch == EOF) {
-    printf("\n   !!! EOF WHILE READING DELIMITED EXPRESSION  { .delim '%c' }\n\n",
-           (char)delim);
-    abort();
+    rtl_throwMsg(C->M, "unexpected-eof",
+                 "Premature EOF while reading a delimited expression.");
   }
 
   return n;
 }
 
 static
-rtl_Word readList(rtl_Compiler *C, FILE *f)
+rtl_Word xReadList(rtl_Compiler *C, FILE *f)
 {
   int ch;
   rtl_Word w = RTL_NIL, car = RTL_NIL, cdr = RTL_NIL;
@@ -152,54 +154,74 @@ rtl_Word readList(rtl_Compiler *C, FILE *f)
     // TODO: make this code selector-friendly
     ch = fgetc(f);
     if (isspace(ch)) {
-      w = rtl_read(C, f);
+      w = rtl_xRead(C, f);
+      RTL_UNWIND (C->M) goto cleanup;
+
       eatWhitespace(f);
       ch = fgetc(f);
-      assert(ch == ')');
+      if (ch != ')') {
+        rtl_throwMsg(C->M, "bad-delim",
+                     "Dotted list does not end with ')'");
+        goto cleanup;
+      }
 
     } else {
       ungetc(ch, f);
-      car = rtl_readAtom(C, f, '.');
-      cdr = readList(C, f);
+      car = rtl_xReadAtom(C, f, '.');
+      RTL_UNWIND (C->M) goto cleanup;
+
+      cdr = xReadList(C, f);
+      RTL_UNWIND (C->M) goto cleanup;
+
       w = rtl_cons(C->M, car, cdr);
 
     } break;
 
   default:
     if (ch == EOF) {
-      printf("\n   !!! EOF WHILE READING LIST EXPRESSION  { .delim ')' }\n\n");
-      abort();
+      rtl_throwMsg(C->M, "unexpected-eof",
+                   "Premature EOF while reading a list expression.");
+      goto cleanup;
     }
 
+
     ungetc(ch, f);
-    car = rtl_read(C, f);
-    cdr = readList(C, f);
+    car = rtl_xRead(C, f);
+    RTL_UNWIND (C->M) goto cleanup;
+
+    cdr = xReadList(C, f);
+    RTL_UNWIND (C->M) goto cleanup;
+
     w = rtl_cons(C->M, car, cdr);
     break;
   }
 
+ cleanup:
   rtl_popWorkingSet(C->M);
 
   return w;
 }
 
 static
-rtl_Word readChar(FILE *f)
+rtl_Word xReadChar(rtl_Compiler *C, FILE *f)
 {
   int ch;
   rtl_Word w;
+  char errBuf[1024];
 
   ch = fgetc(f);
   if (ch == EOF) {
-    printf("  error: EOF during char constant.\n");
-    abort();
+    rtl_throwMsg(C->M, "unexpected-eof",
+                 "Premature EOF while reading character constant.");
+    return RTL_NIL;
   }
 
   if (ch == '\\') {
     switch ((ch = fgetc(f))) {
     case EOF:
-      printf("  error: EOF during char constant.\n");
-      abort();
+      rtl_throwMsg(C->M, "unexpected-eof",
+                   "Premature EOF while reading character constant.");
+      return RTL_NIL;
 
     case '\\':
       w = rtl_char('\\');
@@ -226,8 +248,11 @@ rtl_Word readChar(FILE *f)
       break;
 
     default:
-      printf(" error: bad escape '%c' (%02X) in char constant.\n", ch, (unsigned)ch);
-      abort();
+      snprintf(errBuf, 1024,
+               "Bad escape '\\%c' (%02X) in char constant.\n",
+               ch, (unsigned)ch);
+      rtl_throwMsg(C->M, "malformed", errBuf);
+      return RTL_NIL;
     }
   } else {
     w = rtl_char(ch);
@@ -235,25 +260,30 @@ rtl_Word readChar(FILE *f)
 
   if ((ch = fgetc(f)) != '\'') {
     if (ch == EOF) {
-      printf("  error: EOF during char constant.\n");
+      rtl_throwMsg(C->M, "unexpected-eof",
+                   "Premature EOF while reading character constant.");
+      return RTL_NIL;
     } else {
-      printf("Malformed character constant %02X followed by %c (expected '\\'')\n",
-             (unsigned)rtl_int28Value(w), ch);
+      snprintf(errBuf, 1024,
+               "Character constant %02X followed by %c (expected '\\'')\n",
+               (unsigned)rtl_int28Value(w), ch);
+      rtl_throwMsg(C->M, "malformed", errBuf);
+      return RTL_NIL;
     }
-
-    abort();
   }
 
   return w;
 }
 
 static
-rtl_Word readString(rtl_Compiler *C, FILE *f)
+rtl_Word xReadString(rtl_Compiler *C, FILE *f)
 {
   int ch;
 
   char buf[2048];
   int  idx;
+
+  char errBuf[1024];
 
   for (ch = fgetc(f), idx = 0;
        ch != '"' && ch != EOF && idx < 2048;
@@ -282,8 +312,11 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
         break;
 
       default:
-        printf(" !!! BAD ESCAPE '%c' (%02X) IN STRING !!!", ch, (unsigned)ch);
-        break;
+        snprintf(errBuf, 1024,
+                 "Bad escape '\\%c' (%02X) in string constant.\n",
+                 ch, (unsigned)ch);
+        rtl_throwMsg(C->M, "malformed", errBuf);
+        return RTL_NIL;
       }
     }
 
@@ -292,8 +325,9 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
 
   if (idx == 2048) {
     buf[32] = '\0';
-    printf(" READ ERROR: String longer than 2048 characters,"
-           " beginning with \"%s...\n", buf);
+    printf("  crtl: error: reader: String longer than 2048 characters, "
+           "beginning with \"%s... (this is a compiler limitation)\n",
+           buf);
     abort();
   }
 
@@ -302,7 +336,7 @@ rtl_Word readString(rtl_Compiler *C, FILE *f)
   return rtl_string(C->M, buf);
 }
 
-rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
+rtl_Word rtl_xRead(rtl_Compiler *C, FILE *f)
 {
   int      ch,
            n,
@@ -313,7 +347,7 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
            v = RTL_NIL,
            *ptr;
 
-  RTL_PUSH_WORKING_SET(C->M, &w);
+  RTL_PUSH_WORKING_SET(C->M, &w, &k, &v);
 
   eatWhitespace(f);
 
@@ -326,20 +360,27 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 
   case ')':
   case '}':
-  case ']':
-    printf("\n   !!! RTL EXPRESSION MAY NOT BEGIN WITH '%c' !!!\n\n", (char)ch);
-    abort();
+  case ']': {
+    char errBuf[1024];
+    snprintf(errBuf, 1024,
+             "Expression may not begin with '%c'\n", ch);
+    rtl_throwMsg(C->M, "malformed", errBuf);
+  } break;
 
   case '(':
-    w = readList(C, f);
+    w = xReadList(C, f);
     break;
 
-  case '{': {
-    RTL_PUSH_WORKING_SET(C->M, &w, &k, &v);
+  case '{':
 
-    n = rtl_readDelim(C, f, '}');
+    n = rtl_xReadDelim(C, f, '}');
+    RTL_UNWIND (C->M) break;
 
-    assert((n & 1) == 0); // Must be even numbered!
+    if ((n & 1) != 0) {
+      rtl_throwMsg(C->M, "malformed",
+                   "Odd number of expressions in a map literal!");
+      break;
+    }
 
     w = rtl_emptyMap();
 
@@ -352,48 +393,60 @@ rtl_Word rtl_read(rtl_Compiler *C, FILE *f)
 
     C->M->vStackLen -= n;
 
-    rtl_popWorkingSet(C->M);
-
-
-
-  } break;
+    break;
 
   case '[':
-    n   = rtl_readDelim(C, f, ']');
+    n   = rtl_xReadDelim(C, f, ']');
+    RTL_UNWIND (C->M) break;
+
     ptr = rtl_allocTuple(C->M, &w, n);
     memcpy(ptr, C->M->vStack + C->M->vStackLen - n, sizeof(rtl_Word)*n);
     C->M->vStackLen -= n;
     break;
 
   case '\'':
-    w = readChar(f);
+    w = xReadChar(C, f);
     break;
 
   case '"':
-    w = readString(C, f);
+    w = xReadString(C, f);
     break;
 
   case '`':
-    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_xRead(C, f);
+    RTL_UNWIND (C->M) break;
+
+    w = rtl_cons(C->M, w, RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("std", "semiquote"), w);
     break;
 
   case '~':
-    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_xRead(C, f);
+    RTL_UNWIND (C->M) break;
+
+    w = rtl_cons(C->M, w, RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("std", "escape"), w);
     break;
 
   case '@':
-    w = rtl_cons(C->M, rtl_read(C, f), RTL_NIL);
+    w = rtl_xRead(C, f);
+    RTL_UNWIND (C->M) break;
+
+    w = rtl_cons(C->M, w, RTL_NIL);
     w = rtl_cons(C->M, rtl_intern("std", "splice"), w);
     break;
 
   default:
     if (isgraph(ch)) {
-      w = rtl_readAtom(C, f, ch);
+      w = rtl_xReadAtom(C, f, ch);
     } else {
-      printf("Got bad character %X '%c'.\n", (unsigned int)ch, (char)ch);
-      abort();
+      char errBuf[1024];
+
+      snprintf(errBuf, 1024, 
+               "Got bad character %#X '%c'.\n",
+               (unsigned int)ch, (char)ch);
+
+      rtl_throwMsg(C->M, "malformed", errBuf);
     }
   }
 

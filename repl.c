@@ -53,7 +53,8 @@ void rtl_xLoad(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
     scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
 
     while (!feof(file)) {
-      w = rtl_read(C, file);
+      w = rtl_xRead(C, file);
+      RTL_UNWIND (C->M) goto cleanup;
 
       rtl_xCompile(C, ns, scratchFnID, w);
       RTL_UNWIND (C->M) goto cleanup;
@@ -228,7 +229,14 @@ void rtl_xRepl(rtl_Compiler *C)
 
     printf("\n[ \x1B[1mCRTL\x1B[0m ] ");
     fflush(stdout);
-    w = rtl_read(C, stdin);
+    w = rtl_xRead(C, stdin);
+    RTL_UNWIND (C->M) {
+      rtl_printException(C->M, C->M->exception);
+      rtl_clearException(C->M);
+      printf("\n  \x1B[1mERROR!\x1B[0m\n");
+
+      continue;
+    }
 
     rtl_xCompile(C, &useNS, replFnID, w);
     RTL_UNWIND (C->M) {
