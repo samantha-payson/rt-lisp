@@ -51,8 +51,10 @@ rtl_Word rtl_xReadAtom(rtl_Compiler *C, FILE *f, int first)
   while (isgraph(ch) && !strchr(nonAtomChars, ch)) {
     if (next == 511) {
       // This atom is too long, complain and abort ...
-      buf[next] = '\0';
-      printf("An atom must be less than 512 characters...\n     got \"%s\"\n",
+      buf[32] = '\0';
+      printf("\n  crtl: error: reader: atom must be less than 512 "
+                                      "characters... (compiler bug)\n\n"
+             "     begins with %s...\n\n",
              buf);
       abort();
     }
@@ -325,8 +327,8 @@ rtl_Word xReadString(rtl_Compiler *C, FILE *f)
 
   if (idx == 2048) {
     buf[32] = '\0';
-    printf("  crtl: error: reader: String longer than 2048 characters, "
-           "beginning with \"%s... (this is a compiler limitation)\n",
+    printf("\n  crtl: error: reader: String longer than 2048 characters\n\n"
+           "      beginning with \"%s... (this is a compiler limitation)\n\n",
            buf);
     abort();
   }
