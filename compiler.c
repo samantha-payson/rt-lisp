@@ -240,6 +240,7 @@ rtl_Word rtl_internSelector(char const *pkg, char const *name)
   M(applyList,    "apply-list")                 \
   M(applyTuple,   "apply-tuple")                \
   M(progn,        "progn")                      \
+  M(protect,      "protect")                    \
   M(lambda,       "lambda")                     \
   M(labels,       "labels")                     \
   M(defun,        "defun")                      \
@@ -1339,6 +1340,21 @@ rtl_Intrinsic *rtl_xExprToIntrinsic(rtl_Compiler *C, rtl_Word sxp)
 
       return rtl_mkPrognIntrinsic(buf, bufLen);
 
+    } else if (head == symCache.intrinsic.protect) {
+      arg = rtl_xCadr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      a = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      arg = rtl_xCaddr(C->M, sxp);
+      RTL_UNWIND (C->M) return NULL;
+
+      b = rtl_xExprToIntrinsic(C, arg);
+      RTL_UNWIND (C->M) return NULL;
+
+      return rtl_mkProtectIntrinsic(a, b);
+
     } else if (head == symCache.intrinsic.lambda) {
       assert(len >= 2);
 
@@ -2218,6 +2234,11 @@ rtl_Intrinsic *__impl_transformIntrinsic(rtl_Compiler *C,
     }
     break;
 
+  case RTL_INTRINSIC_PROTECT:
+    x->as.protect.handler = __impl_transformIntrinsic(C, env, x->as.protect.handler);
+    x->as.protect.expr    = __impl_transformIntrinsic(C, env, x->as.protect.expr);
+    break;
+
   case RTL_INTRINSIC_LAMBDA:
     newEnv.super = env;
     newEnv.frame = env ? env->frame + 1 : 0;
@@ -2484,6 +2505,11 @@ void rtl_tailCallPass(rtl_Intrinsic *x)
       rtl_tailCallPass(x->as.progn.forms[i]);
     } break;
 
+  case RTL_INTRINSIC_PROTECT:
+    rtl_tailCallPass(x->as.protect.handler);
+    rtl_tailCallPass(x->as.protect.expr);
+    break;
+
   case RTL_INTRINSIC_LAMBDA:
     for (i = 0; i < x->as.lambda.bodyLen; i++) {
       rtl_tailCallPass(x->as.lambda.body[i]);
@@ -2668,10 +2694,9 @@ static
 size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
 {
   size_t i,
-         thenSize,
-         elseSize,
-         thenJmpBytes,
-         elseJmpBytes;
+         thenSize,    thenJmpBytes,
+         elseSize,    elseJmpBytes,
+         protectSize, protectJmpBytes;
 
   switch (x->type) {
   case RTL_INTRINSIC_CONS:
@@ -2806,6 +2831,21 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     }
 
     return x->codeSize;
+
+  case RTL_INTRINSIC_PROTECT:
+    protectSize = annotateCodeSize(M, x->as.protect.expr);
+
+    if (protectSize + 2< 0xFF) {
+      protectJmpBytes = 2;
+    } if (protectSize + 2 < 0xFFFF) {
+      protectJmpBytes = 3;
+    } else {
+      protectJmpBytes = 5;
+    }
+
+    return x->codeSize = annotateCodeSize(M, x->as.protect.handler)
+                       + protectJmpBytes + protectSize
+                       + 2;
 
   case RTL_INTRINSIC_LAMBDA:
     for (i = 0; i < x->as.lambda.bodyLen; i++) {
@@ -3352,6 +3392,27 @@ void rtl_emitIntrinsicCode(rtl_Compiler *C,
           rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
       }
     } break;
+
+  case RTL_INTRINSIC_PROTECT:
+    rtl_emitIntrinsicCode(C, fnID, x->as.protect.handler);
+
+    if (x->as.protect.expr->codeSize + 2 < 0xFF) {
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_PROTECT8);
+      rtl_emitByteToFunc(codeBase, fnID, x->as.protect.expr->codeSize + 2);
+
+    } else if (x->as.protect.expr->codeSize + 2 < 0xFFFF) {
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_PROTECT16);
+      rtl_emitShortToFunc(codeBase, fnID, x->as.protect.expr->codeSize + 2);
+
+    } else {
+      rtl_emitByteToFunc(codeBase, fnID, RTL_OP_PROTECT32);
+      rtl_emitWordToFunc(codeBase, fnID, x->as.protect.expr->codeSize + 2);
+    }
+
+    rtl_emitIntrinsicCode(C, fnID, x->as.protect.expr);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_END_PROTECT);
+    rtl_emitByteToFunc(codeBase, fnID, RTL_OP_POP);
+    break;
 
   case RTL_INTRINSIC_LAMBDA:
     if (x->as.lambda.fnID > 0xFFFF) {

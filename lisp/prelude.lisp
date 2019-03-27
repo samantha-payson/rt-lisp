@@ -234,8 +234,40 @@
             `(<- (~fn @arg) @(cdr arg*))
           `(<- (~fn ~arg) @(cdr arg*))))))
 
+  (defmacro or (first . rest*)
+    (with-gensyms (tmp)
+      (if rest*
+          `(let ((~tmp ~first))
+             (if ~tmp
+                 ~tmp
+               (or @rest*)))
+        first)))
+
+  (defmacro try clause*
+    (let ((catch* (vfilter (expr clause*)
+                    (and (cons? expr)
+                         (eq .catch (car expr)))))
+          (finally* (vfilter (expr clause*)
+                      (and (cons? expr)
+                           (eq .finally (car expr)))))
+          (body (vfilter (expr clause*)
+                  (or (not (cons? expr))
+                      (not (eq .catch) (car expr))
+                      (not (eq .finally) (car expr))))))
+      (with-gensyms (e)
+        `(intrinsic:protect
+             (lambda (~e)
+               @(vmapcar ((fin finally*))
+                  `(progn @(cdr fin)))
+               (cond
+                 @(vmapcar ((catch catch*))
+                    `((eq ~(cadr catch) (.type ~e))
+                      @(cddr catch)))))
+           @body))))
+
   (export package require -> ->> <-
           last butlast
+          or try
           filter vfilter xfilter
           mapc-1 mapc-2 mapc-3 mapc-4 mapc vmapc
           xmapcar))

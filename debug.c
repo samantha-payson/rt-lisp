@@ -340,6 +340,10 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *pc)
       printf("  %+d\n", (int)(int8_t)imm8);
       break;
 
+    case RTL_OP_PROTECT8:
+      printf("  +%u\n", (unsigned int)imm8);
+      break;
+
     case RTL_OP_SYMBOL8:
       printf("  ");
       rtl_formatExprShallow(rtl_symbol(imm8));
@@ -401,6 +405,10 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *pc)
     case RTL_OP_JMP16:
     case RTL_OP_CJMP16:
       printf("  %+d\n", (int)(int16_t)imm16);
+      break;
+
+    case RTL_OP_PROTECT16:
+      printf("  +%u\n", (unsigned int)imm16);
       break;
 
     case RTL_OP_SYMBOL16:
@@ -473,6 +481,9 @@ uint8_t *rtl_disasm(rtl_CodeBase *codeBase, uint8_t *pc)
       printf("  %+d\n", (int)(int32_t)immW);
       break;
 
+    case RTL_OP_PROTECT32:
+      printf("  +%u\n", (unsigned int)immW);
+      break;
 
     case RTL_OP_CONST32:
       printf("  ");

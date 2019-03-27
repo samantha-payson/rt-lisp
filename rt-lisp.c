@@ -1578,7 +1578,7 @@ void rtl_xRun(rtl_Machine *M)
 
   rtl_Function   *func;
 
-  rtl_UnwindHandler *handler;
+  rtl_UnwindHandler handler;
   rtl_Exception     *exception;
 
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &e, &f);
@@ -1591,26 +1591,23 @@ void rtl_xRun(rtl_Machine *M)
     //   printf(" ");
     //   rtl_formatExprShallow(M->vStack[i]);
     // }
-    // printf("\n");
-    // rtl_printStackTrace(M);
+    
     // printf("\n\n");
-
-    // rtl_disasm(M->codeBase, M->pc);
 
     // Exception handling happens in this loop.
     while (RTL_UNLIKELY(M->exception != NULL)) {
       if (M->uwStackLen == 0) goto cleanup;
 
-      handler = M->uwStack + M->uwStackLen - 1;
+      handler = M->uwStack[M->uwStackLen - 1];
 
-      if (handler->fn == RTL_NIL) goto cleanup;
+      if (handler.fn == RTL_NIL) goto cleanup;
 
       M->uwStackLen--;
 
       exception = M->exception;
       M->exception = NULL;
 
-      a = rtl_xCallWithArgs(M, handler->fn, e);
+      a = rtl_xCallWithArgs(M, handler.fn, exception->data);
 
       if (M->exception) {
         printf("\nDOUBLE FAULT: Unhandled exception within an "
@@ -1621,19 +1618,25 @@ void rtl_xRun(rtl_Machine *M)
         abort();
       }
 
-      if (a == RTL_NIL) {
+      if (a == RTL_NIL) { 
         M->exception = exception;
       } else {
+        rtl_push(M, a);
         free(exception);
       }
 
-      M->rStackLen = handler->rStackIdx;
-      M->pc        = handler->resumePC;
+      M->pc        = handler.resumePC;
+      M->rStackLen = handler.rStackIdx;
     }
+
+    // rtl_disasm(M->codeBase, M->pc);
 
     opcode = *M->pc++;
     enc    = (rtl_OpEncoding)(opcode >> 4);
 
+    // printf("\n");
+    // rtl_printStackTrace(M);
+    
     // Stage 1: Decode the instruction
     switch (enc) {
     case RTL_OP_ENC_NULLARY_NOARG:
@@ -2314,9 +2317,9 @@ void rtl_xRun(rtl_Machine *M)
 
       if (opcode == RTL_OP_END_PROTECT) {
         assert(M->uwStackLen != 0);
-        handler = M->uwStack + M->uwStackLen - 1;
+        handler = M->uwStack[M->uwStackLen - 1];
 
-        f = handler->fn;
+        f = handler.fn;
 
         wptr    = rtl_allocTuple(M, &a, 1);
         wptr[0] = RTL_NIL;
@@ -2409,6 +2412,7 @@ void rtl_xRun(rtl_Machine *M)
           RTL_UNWIND (M) continue;
 
           RPOP();
+
         } else {
           if (opcode != RTL_OP_TAIL && opcode != RTL_OP_STATIC_TAIL) {
             RPUSH(f);
@@ -2421,8 +2425,8 @@ void rtl_xRun(rtl_Machine *M)
 
           wptr[0] = a;
           M->env  = b;
-        }
-        break;
+
+        } break;
 
       default:
         rtl_throwUncallable(M, f);

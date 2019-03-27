@@ -45,6 +45,7 @@ typedef enum rtl_IntrinsicType {
   RTL_INTRINSIC_APPLY_TUPLE,
   RTL_INTRINSIC_APPLY_LIST,
   RTL_INTRINSIC_PROGN,
+  RTL_INTRINSIC_PROTECT,
   RTL_INTRINSIC_LAMBDA,
   RTL_INTRINSIC_LABELS,
   RTL_INTRINSIC_DEFUN,
@@ -194,6 +195,11 @@ struct rtl_Intrinsic {
       rtl_Intrinsic **forms;
       size_t        formsLen;
     } progn;
+
+    struct {
+      rtl_Intrinsic *handler;
+      rtl_Intrinsic *expr;
+    } protect;
 
     struct {
       rtl_Word name;
@@ -600,6 +606,25 @@ rtl_Intrinsic *rtl_mkPrognIntrinsic(rtl_Intrinsic **forms,
       .progn = {
         .forms    = forms,
         .formsLen = formsLen,
+      },
+    },
+  };
+
+  return intr;
+}
+
+static inline
+rtl_Intrinsic *rtl_mkProtectIntrinsic(rtl_Intrinsic *handler,
+                                      rtl_Intrinsic *expr)
+{
+  rtl_Intrinsic *intr = malloc(sizeof(rtl_Intrinsic));
+
+  *intr = (rtl_Intrinsic) {
+    .type = RTL_INTRINSIC_PROTECT,
+    .as = {
+      .protect = {
+        .handler = handler,
+        .expr    = expr,
       },
     },
   };
