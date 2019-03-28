@@ -260,10 +260,13 @@
                @(vmapcar ((fin finally*))
                   `(progn @(cdr fin)))
                (cond
+                 ((not (map? ~e))
+                  .intrinsic:exception-fail)
                  @(vmapcar ((catch catch*))
                     `((eq ~(cadr catch) (.type ~e))
-                      @(cddr catch)))))
-           @body))))
+                      @(cddr catch)))
+                 (T .intrinsic:exception-fail)))
+           (progn @body)))))
 
   (export package require -> ->> <-
           last butlast

@@ -1570,7 +1570,6 @@ void rtl_xRun(rtl_Machine *M)
               e = RTL_NIL,
               f = RTL_NIL;
 
-
   rtl_Word const *rptr,
                  *sptr;
 
@@ -1580,6 +1579,8 @@ void rtl_xRun(rtl_Machine *M)
 
   rtl_UnwindHandler handler;
   rtl_Exception     *exception;
+
+  rtl_Word const exnFail = rtl_internSelector("intrinsic", "exception-fail");
 
   RTL_PUSH_WORKING_SET(M, &a, &b, &c, &d, &e, &f);
 
@@ -1618,7 +1619,7 @@ void rtl_xRun(rtl_Machine *M)
         abort();
       }
 
-      if (a == RTL_NIL) { 
+      if (a == exnFail) {
         M->exception = exception;
       } else {
         rtl_push(M, a);
