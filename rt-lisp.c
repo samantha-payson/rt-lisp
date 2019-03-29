@@ -1677,7 +1677,7 @@ void rtl_xRun(rtl_Machine *M)
       break;
     }
 
-    // Labels is a (weird and rare) special case.
+    // The labels instruction is a (weird and rare) special case.
     if (RTL_UNLIKELY(opcode == RTL_OP_LABELS)) {
       if (M->vStackLen < imm16) {
         rtl_throwMsg(M, "stack-underflow",
@@ -1691,6 +1691,15 @@ void rtl_xRun(rtl_Machine *M)
       rtl_xReifyTuple(M, M->env, &len);
       RTL_UNWIND (M) continue;
 
+      // Allocate enough space for:
+      //
+      //   1+len+1 : the new env tuple
+      //   1+imm16 : the env frame that will contain the closures
+      //   2*imm16 : the closures themselves
+      //
+      // since these are all allocated in a single contiguous block, it's fine
+      // to have circular references between them (since they'll always be in
+      // the same generation together).
       wptr    = rtl_allocGC(M, RTL_TUPLE, &a, 1+len+1 + 1+imm16 + 2*imm16);
       wptr[0] = rtl_header(len + 1);
 
