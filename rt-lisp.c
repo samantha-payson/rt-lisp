@@ -1610,16 +1610,17 @@ void rtl_xRun(rtl_Machine *M)
 
       a = rtl_xCallWithArgs(M, handler.fn, exception->data);
 
-      if (M->exception) {
-        printf("\nDOUBLE FAULT: Unhandled exception within an "
-                               "exception handler!\n\n");
+      RTL_UNWIND (M) {
+        printf("\ndouble fault: unhandled exception within an "
+                               "exception handler:\n\n");
         rtl_printException(M, M->exception);
-        printf("\nOriginal Exception:\n\n");
+        printf("\noriginal exception:\n\n");
         rtl_printException(M, exception);
-        abort();
-      }
+        printf("\n\n");
 
-      if (a == exnFail) {
+        free(M->exception);
+        M->exception = exception;
+      } else if (a == exnFail) {
         M->exception = exception;
       } else {
         rtl_push(M, a);

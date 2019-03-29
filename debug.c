@@ -794,7 +794,7 @@ void __rtl_printStackTrace(rtl_Machine *M, rtl_RetAddr *stack, size_t stackLen)
 
   char fnName[1024];
 
-  printf("Stack Trace (most recent at bottom):\n\n");
+  printf("  Stack Trace (most recent at bottom):\n\n");
   for (i = 0; i < stackLen; i++) {
     func = rtl_reifyFunction(M->codeBase, stack[i].fn);
     fnID = rtl_functionID(stack[i].fn);
@@ -809,7 +809,7 @@ void __rtl_printStackTrace(rtl_Machine *M, rtl_RetAddr *stack, size_t stackLen)
            fnName,
            (unsigned int)fnID);
 
-    if (i + 1 < M->rStackLen) {
+    if (i + 1 < stackLen) {
       pc = stack[i + 1].pc;
     } else {
       pc = M->pc;
@@ -870,15 +870,15 @@ void rtl_printException(rtl_Machine *M, rtl_Exception *exn)
       }
     }
 
-    printf("\nException ");
+    printf("\n  Exception ");
     rtl_formatExprShallow(type);
-    printf(":\n\n    %s\n\n", msgBuf);
-    printf("   ");
+    printf(":\n\n      %s\n\n", msgBuf);
+    printf("     ");
     rtl_formatExpr(M, exn->data);
     printf("\n\n");
   } else {
     msgBuf = NULL;
-    printf("\nException ");
+    printf("\n  Exception ");
     rtl_formatExpr(M, exn->data);
     printf("\n\n");
   }
