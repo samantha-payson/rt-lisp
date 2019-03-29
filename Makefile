@@ -19,8 +19,7 @@ OBJS = \
   compiler.o \
   io.o \
   reader.o \
-  repl.o \
-  main.o
+  repl.o
 
 
 HDRS = \
@@ -45,13 +44,22 @@ HDRS = \
   inc/rtl/debug.h
 
 
-crtl: $(OBJS)
+crtl: main.o librtl.so
 	@ echo "  LD    $@"
-	@ $(LD) $(LDFLAGS) $^ -o $@
+	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
+
+librtl.so: $(OBJS)
+	@ echo "  LD    $@"
+	@ $(LD) $(LDFLAGS) -shared $^ -o $@
+
+main.o: main.c $(HDRS)
+	@ echo "  CC    $@"
+	@ $(CC) $(CFLAGS) -c $< -o $@
+
 
 %.o: %.c $(HDRS)
 	@ echo "  CC    $@"
-	@ $(CC) $(CFLAGS) -c $< -o $@
+	@ $(CC) $(CFLAGS) -fpic -c $< -o $@
 
 
 clean:
