@@ -1,4 +1,5 @@
 crtl
 librtl.so
+.rtl-symbol-cache
 *.o
 #*

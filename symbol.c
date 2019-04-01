@@ -22,6 +22,12 @@
 // DEBUG
 #include <stdio.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
+
+
 typedef struct UnresolvedSymbol {
   uint32_t   id;
   char const *name;
@@ -171,6 +177,128 @@ uint32_t rtl_internPackageID(char const *name)
   return pkg->id;
 }
 
+// A file descriptor for the on-disk cache of symbols.
+static int cacheFD = 0;
+static FILE *cache = NULL;
+
+static
+void ensureCache() {
+  if (cache == NULL) {
+    cacheFD = open(".rtl-symbol-cache", O_CREAT | O_RDWR | O_APPEND, 0644);
+    assert(cacheFD >= 0);
+
+    cache   = fdopen(cacheFD, "a+");
+    assert(cache != NULL);
+  }
+}
+
+// I'm not 100% sure that this will work as intended, but the idea is to
+// synchronize the numeric IDs of symbols across multiple (possibly
+// simultaneous) process invokations.
+static
+uint32_t __newSymbolID(Package const *pkg, char const *name) {
+  Symbol *sym = NULL;
+
+  uint32_t cPkgID,
+           hash,
+           idx;
+
+  Package const *cPkg;
+  Symbol        *cSym;
+
+  char *colon,
+       *newline;
+
+  char const *cPkgName;
+  char const *cSymName;
+
+  char   *lineBuf = NULL;
+  size_t len      = 0;
+
+  ensureCache();
+
+  // First we lock the on-disk cache, to make sure this operation is atomic WRT
+  // the disk.
+  flock(cacheFD, LOCK_EX);
+
+  while ((len = getline(&lineBuf, &len, cache)) != -1) {
+    colon = strchr(lineBuf, ':');
+    assert(colon);
+
+    newline = strchr(lineBuf, '\n'); 
+    assert(newline);
+
+    *colon   = '\0';
+    *newline = '\0';
+
+    cPkgName = lineBuf;
+    cSymName = strdup(colon + 1);
+
+    hash = hashStr(cPkgName) ^ hashStr(cSymName);
+    idx  = hash % HASH_SIZE;
+
+    cPkgID = rtl_internPackageID(cPkgName);
+    assert(cPkgID < pkgNextID);
+
+    cPkg = pkgByID[cPkgID];
+
+    cSym       = malloc(sizeof(Symbol));
+    cSym->id   = symNextID;
+    cSym->name = strdup(cSymName);
+    cSym->pkg  = cPkg;
+
+    // Make sure that we haven't overflowed into the realm of gensyms.
+    assert(cSym->id < (1 << 27));
+
+    // Add this new Symbol to its list in the hash table.
+    cSym->next    = symTable[idx];
+    symTable[idx] = cSym;
+
+    // Make sure there is enough capacity for symByID ..
+    if (symByIDCap <= symNextID) {
+      symByIDCap = symByIDCap == 0 ? 32 : 2*symByIDCap;
+      symByID = realloc(symByID, sizeof(Symbol *)*symByIDCap);
+    }
+
+    // .. then add this to the array.
+    symByID[symNextID++] = cSym;
+
+    if (cPkg == pkg && !strcmp(name, cSymName)) {
+      // This is the symbol we're looking for.
+      sym = cSym;
+    }
+  }
+
+  if (sym == NULL) {
+    fprintf(cache, "%s:%s\n", pkg->name, name);
+
+    sym       = malloc(sizeof(Symbol));
+    sym->id   = symNextID;
+    sym->name = strdup(name);
+    sym->pkg  = pkg;
+
+    hash = hashStr(pkg->name) ^ hashStr(name);
+    idx  = hash % HASH_SIZE;
+
+    sym->next     = symTable[idx];
+    symTable[idx] = sym;
+
+    // Make sure there is enough capacity for symByID ..
+    if (symByIDCap <= symNextID) {
+      symByIDCap = symByIDCap == 0 ? 32 : 2*symByIDCap;
+      symByID = realloc(symByID, sizeof(Symbol *)*symByIDCap);
+    }
+
+    // .. then add this to the array.
+    symByID[symNextID++] = sym;
+  }
+
+  // We're done with the cache for now, unlock it.
+  flock(cacheFD, LOCK_UN);
+
+  return sym->id;
+}
+
 uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
 {
   uint32_t      hash, idx;
@@ -193,29 +321,7 @@ uint32_t rtl_internSymbolID(uint32_t pkgID, char const *name)
     }
   }
 
-  // There is no such symbol at this point -- make a new one.
-  sym = malloc(sizeof(Symbol));
-  sym->id   = symNextID;
-  sym->name = strdup(name);
-  sym->pkg  = pkg;
-
-  // Make sure that we haven't overflowed into the realm of gensyms.
-  assert(sym->id < (1 << 27));
-
-  // Add this new Symbol to its list in the hash table.
-  sym->next = symTable[idx];
-  symTable[idx] = sym;
-
-  // Make sure there is enough capacity for symByID ..
-  if (symByIDCap <= symNextID) {
-    symByIDCap = symByIDCap == 0 ? 32 : 2*symByIDCap;
-    symByID = realloc(symByID, sizeof(Symbol *)*symByIDCap);
-  }
-
-  // .. then add this to the array.
-  symByID[symNextID++] = sym;
-
-  return sym->id;
+  return __newSymbolID(pkg, name);
 }
 
 static uint32_t gensymNextID;
