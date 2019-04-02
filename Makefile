@@ -46,7 +46,7 @@ HDRS = \
 
 crtl: main.o librtl.so
 	@ echo "  LD    $@"
-	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
+	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl -lexplain
 
 librtl.so: $(OBJS)
 	@ echo "  LD    $@"

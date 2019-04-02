@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <libexplain/fopen.h>
+
 #include "rt-lisp.h"
 
 typedef struct rtl_repl_Compiler {
@@ -34,20 +36,8 @@ void rtl_xLoad(rtl_Compiler *C, rtl_NameSpace const *ns, char const *path)
 
   file = fopen(path, "r");
   if (!file) {
-    w = RTL_MAP;
-    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "type"),
-                       rtl_internSelector(NULL, "fopen-failed"));
-    RTL_ASSERT_NO_UNWIND(C->M);
-
-    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "message"),
-                       rtl_string(C->M, "Failed to open file"));
-    RTL_ASSERT_NO_UNWIND(C->M);
-
-    w = rtl_xMapInsert(C->M, w, rtl_internSelector(NULL, "path"),
-                       rtl_string(C->M, path));
-    RTL_ASSERT_NO_UNWIND(C->M);
-
-    rtl_throw(C->M, w);
+    rtl_throwMsg(C->M, "native-error",
+                 explain_fopen(path, "r"));
 
   } else {
     scratchFnID = rtl_newFuncID(C->M->codeBase, rtl_intern("repl", "scratch"));
@@ -96,11 +86,16 @@ rtl_Word rtl_repl_load(rtl_Machine *M, rtl_Word const *args, size_t argsLen)
   rtl_xReifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
   RTL_UNWIND (M) goto cleanup;
 
-  assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
+  if (strcmp(wrapper.tag, "rtl_repl_Compiler")) {
+    rtl_throwMsg(M, "native-type",
+                 "The std:*compiler* dynamic var isn't a compiler object!");
+    goto cleanup;
+  }
 
   pathLen = rtl_xStringSize(M, args[0]);
   RTL_UNWIND (M) goto cleanup;
-  path    = malloc(pathLen + 1);
+
+  path = malloc(pathLen + 1);
 
   rtl_xReifyString(M, args[0], path, pathLen + 1);
   RTL_UNWIND (M) {
@@ -133,7 +128,11 @@ rtl_Word rtl_repl_macroExpand(rtl_Machine *M, rtl_Word const *args, size_t argsL
   rtl_xReifyNative(M, handle, &wrapper, sizeof(rtl_repl_Compiler));
   RTL_UNWIND (M) goto cleanup;
 
-  assert(!strcmp(wrapper.tag, "rtl_repl_Compiler"));
+  if (strcmp(wrapper.tag, "rtl_repl_Compiler")) {
+    rtl_throwMsg(M, "native-type",
+                 "The std:*compiler* dynamic var isn't a compiler object!");
+    goto cleanup;
+  }
 
   result = rtl_xMacroExpand(wrapper.C, wrapper.ns, args[0]);
 

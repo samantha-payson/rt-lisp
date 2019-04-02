@@ -17,6 +17,15 @@
 
 #include <stdio.h>
 #include <dirent.h>
+#include <errno.h>
+
+#include <libexplain/closedir.h>
+#include <libexplain/readdir.h>
+#include <libexplain/opendir.h>
+#include <libexplain/fopen.h>
+#include <libexplain/fclose.h>
+#include <libexplain/fgetc.h>
+#include <libexplain/fwrite.h>
 
 typedef struct rtl_io_File {
   uint32_t tag;
@@ -44,9 +53,12 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
   size_t pathLen;
   char   *path;
 
-  assert(argsLen == 2);
-  assert(rtl_isString(M, args[0]));
-  assert(rtl_isSelector(args[1]));
+  if (argsLen != 2) {
+    rtl_throwMsg(M, "arg-count",
+                 "usage: (io:open <path> .read) or "
+                 "(io:open <path> .write)");
+    return RTL_NIL;
+  }
 
   pathLen = rtl_xStringSize(M, args[0]);
   RTL_UNWIND (M) return RTL_NIL;
@@ -62,23 +74,26 @@ rtl_Word rtl_io_open(rtl_Machine    *M,
   if (args[1] == dotRead) {
     rif.f = fopen(path, "r");
     if (!rif.f) {
-      fprintf(stderr, "  error: can't open \"%s\"\n", path);
-      abort();
+      rtl_throwMsg(M, "native-error",
+                   explain_fopen(path, "r"));
+      return RTL_NIL;
     }
 
     return rtl_native(M, &rif, sizeof(rtl_io_File));
   } else if (args[1] == dotWrite) {
     rif.f = fopen(path, "w");
     if (!rif.f) {
-      fprintf(stderr, "  error: can't open \"%s\"\n", path);
-      abort();
+      rtl_throwMsg(M, "native-error",
+                   explain_fopen(path, "w"));
+      return RTL_NIL;
     }
 
     return rtl_native(M, &rif, sizeof(rtl_io_File));
   } else {
-    fprintf(stderr, "\n   usage: (io:open <path> .read)\n"
-                      "          (io:open <path> .write)\n\n");
-    abort();
+    rtl_throwMsg(M, "usage-error",
+                 "usage: (io:open <path> .read) or "
+                 "(io:open <path> .write)");
+    return RTL_NIL;
   }
 }
 
@@ -101,14 +116,23 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
   utf8_int32_t ch;
   uint8_t byteCount, utf8[4];
 
-  assert(argsLen == 1);
+  if (argsLen != 1) {
+    rtl_throwMsg(M, "arg-count",
+                 "io:read-char expects a single argument.");
+    return RTL_NIL;
+  }
 
   rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   RTL_UNWIND (M) return RTL_NIL;
 
-  assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
+  if (rif.tag != MULTICHAR('F', 'I', 'L', 'E')) {
+    rtl_throwMsg(M, "native-type",
+                 "native argument to io:read-char is not a file.");
+    return RTL_NIL;
+  }
 
   ch = fgetc(rif.f);
+  if (ferror(rif.f)) goto fgetc_error;
   if (ch == EOF) return rtl_internSelector("io", "EOF");
 
   utf8[0] = ch;
@@ -121,6 +145,7 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
 
   case 4:
     ch = fgetc(rif.f);
+    if (ferror(rif.f)) goto fgetc_error;
     if (ch == EOF) return rtl_internSelector("io", "EOF");
 
     utf8[3] = ch;
@@ -129,6 +154,7 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
 
   case 3:
     ch = fgetc(rif.f);
+    if (ferror(rif.f)) goto fgetc_error;
     if (ch == EOF) return rtl_internSelector("io", "EOF");
 
     utf8[2] = ch;
@@ -137,6 +163,7 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
 
   case 2:
     ch = fgetc(rif.f);
+    if (ferror(rif.f)) goto fgetc_error;
     if (ch == EOF) return rtl_internSelector("io", "EOF");
 
     utf8[1] = ch;
@@ -151,6 +178,11 @@ rtl_Word rtl_io_readChar(rtl_Machine    *M,
   default:
     abort(); // unreachable
   }
+
+ fgetc_error:
+  rtl_throwMsg(M, "native-error",
+               explain_fgetc(rif.f));
+  return RTL_NIL;
 }
 
 static
@@ -163,21 +195,37 @@ rtl_Word rtl_io_writeChar(rtl_Machine    *M,
   int32_t      count;
   utf8_int32_t ch;
 
-  assert(argsLen == 2);
-  assert(rtl_isChar(args[1]));
+  if (argsLen != 2) {
+    rtl_throwMsg(M, "arg-count",
+                 "io:write-char expects two arguments.");
+    return RTL_NIL;
+  }
+
+  rtl_xAssertChar(M, args[1]);
+  RTL_UNWIND (M) return RTL_NIL;
 
   ch = rtl_charValue(args[1]);
 
   rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   RTL_UNWIND (M) return RTL_NIL;
 
-  assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
+  if (rif.tag != MULTICHAR('F', 'I', 'L', 'E')) {
+    rtl_throwMsg(M, "native-type",
+                 "native argument to io:write-char is not a file.");
+    return RTL_NIL;
+  }
 
   utf8catcodepoint(utf8, ch, 4);
 
   count = fwrite(utf8, 1, utf8codepointsize(ch), rif.f);
   
   if (count < utf8codepointsize(ch)) {
+    if (ferror(rif.f)) {
+      rtl_throwMsg(M, "native-error",
+                   explain_fwrite(utf8, 1, utf8codepointsize(ch), rif.f));
+      return RTL_NIL;
+    }
+
     return rtl_internSelector("io", "EOF");
   }
 
@@ -195,12 +243,19 @@ rtl_Word rtl_io_writeString(rtl_Machine    *M,
 
   int32_t      count;
 
-  assert(argsLen == 2);
-  assert(rtl_isString(M, args[1]));
+  if (argsLen != 2) {
+    rtl_throwMsg(M, "arg-count",
+                 "io:write-string expects 2 arguments.");
+  }
 
   rtl_xReifyNative(M, args[0], &rif, sizeof(rtl_io_File));
   RTL_UNWIND (M) return RTL_NIL;
-  assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
+
+  if (rif.tag != MULTICHAR('F', 'I', 'L', 'E')) {
+    rtl_throwMsg(M, "native-type",
+                 "native argument to io:read-char is not a file.");
+    return RTL_NIL;
+  }
 
   size = rtl_xStringSize(M, args[1]);
   RTL_UNWIND (M) return RTL_NIL;
@@ -218,6 +273,12 @@ rtl_Word rtl_io_writeString(rtl_Machine    *M,
   free(utf8);
 
   if (count < size) {
+    if (ferror(rif.f)) {
+      rtl_throwMsg(M, "native-error",
+                   explain_fwrite(utf8, 1, size, rif.f));
+      return RTL_NIL;
+    }
+
     return rtl_internSelector("io", "EOF");
   }
 
@@ -238,7 +299,10 @@ rtl_Word rtl_io_close(rtl_Machine    *M,
 
   assert(rif.tag == MULTICHAR('F', 'I', 'L', 'E'));
 
-  fclose(rif.f);
+  if (fclose(rif.f)) {
+    rtl_throwMsg(M, "native-error",
+                 explain_fclose(rif.f));
+  }
 
   return RTL_NIL;
 }
@@ -284,6 +348,14 @@ rtl_Word rtl_io_openDir(rtl_Machine    *M,
   rid.tag = MULTICHAR('D', 'I', 'R', 0);
   rid.d   = opendir(path);
 
+  if (rid.d == NULL) {
+    rtl_throwMsg(M, "native-error",
+                 explain_opendir(path));
+    free(path);
+
+    return RTL_NIL;
+  }
+
   free(path);
 
   return rtl_native(M, &rid, sizeof(rtl_io_Dir));
@@ -316,8 +388,15 @@ rtl_Word rtl_io_readDir(rtl_Machine    *M,
     return RTL_NIL;
   }
 
+  errno = 0;
+
   ent = readdir(rid.d);
   if (ent == NULL) {
+    if (errno != 0) {
+      rtl_throwMsg(M, "native-error",
+                   explain_readdir(rid.d));
+    }
+
     return RTL_NIL;
   }
 
@@ -405,10 +484,13 @@ rtl_Word rtl_io_closeDir(rtl_Machine    *M,
     rtl_throwMsg(M, "expected-dir",
                  "io:close-dir expects its first argument to be a "
                  "DIR object.");
+    return RTL_NIL;
   }
 
   if (closedir(rid.d)) {
-    return rtl_internSelector("error", "unknown");
+    rtl_throwMsg(M, "native-error",
+                 explain_closedir(rid.d));
+    return RTL_NIL;
   }
 
   return rtl_internSelector(NULL, "ok");

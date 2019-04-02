@@ -15,19 +15,32 @@
 
 #include "rt-lisp.h"
 
+#include <libexplain/fgetc.h>
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
 static
-void eatWhitespace(FILE *f)
+void eatWhitespace(rtl_Compiler *C, FILE *f)
 {
   int ch;
 
-  while (isspace(ch = fgetc(f)) || ch == ',' || ch == ';')
-    if (ch == ';')
-      while (fgetc(f) != '\n' && !feof(f))
-        ;;
+  while (isspace(ch = fgetc(f)) || ch == ',' || ch == ';') {
+    if (ch == ';') {
+      while (fgetc(f) != '\n' && !feof(f)) {
+        if (ferror(f)) {
+          rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+          return;
+        }
+      }
+    }
+  }
+
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return;
+  }
 
   ungetc(ch, f);
 }
@@ -47,6 +60,10 @@ rtl_Word rtl_xReadAtom(rtl_Compiler *C, FILE *f, int first)
   next   = 1;
 
   ch = fgetc(f);
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return RTL_NIL;
+  }
 
   while (isgraph(ch) && !strchr(nonAtomChars, ch)) {
     if (next == 511) {
@@ -62,6 +79,10 @@ rtl_Word rtl_xReadAtom(rtl_Compiler *C, FILE *f, int first)
     buf[next++] = ch;
 
     ch = fgetc(f);
+    if (ferror(f)) {
+      rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+      return RTL_NIL;
+    }
   }
 
   // Make sure the string is null terminated
@@ -114,8 +135,13 @@ int rtl_xReadDelim(rtl_Compiler *C, FILE *f, int delim)
   int ch, n;
   rtl_Word w;
 
-  eatWhitespace(f);
+  eatWhitespace(C, f);
   ch = fgetc(f);
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return RTL_NIL;
+  }
+
   for (n = 0; ch != delim && ch != EOF; n++) {
     // Put ch back on the stream so that rtl_read can work with it.
     ungetc(ch, f);
@@ -124,8 +150,12 @@ int rtl_xReadDelim(rtl_Compiler *C, FILE *f, int delim)
     
     rtl_push(C->M, w);
 
-    eatWhitespace(f);
+    eatWhitespace(C, f);
     ch = fgetc(f);
+    if (ferror(f)) {
+      rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+      return RTL_NIL;
+    }
   }
 
   if (ch == EOF) {
@@ -144,8 +174,12 @@ rtl_Word xReadList(rtl_Compiler *C, FILE *f)
 
   RTL_PUSH_WORKING_SET(C->M, &w, &car, &cdr);
 
-  eatWhitespace(f);
+  eatWhitespace(C, f);
   ch = fgetc(f);
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return RTL_NIL;
+  }
 
   switch (ch) {
   case ')':
@@ -155,11 +189,16 @@ rtl_Word xReadList(rtl_Compiler *C, FILE *f)
   case '.':
     // TODO: make this code selector-friendly
     ch = fgetc(f);
+    if (ferror(f)) {
+      rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+      return RTL_NIL;
+    }
+  
     if (isspace(ch)) {
       w = rtl_xRead(C, f);
       RTL_UNWIND (C->M) goto cleanup;
 
-      eatWhitespace(f);
+      eatWhitespace(C, f);
       ch = fgetc(f);
       if (ch != ')') {
         rtl_throwMsg(C->M, "bad-delim",
@@ -212,6 +251,11 @@ rtl_Word xReadChar(rtl_Compiler *C, FILE *f)
   char errBuf[1024];
 
   ch = fgetc(f);
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return RTL_NIL;
+  }
+
   if (ch == EOF) {
     rtl_throwMsg(C->M, "unexpected-eof",
                  "Premature EOF while reading character constant.");
@@ -221,8 +265,14 @@ rtl_Word xReadChar(rtl_Compiler *C, FILE *f)
   if (ch == '\\') {
     switch ((ch = fgetc(f))) {
     case EOF:
+      if (ferror(f)) {
+        rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+        return RTL_NIL;
+      }
+
       rtl_throwMsg(C->M, "unexpected-eof",
                    "Premature EOF while reading character constant.");
+
       return RTL_NIL;
 
     case '\\':
@@ -261,7 +311,10 @@ rtl_Word xReadChar(rtl_Compiler *C, FILE *f)
   }
 
   if ((ch = fgetc(f)) != '\'') {
-    if (ch == EOF) {
+    if (ferror(f)) {
+      rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+      return RTL_NIL;
+    } else if (ch == EOF) {
       rtl_throwMsg(C->M, "unexpected-eof",
                    "Premature EOF while reading character constant.");
       return RTL_NIL;
@@ -291,6 +344,11 @@ rtl_Word xReadString(rtl_Compiler *C, FILE *f)
        ch != '"' && ch != EOF && idx < 2048;
        ch = fgetc(f), idx++)
   {
+    if (ferror(f)) {
+      rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+      return RTL_NIL;
+    }
+
     if (ch == '\\') {
       switch ((ch = fgetc(f))) {
       case '\\':
@@ -314,6 +372,11 @@ rtl_Word xReadString(rtl_Compiler *C, FILE *f)
         break;
 
       default:
+        if (ferror(f)) {
+          rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+          return RTL_NIL;
+        }
+
         snprintf(errBuf, 1024,
                  "Bad escape '\\%c' (%02X) in string constant.\n",
                  ch, (unsigned)ch);
@@ -349,11 +412,16 @@ rtl_Word rtl_xRead(rtl_Compiler *C, FILE *f)
            v = RTL_NIL,
            *ptr;
 
+  eatWhitespace(C, f);
+
+  ch = fgetc(f);  
+  if (ferror(f)) {
+    rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
+    return RTL_NIL;
+  }
+
   RTL_PUSH_WORKING_SET(C->M, &w, &k, &v);
 
-  eatWhitespace(f);
-
-  ch = fgetc(f);
   switch (ch) {
   case EOF:
     w = rtl_cons(C->M, rtl_internSelector("io", "EOF"), RTL_NIL);

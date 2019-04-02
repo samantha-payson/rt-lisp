@@ -19,8 +19,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-// DEBUG
 #include <stdio.h>
+
+#include <libexplain/open.h>
+#include <libexplain/fdopen.h>
+#include <libexplain/flock.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -185,10 +188,20 @@ static
 void ensureCache() {
   if (cache == NULL) {
     cacheFD = open(".rtl-symbol-cache", O_CREAT | O_RDWR | O_APPEND, 0644);
-    assert(cacheFD >= 0);
+    if (cacheFD < 0) {
+      fprintf(stderr, "\n  crtl: error: %s\n\n",
+              explain_open(".rtl-symbol-cache",
+                           O_CREAT | O_RDWR | O_APPEND,
+                           0644));
+      abort();
+    }
 
-    cache   = fdopen(cacheFD, "a+");
-    assert(cache != NULL);
+    cache = fdopen(cacheFD, "a+");
+    if (cache == NULL) {
+      fprintf(stderr, "\n  crtl: error: %s\n\n",
+              explain_fdopen(cacheFD, "a+"));
+      abort();
+    }
   }
 }
 
@@ -219,7 +232,11 @@ uint32_t __newSymbolID(Package const *pkg, char const *name) {
 
   // First we lock the on-disk cache, to make sure this operation is atomic WRT
   // the disk.
-  flock(cacheFD, LOCK_EX);
+  if (flock(cacheFD, LOCK_EX) < 0) {
+    fprintf(stderr, "\n  crtl: error: %s\n",
+            explain_flock(cacheFD, LOCK_EX));
+    abort();
+  }
 
   while ((len = getline(&lineBuf, &len, cache)) != -1) {
     colon = strchr(lineBuf, ':');
@@ -294,7 +311,11 @@ uint32_t __newSymbolID(Package const *pkg, char const *name) {
   }
 
   // We're done with the cache for now, unlock it.
-  flock(cacheFD, LOCK_UN);
+  if (flock(cacheFD, LOCK_UN) < 0) {
+    fprintf(stderr, "\n  crtl: error: %s\n",
+            explain_flock(cacheFD, LOCK_UN));
+    abort();
+  }
 
   return sym->id;
 }

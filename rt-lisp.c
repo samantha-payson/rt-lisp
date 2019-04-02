@@ -1553,7 +1553,7 @@ void rtl_xRun(rtl_Machine *M)
               frame = 0,
               index = 0;
 
-  rtl_Word    immW = 0;
+  rtl_Word    immW  = 0;
 
   uint32_t    gen,
               offs;
