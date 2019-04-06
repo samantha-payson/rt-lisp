@@ -1020,6 +1020,104 @@ rtl_Word rtl_std_listToTuple(rtl_Machine     *M,
   return rtl_xListToTuple(M, args[0]);
 }
 
+static
+rtl_Word rtl_std_name(rtl_Machine    *M,
+                      rtl_Word const *args,
+                      size_t         argsLen)
+{
+  if (RTL_UNLIKELY(argsLen != 1)) {
+    rtl_throwMsg(M, "arg-count", "symbol-name expects 1 argument.");
+    return RTL_NIL;
+
+  }
+
+  if (rtl_isSymbol(args[0])) {
+    return rtl_string(M, rtl_symbolName(args[0]));
+
+  } else if (rtl_isSelector(args[0])) {
+    return rtl_string(M, rtl_selectorName(args[0]));
+
+  } else if (rtl_typeOf(args[0]) == RTL_UNRESOLVED_SYMBOL) {
+    return rtl_string(M, rtl_unresolvedSymbolName(args[0]));
+
+  }
+
+  rtl_throwWrongType(M, RTL_SYMBOL, args[0]);
+  return RTL_NIL;
+}
+
+static
+rtl_Word rtl_std_unresolved(rtl_Machine    *M,
+                            rtl_Word const *args,
+                            size_t         argsLen)
+{
+  char const *pkgBuf;
+  char const *nameBuf;
+
+  rtl_Word w = RTL_NIL;
+
+  if (RTL_UNLIKELY(argsLen != 2)) {
+    rtl_throwMsg(M, "arg-count", "unresolved expects 2 arguments.");
+    return RTL_NIL;
+
+  }
+
+  if (rtl_isNil(args[0])) {
+    pkgBuf = NULL;
+  } else {
+    pkgBuf  = rtl_xReifyStringAlloc(M, args[0]);
+    RTL_UNWIND (M) return RTL_NIL;
+  }
+
+  nameBuf = rtl_xReifyStringAlloc(M, args[1]);
+  RTL_UNWIND (M) goto cleanup_pkg;
+
+  w = rtl_internUnresolved(pkgBuf, nameBuf);
+
+  free((void *)nameBuf);
+
+ cleanup_pkg:
+  free((void *)pkgBuf);
+
+  return w;
+}
+
+static
+rtl_Word rtl_std_selector(rtl_Machine    *M,
+                          rtl_Word const *args,
+                          size_t         argsLen)
+{
+  char const *pkgBuf;
+  char const *nameBuf;
+
+  rtl_Word w = RTL_NIL;
+
+  if (RTL_UNLIKELY(argsLen != 2)) {
+    rtl_throwMsg(M, "arg-count", "selector expects 2 arguments.");
+    return RTL_NIL;
+
+  }
+
+  if (rtl_isNil(args[0])) {
+    pkgBuf = NULL;
+  } else {
+    pkgBuf  = rtl_xReifyStringAlloc(M, args[0]);
+    RTL_UNWIND (M) return RTL_NIL;
+  }
+
+  nameBuf = rtl_xReifyStringAlloc(M, args[1]);
+  RTL_UNWIND (M) goto cleanup_pkg;
+
+  w = rtl_internSelector(pkgBuf, nameBuf);
+
+  free((void *)nameBuf);
+
+ cleanup_pkg:
+  free((void *)pkgBuf);
+
+  return w;
+}
+
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
   // Required to register builtins.
@@ -1067,8 +1165,18 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   rtl_registerBuiltin(&C, rtl_intern("std", "fold-map"),
                       rtl_std_foldMap);
+
   rtl_registerBuiltin(&C, rtl_intern("std", "list->tuple"),
                       rtl_std_listToTuple);
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "name"),
+                      rtl_std_name);
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "unresolved"),
+                      rtl_std_unresolved);
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "selector"),
+                      rtl_std_selector);
 }
 
 void rtl_resetMachine(rtl_Machine *M)
