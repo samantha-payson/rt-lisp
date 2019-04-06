@@ -72,6 +72,12 @@ rtl_Word rtl_unresolvedSymbol(uint32_t id)
 // specifier, pkg should be NULL.
 uint32_t rtl_internUnresolvedID(char const *pkg, char const *name);
 
+static inline
+rtl_Word rtl_internUnresolved(char const *pkg, char const *name)
+{
+  return rtl_unresolvedSymbol(rtl_internUnresolvedID(pkg, name));
+}
+
 
 // Intern a package. This expects the package's name in the global namespace.
 uint32_t rtl_internPackageID(char const *name);
