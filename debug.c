@@ -818,7 +818,7 @@ void __rtl_printStackTrace(rtl_Machine *M, rtl_RetAddr *stack, size_t stackLen)
     if (!func->isBuiltin) {
       prev = prevInstruction(func->as.lisp.code, pc);
 
-      printf("            @%04X", (unsigned int)(prev - func->as.lisp.code));
+      printf("            @%04u", (unsigned int)(prev - func->as.lisp.code));
       rtl_disasm(M->codeBase, prev);
 
     } else {
