@@ -517,6 +517,8 @@ bool rtl_isString(rtl_Machine *M, rtl_Word w);
 
 void rtl_xReifyString(rtl_Machine *M, rtl_Word str, char *buf, size_t cap);
 
+char const *rtl_xReifyStringAlloc(rtl_Machine *M, rtl_Word str);
+
 uint32_t rtl_xStringSize(rtl_Machine *M, rtl_Word str);
 
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr);

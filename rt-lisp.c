@@ -2917,6 +2917,24 @@ uint32_t rtl_xStringSize(rtl_Machine *M, rtl_Word str)
   return size;
 }
 
+char const *rtl_xReifyStringAlloc(rtl_Machine *M, rtl_Word str) {
+  size_t len;
+  char   *buf;
+
+  len = rtl_xStringSize(M, str);
+  RTL_UNWIND (M) return NULL;
+
+  buf = malloc(len + 1);
+
+  rtl_xReifyString(M, str, buf, len + 1);
+  RTL_UNWIND (M) {
+    free(buf);
+    return NULL;
+  }
+
+  return buf;
+}
+
 rtl_Word rtl_string(rtl_Machine *M, char const *cstr)
 {
   size_t len, i;
