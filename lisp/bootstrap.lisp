@@ -690,6 +690,6 @@
 
     maptuple-1 mapt vmapt
 
-    fold-map list->tuple
+    fold-map list->tuple name unresolved selector
 
     with bind defvar))
