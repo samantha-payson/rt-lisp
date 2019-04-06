@@ -42,7 +42,7 @@
       ((cons? x)
         (if (spliced? (car x))
             (if (zero? depth)
-                (list (quote std:append)
+                (list (quote std:append2)
                       (cadar x)
                       (build-semiquote (cdr x) depth))
               (list (quote std:cons)
@@ -158,9 +158,10 @@
                      (intrinsic:iso ld path))
                    *loaded*)
         (load path)
-        (intrinsic:dyn-set *loaded*
-                            (cons path
-                                  *loaded*)))))
+        (with (*loaded*)
+          (intrinsic:dyn-set *loaded*
+                              (cons path
+                                    *loaded*))))))
 
   (defun require path*
     (vmapc ((path path*))
@@ -268,8 +269,86 @@
                  (T .intrinsic:exception-fail)))
            (progn @body)))))
 
+  (defun getf (plist key)
+    (when plist
+      (if (eq (car plist) key)
+          (cadr plist)
+        (getf (cddr plist) key))))
+
+  (defun take-while (fn ls)
+    (rlet rec ((rev nil)
+               (ls ls))
+      (if (and ls (fn (car ls)))
+          (rec (cons (car ls) rev)
+               (cdr ls))
+        (reverse rev))))
+
+  (defun drop-while (fn ls)
+    (unless (nil? ls)
+      (if (fn (car ls))
+          (drop-while fn (cdr ls))
+        ls)))
+
+  (defun take (n ls)
+    (rlet rec ((rev nil)
+               (n n)
+               (ls ls))
+      (if (and ls (< 0 n))
+          (rec (cons (car ls) rev)
+               (pred n)
+               (cdr ls))
+        (reverse rev))))
+
+  (defun drop (n ls)
+    (if (< 0 n)
+        (drop (pred n) (cdr ls))
+      ls))
+
+  (defun indices (n)
+    (rlet rec ((x 0)
+               (rev nil))
+      (if (< x n)
+          (rec (succ x)
+               (cons x rev))
+        (reverse rev))))
+
+  (defun nth (n ls)
+    (car (drop n ls)))
+
+  (defun expand-lambda-list (lls body)
+    (if (not (cons? lls))
+        `(~lls @body)
+      (let ((fixed* (take-while symbol? lls))
+            (other* (drop-while symbol? lls)))
+        (cond
+          ((eq (car other*) .key)
+            (with-gensyms (rest)
+              `((@fixed* . ~rest)
+                 (let ~(vmapcar ((v (cdr other*)))
+                         (if (cons? v)
+                             `(~(car v) (or (getf ~rest ~(selector nil (name (car v)))) ~(cadr v)))
+                           `(~v (getf ~rest ~(selector nil (name v))))))
+                   @body))))
+          ((eq (car other*) .opt)
+            (with-gensyms (rest)
+              `((@fixed* . ~rest)
+                 (let ~(vmapcar ((v (cdr other*))
+                                 (n (indices (length other*))))
+                         (if (cons? v)
+                             `(~(car v) (or (nth ~n ~rest) ~(cadr v)))
+                           `(~v (nth ~n ~rest))))
+                   @body))))
+          (T `(~lls @body))))))
+
+  (defmacro defun (name lambda-list . body)
+    `(intrinsic:defun ~name @(expand-lambda-list lambda-list body)))
+
+  (defmacro defmacro (name lambda-list . body)
+    `(intrinsic:defmacro ~name @(expand-lambda-list lambda-list body)))
+
   (export package require -> ->> <-
-          last butlast
+          getf
+          last butlast take drop take-while drop-while
           or try
           filter vfilter xfilter
           mapc-1 mapc-2 mapc-3 mapc-4 mapc vmapc
