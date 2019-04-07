@@ -2506,11 +2506,15 @@ void rtl_xRun(rtl_Machine *M)
         f    = rptr[0];
         b    = rptr[1];
 
+#ifdef RTL_NO_TAIL_CALLS
+        RPUSH(f);
+#else
         if (opcode != RTL_OP_TAIL && opcode != RTL_OP_STATIC_TAIL) {
           RPUSH(f);
         } else {
           TAIL(f);
         }
+#endif
 
         func   = rtl_reifyFunction(M->codeBase, f);
         M->pc  = func->as.lisp.code;
@@ -2533,11 +2537,16 @@ void rtl_xRun(rtl_Machine *M)
           RPOP();
 
         } else {
+
+#ifdef RTL_NO_TAIL_CALLS
+          RPUSH(f);
+#else
           if (opcode != RTL_OP_TAIL && opcode != RTL_OP_STATIC_TAIL) {
             RPUSH(f);
           } else {
             TAIL(f);
           }
+#endif
   
           M->pc = func->as.lisp.code;
           wptr  = rtl_allocTuple(M, &b, 1);
