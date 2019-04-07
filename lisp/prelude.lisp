@@ -275,6 +275,11 @@
           (cadr plist)
         (getf (cddr plist) key))))
 
+  (defun proper? (ls)
+    (if (cons? ls)
+        (proper? (cdr ls))
+      (nil? ls)))
+
   (defun take-while (fn ls)
     (rlet rec ((rev nil)
                (ls ls))
@@ -316,7 +321,7 @@
     (car (drop n ls)))
 
   (defun expand-lambda-list (lls body)
-    (if (not (cons? lls))
+    (if (not (proper? lls))
         `(~lls @body)
       (let ((fixed* (take-while symbol? lls))
             (other* (drop-while symbol? lls)))
