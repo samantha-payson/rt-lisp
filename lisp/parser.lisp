@@ -16,50 +16,154 @@
 (require "lisp/iter.lisp")
 
 (package parser
-    { .use     ( std )
-      .export  ( parse p-char p-seq p-const) }
+    { .export ( parse char cons list const or
+                apply call let not without-prefix
+                repeat * + ? ) }
   
-  (defun ensure-parser (p)
-    (cond
-      ((char? p)
-        (p-char p))
-      (T p)))
-
-  (defmacro with-parsers (p* . body)
-    `(let ~(vmapcar ((p p*))
-             `(~p (ensure-parser ~p)))
+  (std:defmacro with-parsers (p* . body)
+    `(std:let ~(std:vmapcar ((p p*))
+                 `(~p (ensure-parser ~p)))
        @body))
 
-  (defun parse (p itr|p)
-    (p itr|p
-       (lambda (x p|itr)
+  (std:defun run (p itr.p)
+    (p itr.p
+       (std:lambda (x p.itr)
          x)
-       (lambda ()
+       (std:lambda ()
          .parse:error)))
 
-  (defun p-char (c)
-    (lambda (itr|c pass fail)
-      (if (eq c (iter:car itr|c))
-          (pass c (iter:cdr itr|c))
+  (std:defmacro parse (p itr.p)
+    `(run (std:use-package parser (ensure-parser ~p))
+          ~itr.p))
+
+  (std:defun char (c)
+    (std:lambda (itr.c pass fail)
+      (std:if (std:and itr.c (std:eq c (iter:car itr.c)))
+          (pass c (iter:cdr itr.c))
         (fail))))
 
-  (defun p-const (x)
-    (lambda (itr pass fail)
+  (std:defun eof ()
+    (std:lambda (itr pass fail)
+      (std:use-package std
+        (if (nil? itr)
+            (pass nil itr)
+          (fail)))))
+
+  (std:defun const (x)
+    (std:lambda (itr pass fail)
       (pass x itr)))
 
-  (defun p-seq2 (a b)
+  (std:defun always-fail ()
+    (std:lambda (itr pass fail)
+      (fail)))
+
+  (std:defun cons (a b)
     (with-parsers (a b)
-      (lambda (itr|a|b pass fail)
-        (a itr|a|b
-           (lambda (a a|itr|b)
-             (b a|itr|b
-                (lambda (b a|b|itr)
-                  (pass (cons a b)
-                        a|b|itr))
+      (std:lambda (itr.a.b pass fail)
+        (a itr.a.b
+           (std:lambda (a a.itr.b)
+             (b a.itr.b
+                (std:lambda (b a.b.itr)
+                  (pass (std:cons a b)
+                        a.b.itr))
                 fail))
            fail))))
 
-  (defun p-seq p*
-    (vfold (acc (p-const nil))
-        ((p (reverse p*)))
-      (p-seq2 p acc))))
+  (std:defun list p*
+    (std:vfold (acc (const nil))
+        ((p (std:reverse p*)))
+      (cons p acc)))
+
+  (std:defun or2 (a b)
+    (with-parsers (a b)
+      (std:lambda (itr.a|b pass fail)
+        (a itr.a|b
+           pass
+           (std:lambda ()
+             (b itr.a|b
+                pass
+                fail))))))
+
+  (std:defun or p*
+    (std:vfold (acc (always-fail)) ((p (std:reverse p*)))
+      (or2 p acc)))
+
+  (std:defun apply (fn p)
+    (with-parsers (p)
+      (std:lambda (itr.p pass fail)
+        (p itr.p
+           (std:lambda (arg* p.itr)
+             (pass (intrinsic:apply-list fn arg*)
+                   p.itr))
+           fail))))
+
+  (std:defmacro call (fn . arg*)
+    `(apply ~fn (list @arg*)))
+
+  (std:defun not (p)
+    (with-parsers (p)
+      (std:lambda (itr.~p pass fail)
+        (p itr.~p
+           (std:lambda (x p.itr)
+             (fail))
+           (std:lambda ()
+             (pass nil itr.~p))))))
+
+  (std:defmacro let (letarg* . body)
+    `(call (std:lambda ~(std:mapcar std:car letarg*)
+             (std:use-package std
+               @body))
+           @(std:mapcar std:cadr letarg*)))
+
+  (std:defun without-prefix (pre p)
+    (let ((_ (not pre))
+          (x p))
+      x))
+
+  (std:defun repeat (p .key (lo 0) hi)
+    (std:use-package std
+      (with-parsers (p)
+        (lambda (itr.p* pass fail)
+          (p itr.p*
+             (rlet rec ((n   1)
+                        (rev nil))
+               (cond
+                 ((and hi (eq hi n))
+                   (lambda (val p*.itr)
+                     (pass (reverse (cons val rev))
+                           p*.itr)))
+                 (T
+                   (lambda (val p*.itr.p*)
+                     (p p*.itr.p*
+                        (rec (succ n)
+                             (cons val rev))
+                        (if (< n lo)
+                            fail
+                          (lambda ()
+                            (pass (reverse (cons val rev))
+                                  p*.itr.p*))))))))
+             (if (< 0 lo)
+                 fail
+               (lambda ()
+                 (pass nil itr.p*))))))))
+
+  (std:defun * (p)
+    (repeat p))
+
+  (std:defun + (p)
+    (repeat p .lo 1))
+
+  (std:defun ? (p)
+    (repeat p .hi 1))
+
+  (std:defun ensure-parser (p)
+    (std:cond
+      ((std:char? p)
+        (char p))
+      ((std:tuple? p)
+        (call std:list->tuple (intrinsic:apply-tuple list p)))
+      ((std:cons? p)
+        (cons (std:car p) (std:cdr p)))
+      ((std:nil? p)
+        (const nil))
+      (T p))))
