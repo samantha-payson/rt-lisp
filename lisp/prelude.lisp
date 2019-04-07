@@ -353,7 +353,7 @@
 
   (export package require -> ->> <-
           getf
-          last butlast take drop take-while drop-while
+          last butlast take drop take-while drop-while proper? nth indices
           or try
           filter vfilter xfilter
           mapc-1 mapc-2 mapc-3 mapc-4 mapc vmapc
