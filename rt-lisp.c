@@ -1746,7 +1746,7 @@ void rtl_xRun(rtl_Machine *M)
 
     // printf("\n");
     // rtl_printStackTrace(M);
-    
+
     // Stage 1: Decode the instruction
     switch (enc) {
     case RTL_OP_ENC_NULLARY_NOARG:
@@ -1989,7 +1989,9 @@ void rtl_xRun(rtl_Machine *M)
       break;
 
     case RTL_OP_SYMBOLP:
-      rtl_push(M, rtl_isSymbol(a) ? RTL_TOP : RTL_NIL);
+      rtl_push(M, rtl_isSymbol(a) || (rtl_typeOf(a) == RTL_UNRESOLVED_SYMBOL)
+                  ? RTL_TOP
+                  : RTL_NIL);
       break;
 
     case RTL_OP_SELECTORP:
