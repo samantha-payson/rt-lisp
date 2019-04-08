@@ -64,4 +64,4 @@ main.o: main.c $(HDRS)
 
 
 clean:
-	@ rm -f $(OBJS) crtl
+	@ rm -f $(OBJS) main.o librtl.so crtl
