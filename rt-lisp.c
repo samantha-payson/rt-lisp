@@ -1118,6 +1118,18 @@ rtl_Word rtl_std_selector(rtl_Machine    *M,
   return w;
 }
 
+rtl_Word rtl_std_code(rtl_Machine    *M,
+                      rtl_Word const *args,
+                      size_t         argsLen)
+{
+  if (RTL_UNLIKELY(argsLen != 1)) {
+    rtl_throwMsg(M, "arg-count", "code expects 1 argument.");
+    return RTL_NIL;
+  }
+
+  return rtl_int28(args[0] >> 4);
+}
+
 void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 {
   // Required to register builtins.
@@ -1177,6 +1189,9 @@ void rtl_initMachine(rtl_Machine *M, rtl_CodeBase *codeBase)
 
   rtl_registerBuiltin(&C, rtl_intern("std", "selector"),
                       rtl_std_selector);
+
+  rtl_registerBuiltin(&C, rtl_intern("std", "code"),
+                      rtl_std_code);
 }
 
 void rtl_resetMachine(rtl_Machine *M)

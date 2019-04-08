@@ -665,7 +665,7 @@
 
     caaaar caaadr caadar caaddr
     cadaar cadadr caddar cadddr
-      cdaaar cdaadr cdadar cdaddr
+    cdaaar cdaadr cdadar cdaddr
     cddaar cddadr cdddar cddddr
 
     append reverse list
@@ -690,6 +690,6 @@
 
     maptuple-1 mapt vmapt
 
-    fold-map list->tuple name unresolved selector
+    fold-map list->tuple name unresolved selector code
 
     with bind defvar))
