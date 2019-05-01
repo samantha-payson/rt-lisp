@@ -16,7 +16,7 @@
 (require "lisp/iter.lisp")
 
 (package parser
-    { .export ( parse char cons list const or
+    { .export ( parse char-pred char any-char not-char cons list const or
                 apply call let not without-prefix
                 repeat * + ? ) }
   
@@ -36,11 +36,26 @@
     `(run (std:use-package parser (ensure-parser ~p))
           ~itr.p))
 
-  (std:defun char (c)
+  (std:defun char-pred (fn)
     (std:lambda (itr.c pass fail)
-      (std:if (std:and itr.c (std:eq c (iter:car itr.c)))
-          (pass c (iter:cdr itr.c))
-        (fail))))
+      (std:if (std:nil? itr.c)
+          (fail)
+        (std:let ((c (iter:car itr.c)))
+          (std:if (fn c)
+            (pass c (iter:cdr itr.c))
+            (fail))))))
+
+  (std:defun any-char ()
+    (char-pred (std:lambda (_) T)))
+
+  (std:defun char (c)
+    (char-pred (std:lambda (x) (std:eq c x))))
+
+  (std:defun not-char c*
+    (char-pred (std:lambda (x)
+                 (std:not (std:any (std:lambda (c)
+                                     (std:eq c x))
+                                   c*)))))
 
   (std:defun eof ()
     (std:lambda (itr pass fail)
