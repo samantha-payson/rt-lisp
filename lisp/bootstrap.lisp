@@ -396,8 +396,14 @@
   (definline succ (x)
     `(intrinsic:iadd ~x 1))
 
+  (definline ++ (x)
+    `(+ ~x 1))
+
   (definline pred (x)
     `(intrinsic:isub ~x 1))
+
+  (definline -- (x)
+    `(- ~x 1))
 
   (defmacro with-gensyms (g* . body)
     `(let ~(mapcar-1 (lambda (g)
@@ -680,9 +686,9 @@
 
     let cond gensym
 
-    with-gensyms rlambda rlet length mapcar vmapcar fold vfold
+    with-gensyms rlambda rlet length mapcar vmapcar fold vfold any
 
-    + - * / % succ pred
+    + - * / % succ pred ++ --
 
     < > <= >= eq iso zero?
 
