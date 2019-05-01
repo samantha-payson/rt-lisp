@@ -19,13 +19,23 @@
 #include <dirent.h>
 #include <errno.h>
 
-#include <libexplain/closedir.h>
-#include <libexplain/readdir.h>
-#include <libexplain/opendir.h>
-#include <libexplain/fopen.h>
-#include <libexplain/fclose.h>
-#include <libexplain/fgetc.h>
-#include <libexplain/fwrite.h>
+#ifdef RTL_LINUX
+# include <libexplain/closedir.h>
+# include <libexplain/readdir.h>
+# include <libexplain/opendir.h>
+# include <libexplain/fopen.h>
+# include <libexplain/fclose.h>
+# include <libexplain/fgetc.h>
+# include <libexplain/fwrite.h>
+#else
+# define explain_closedir(_d)           strerror(errno)
+# define explain_readdir(_d)            strerror(errno)
+# define explain_opendir(_p)            strerror(errno)
+# define explain_fopen(_p, _m)          strerror(errno)
+# define explain_fclose(_f)             strerror(errno)
+# define explain_fgetc(_f)              strerror(errno)
+# define explain_fwrite(_p, _s, _n, _f) strerror(errno)
+#endif
 
 typedef struct rtl_io_File {
   uint32_t tag;

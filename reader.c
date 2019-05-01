@@ -15,7 +15,13 @@
 
 #include "rt-lisp.h"
 
-#include <libexplain/fgetc.h>
+#ifdef RTL_LINUX
+# include <libexplain/fgetc.h>
+#else
+# include <errno.h>
+
+# define explain_fgetc(...) strerror(errno)
+#endif
 
 #include <ctype.h>
 #include <stdlib.h>

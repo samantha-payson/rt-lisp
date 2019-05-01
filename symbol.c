@@ -21,9 +21,17 @@
 
 #include <stdio.h>
 
-#include <libexplain/open.h>
-#include <libexplain/fdopen.h>
-#include <libexplain/flock.h>
+#ifdef RTL_LINUX
+# include <libexplain/open.h>
+# include <libexplain/fdopen.h>
+# include <libexplain/flock.h>
+#else
+# include <errno.h>
+
+# define explain_open(...)   strerror(errno)
+# define explain_fdopen(...) strerror(errno)
+# define explain_flock(...)  strerror(errno)
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>

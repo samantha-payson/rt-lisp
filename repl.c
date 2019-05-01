@@ -16,7 +16,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <libexplain/fopen.h>
+#ifdef RTL_LINUX
+# include <libexplain/fopen.h>
+#else
+# include <errno.h>
+
+# define explain_fopen(...) strerror(errno)
+#endif
 
 #include "rt-lisp.h"
 

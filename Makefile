@@ -9,6 +9,22 @@ CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
 #  -D RTL_TRACE_FN_CALLS \
 #  -D RTL_BITMAP_SANITY_CHECKS \
 
+# Simple tricks to detect 
+ifeq ($(OS),Windows_NT)
+    WINDOWS = true
+    CFLAGS += -D RTL_WIN32
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        LINUX   = true
+        CFLAGS += -D RTL_LINUX
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        OSX     = true
+        CFLAGS += -D RTL_OSX
+    endif
+endif
+
 LD      = gcc
 LDFLAGS =
 
@@ -47,7 +63,11 @@ HDRS = \
 
 crtl: main.o librtl.so
 	@ echo "  LD    $@"
+ifeq ($(RTL_LINUX),true)
 	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl -lexplain
+else
+	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
+endif
 
 librtl.so: $(OBJS)
 	@ echo "  LD    $@"
