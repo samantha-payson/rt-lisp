@@ -2,7 +2,7 @@ CC     = gcc
 CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
   -Wno-error=unused-function \
   -Wno-error=unused-variable \
-  -Wno-error=maybe-uninitialized \
+  -Wno-error=uninitialized \
   -D NDEBUG \
 #  -D RTL_NO_TAIL_CALLS \
 #  -D RTL_TRACE_WORKING_SETS \
