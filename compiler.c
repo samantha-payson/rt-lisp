@@ -2867,7 +2867,7 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
     }
 
   case RTL_INTRINSIC_LABELS:
-    x->codeSize = 3;
+    x->codeSize = 3; // labels <u16>
 
     for (i = 0; i < x->as.labels.labelsLen; i++) {
       annotateCodeSize(M, x->as.labels.labelsFns[i]);
@@ -2881,6 +2881,14 @@ size_t annotateCodeSize(rtl_Machine *M, rtl_Intrinsic *x)
         x->codeSize += 2;
       }
     }
+
+    for (i = 0; i < x->as.labels.bodyLen; i++) {
+      x->codeSize += annotateCodeSize(M, x->as.labels.body[i]);
+    }
+
+    x->codeSize += 1; // end-labels
+
+    return x->codeSize;
 
   case RTL_INTRINSIC_DEFUN:
     for (i = 0; i < x->as.defun.bodyLen; i++) {
