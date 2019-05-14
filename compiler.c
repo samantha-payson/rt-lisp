@@ -418,6 +418,7 @@ rtl_Word rtl_xResolveAll(rtl_Compiler *C,
 
     for (i = 0; i < len; i++) {
       wptr[i] = rtl_xResolveAll(C, ns, rptr[i]);
+      rptr = rtl_xReifyTuple(C->M, in, &len);
       RTL_UNWIND (C->M) break;
     } break;
     
@@ -536,6 +537,7 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
            name   = RTL_NIL,
            alias  = RTL_NIL,
            tail   = RTL_NIL,
+           tmp    = RTL_NIL,
            out    = RTL_NIL;
 
   rtl_Word const *rptr;
@@ -549,7 +551,7 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
 
   ensureSymCache(C);
 
-  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &clause, &name, &alias, &tail, &out);
+  RTL_PUSH_WORKING_SET(C->M, &in, &head, &arg, &clause, &name, &alias, &tail, &tmp, &out);
 
   switch (rtl_typeOf(in)) {
   case RTL_UNRESOLVED_SYMBOL:
@@ -565,7 +567,10 @@ rtl_Word rtl_xMacroExpand(rtl_Compiler *C, rtl_NameSpace const *ns, rtl_Word in)
     RTL_ASSERT_NO_UNWIND(C->M);
     
     for (i = 0; i < len; i++) {
-      wptr[i] = rtl_xMacroExpand(C, ns, rptr[i]);
+      tmp     = rtl_xMacroExpand(C, ns, rptr[i]);
+      rptr    = rtl_xReifyTuple(C->M, in, &len);
+      wptr    = (rtl_Word *)rtl_xReifyTuple(C->M, out, &len);
+      wptr[i] = tmp;
       RTL_UNWIND (C->M) break;
     } break;
 

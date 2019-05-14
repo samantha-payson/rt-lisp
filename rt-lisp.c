@@ -35,6 +35,10 @@ rtl_Generation *mkGeneration(int genNbr)
 
   gen = malloc(sizeof(rtl_Generation) + capacity*sizeof(rtl_Word));
 
+#ifndef NDEBUG
+  memset(gen, 0, sizeof(rtl_Generation) + capacity*sizeof(rtl_Word));
+#endif
+
   gen->nbr      = genNbr;
   gen->fillPtr  = 0;
   gen->capacity = capacity;
@@ -542,6 +546,12 @@ int collectGen(rtl_Machine *M, int g)
     }
   }
 
+#ifndef NDEBUG
+  for (i = 0; i < gen->capacity; i++) {
+    gen->words[i] = RTL_HEADER;
+  }
+#endif
+
   return highest;
 }
 
@@ -598,9 +608,7 @@ rtl_Word *rtl_allocGC(rtl_Machine *M, rtl_WordType t, rtl_Word *w, size_t nbr)
   ptr = gen0->words + offs;
 
   #ifndef NDEBUG
-  // In most cases, this should leave uninitialized GC-allocated memory as an
-  // invalid tuple.
-  memset(ptr, RTL_TUPLE, nbr*sizeof(rtl_Word));
+  memset(ptr, RTL_HEADER, nbr*sizeof(rtl_Word));
   #endif
 
   return ptr;
