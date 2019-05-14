@@ -393,6 +393,9 @@
                 rest*)
       (intrinsic:idiv 1 first)))
 
+  (defun % (a b)
+    (intrinsic:imod a b))
+
   (definline succ (x)
     `(intrinsic:iadd ~x 1))
 

@@ -29,7 +29,7 @@
                 cddaar cddadr cdddar cddddr
 
                 from-list into-list
-                from-tuple
+                from-tuple into-tuple
                 from-file
                 from-dir
 
@@ -103,6 +103,9 @@
         (std:when (std:< idx len)
           (cons (intrinsic:get tpl idx)
                 (rec (std:succ idx)))))))
+
+  (std:defun into-tuple (itr)
+    (std:list->tuple (into-list itr)))
 
   (std:defmacro thunk (expr)
     (std:use-package std
