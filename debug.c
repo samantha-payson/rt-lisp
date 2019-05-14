@@ -632,35 +632,33 @@ void rtl_disasmMacro(rtl_Machine *M, rtl_Word name)
 
 bool rtl_debugCheckForCycles(rtl_Machine *M)
 {
-  size_t i, j;
-  rtl_Generation *gen;
-  rtl_Word w;
-  uint32_t offs;
-  int      genNbr;
+  // size_t i, j;
+  // rtl_Generation *gen;
+  // rtl_Word w;
+  // int      genNbr;
 
-  for (i = 0; i < RTL_MAX_GENERATIONS; i++) {
-    gen = M->heap.gen[i];
-    if (!gen) break;
+  // for (i = 0; i < RTL_MAX_GENERATIONS; i++) {
+  //   gen = M->heap.gen[i];
+  //   if (!gen) break;
 
-    for (j = 0; j < gen->fillPtr; j++) {
-      w = gen->words[j];
+  //   for (j = 0; j < gen->fillPtr; j++) {
+  //     w = gen->words[j];
 
-      if (rtl_isCons(w)) {
-        offs   = __rtl_ptrOffs(w);
-        genNbr = __rtl_ptrGen(w);
+  //     if (rtl_isCons(w)) {
+  //       genNbr = __rtl_ptrGen(w);
 
-        if (genNbr < gen->nbr ||
-            (genNbr == gen->nbr && offs >= j))
-        {
-          printf("\n    CYCLE: %04Xg%d: ", (unsigned int)j, (int)i);
-          rtl_formatExprShallow(w);
-          printf("\n\n");
-          return true;
-        }
-      }
-    }
-  }
+  //       if (genNbr < gen->nbr)
+  //       {
+  //         printf("\n    CYCLE: %04Xg%d: ", (unsigned int)j, (int)i);
+  //         rtl_formatExprShallow(w);
+  //         printf("\n\n");
+  //         return true;
+  //       }
+  //     }
+  //   }
 
+  // Cycles are currently allowed. In the future this function could be okay
+  // if it checked against the backset.
   return false;
 }
 
