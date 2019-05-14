@@ -63,7 +63,7 @@ HDRS = \
 
 crtl: main.o librtl.so
 	@ echo "  LD    $@"
-ifeq ($(RTL_LINUX),true)
+ifeq ($(LINUX),true)
 	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl -lexplain
 else
 	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
