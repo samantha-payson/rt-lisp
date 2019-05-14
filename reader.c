@@ -145,7 +145,7 @@ int rtl_xReadDelim(rtl_Compiler *C, FILE *f, int delim)
   ch = fgetc(f);
   if (ferror(f)) {
     rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
-    return RTL_NIL;
+    return 0;
   }
 
   for (n = 0; ch != delim && ch != EOF; n++) {
@@ -160,7 +160,7 @@ int rtl_xReadDelim(rtl_Compiler *C, FILE *f, int delim)
     ch = fgetc(f);
     if (ferror(f)) {
       rtl_throwMsg(C->M, "native-error", explain_fgetc(f));
-      return RTL_NIL;
+      return 0;
     }
   }
 
@@ -305,6 +305,10 @@ rtl_Word xReadChar(rtl_Compiler *C, FILE *f)
       w = rtl_char('\'');
       break;
 
+    case '\"':
+      w = rtl_char('\"');
+      break;
+
     default:
       snprintf(errBuf, 1024,
                "Bad escape '\\%c' (%02X) in char constant.\n",
@@ -375,6 +379,10 @@ rtl_Word xReadString(rtl_Compiler *C, FILE *f)
 
       case 't':
         ch = '\t';
+        break;
+
+      case '"':
+        ch = '"';
         break;
 
       default:
