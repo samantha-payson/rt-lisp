@@ -1229,7 +1229,7 @@ rtl_Word rtl_cons(rtl_Machine *M, rtl_Word car, rtl_Word cdr)
 
   rtl_popWorkingSet(M);
 
-  rtl_debugCheckAlloc(M, w);
+  // rtl_debugCheckAlloc(M, w);
 
   return w;
 }
