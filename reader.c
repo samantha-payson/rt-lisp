@@ -15,7 +15,7 @@
 
 #include "rt-lisp.h"
 
-#ifdef RTL_LINUX
+#ifdef RTL_LIBEXPLAIN
 # include <libexplain/fgetc.h>
 #else
 # include <errno.h>

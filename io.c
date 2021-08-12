@@ -19,7 +19,7 @@
 #include <dirent.h>
 #include <errno.h>
 
-#ifdef RTL_LINUX
+#ifdef RTL_LIBEXPLAIN
 # include <libexplain/closedir.h>
 # include <libexplain/readdir.h>
 # include <libexplain/opendir.h>

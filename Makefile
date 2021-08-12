@@ -9,6 +9,8 @@ CFLAGS = -Wall -Werror -Iinc -g -O3 -march=native \
 #  -D RTL_TRACE_FN_CALLS \
 #  -D RTL_BITMAP_SANITY_CHECKS \
 
+USE_LIBEXPLAIN ?= false
+
 # Simple tricks to detect 
 ifeq ($(OS),Windows_NT)
     WINDOWS = true
@@ -18,6 +20,9 @@ else
     ifeq ($(UNAME_S),Linux)
         LINUX   = true
         CFLAGS += -D RTL_LINUX
+        ifeq ($(USE_LIBEXPLAIN),true)
+            CFLAGS += -D RTL_LIBEXPLAIN
+        endif
     endif
     ifeq ($(UNAME_S),Darwin)
         OSX     = true
@@ -64,7 +69,11 @@ HDRS = \
 crtl: main.o librtl.so
 	@ echo "  LD    $@"
 ifeq ($(LINUX),true)
+    ifeq ($(USE_LIBEXPLAIN),true)
 	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl -lexplain
+    else 
+	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
+    endif
 else
 	@ $(LD) $(LDFLAGS) $< -o $@ -L. -lrtl
 endif

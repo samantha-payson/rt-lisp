@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 
-#ifdef RTL_LINUX
+#ifdef RTL_LIBEXPLAIN
 # include <libexplain/open.h>
 # include <libexplain/fdopen.h>
 # include <libexplain/flock.h>

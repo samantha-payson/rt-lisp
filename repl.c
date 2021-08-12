@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#ifdef RTL_LINUX
+#ifdef RTL_LIBEXPLAIN
 # include <libexplain/fopen.h>
 #else
 # include <errno.h>
