@@ -252,7 +252,9 @@ struct rtl_Machine {
   size_t      rStackLen;
   size_t      rStackCap;
 
-  // Working set stack // // Keeps track of words stored on the C stack, so the
+  // Working set stack
+  //
+  // Keeps track of words stored on the C stack, so the
   // GC can update them properly on collection.
   rtl_WorkingSet *wsStack;
   size_t         wsStackLen;
