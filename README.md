@@ -31,12 +31,12 @@ make
 ```
 
 Alternatively, if you are on a system with the development libraries
-for [libexplain][libexplain] installed, you can do set
+for [libexplain][libexplain] installed, you can set
 `USE_LIBEXPLAIN=true` for the make command in order to get better
 error messages.
 
 ```sh
-LIBEXPLAIN=true make
+USE_LIBEXPLAIN=true make
 ```
 
 RT Lisp is built as a shared library in the current directory, so you'll need
