@@ -13,6 +13,70 @@ RT Lisp is being developed with game scripting in mind as its primary use case.
 >
 > Who knows, maybe I'll rename it ...
 
+# Trying it out
+
+It's been a while since I ran this on a platform other than Linux, so a little
+debugging may be in order on other systems.
+
+In order to build, you need to ensure that all submodules are checked out
+```sh
+cd rt-lisp.git
+git submodule init
+git submodule update
+```
+
+After that you can simply build it by running
+```sh
+make
+```
+
+Alternatively, if you are on a system with the development libraries
+for [libexplain][libexplain] installed, you can do set
+`USE_LIBEXPLAIN=true` for the make command in order to get better
+error messages.
+
+```sh
+LIBEXPLAIN=true make
+```
+
+RT Lisp is built as a shared library in the current directory, so you'll need
+to tell the dynamic linker where to find it when you run the REPL binary
+
+```sh
+LD_LIBRARY_PATH=. ./crtl
+```
+
+That's it! After some loading text, you should get a prompt like this
+
+```
+[CRTL]
+```
+
+You can hit `Ctrl` + `D` to quit. Maybe twice if you're in the middle
+of an expression...
+
+Here is an example session:
+
+```
+[ CRTL ] (defun even? (n) (zero? (% n 2)))
+Compiled function 'repl:even?'
+
+=> repl:even?
+
+[ CRTL ] (even? 2)
+
+=> T
+
+[ CRTL ] (even? 3)
+
+=> nil
+
+[ CRTL ] <Ctrl+D>
+=> .io:EOF
+```
+
+[libexplain]: https://manpages.ubuntu.com/manpages/precise/man3/explain.3.html
+
 # The State of the Implementation
 
 At this point, RT Lisp is feature complete except for the standard
