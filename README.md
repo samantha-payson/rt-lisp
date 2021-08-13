@@ -7,9 +7,9 @@ definition, and easy usage from C.
 RT Lisp is being developed with game scripting in mind as its primary use case.
 
 > Note: the name RT Lisp is terrible, it stands for "Runtime Lisp", because it's
-> meant to be used in my game engine at runtime... It does NOT stand for "Real
-> Time Lisp", the garbage collector likely prevents this system from being used
-> in true realtime systems.
+> meant  to be used  in an old  game project of mine  at runtime... It  does NOT
+> stand for "Real Time Lisp",  the garbage collector likely prevents this system
+> from being used in true realtime systems.
 >
 > Who knows, maybe I'll rename it ...
 
